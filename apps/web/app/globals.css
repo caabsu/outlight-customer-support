@@ -117,3 +117,28 @@
 .tag-muted {
   @apply bg-muted text-muted-foreground border border-border;
 }
+
+/* Email content visibility fixes */
+.email-content {
+  @apply w-full;
+}
+
+.email-content a {
+  @apply text-blue-600 underline;
+}
+
+.email-content a:hover {
+  @apply text-blue-800;
+}
+
+/* Force readable text in email HTML */
+.email-content div[style*="color"] {
+  color: #1f2937 !important;
+}
+
+.email-content p,
+.email-content span,
+.email-content td,
+.email-content div {
+  color: inherit !important;
+}

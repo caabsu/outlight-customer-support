@@ -107,9 +107,12 @@ export default function ConversationView() {
                 {formatDate(message.sentAt)}
               </span>
             </div>
-            <div className="prose prose-sm dark:prose-invert max-w-none">
+            <div className="email-content">
               {message.bodyHtml ? (
-                <div dangerouslySetInnerHTML={{ __html: message.bodyHtml }} />
+                <div
+                  className="bg-white text-gray-900 p-4 rounded border border-gray-200 overflow-auto max-h-96"
+                  dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
+                />
               ) : (
                 <p className="text-sm text-foreground whitespace-pre-wrap">
                   {message.bodyText}
