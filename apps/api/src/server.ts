@@ -129,12 +129,16 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
     // Get the reply-to email from the most recent inbound message
     const replyToEmail = conversation.messages[0]?.replyToEmail;
 
-    // If reply-to exists, ONLY query by reply-to email. Otherwise, use customer ID
+    // CRITICAL FIX: If reply-to exists, ONLY query by that email (not customer ID, not sent-from)
+    // Find conversations where ANY message has this email as fromEmail OR replyToEmail
     const whereClause = replyToEmail
       ? {
           messages: {
             some: {
-              replyToEmail: replyToEmail
+              OR: [
+                { fromEmail: replyToEmail },
+                { replyToEmail: replyToEmail }
+              ]
             }
           },
           id: { not: req.params.id },

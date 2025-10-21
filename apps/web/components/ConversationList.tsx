@@ -25,11 +25,10 @@ type Conversation = {
 };
 
 export default function ConversationList() {
-  const { conversations, selectedConversation, selectConversation, loading, refreshConversations, updateConversationOptimistic } =
+  const { conversations, selectedConversation, selectConversation, loading, refreshConversations, updateConversationOptimistic, showArchived } =
     useConversations();
   const [showStarred, setShowStarred] = useState(false);
   const [excludeNonSupport, setExcludeNonSupport] = useState(true);
-  const [showArchived, setShowArchived] = useState(false);
 
   const filteredConversations = conversations.filter((conv: Conversation) => {
     if (showStarred && !conv.starred) return false;
@@ -215,16 +214,6 @@ export default function ConversationList() {
             }`}
           >
             ✓ CS Only
-          </button>
-          <button
-            onClick={() => setShowArchived(!showArchived)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              showArchived
-                ? "bg-muted text-foreground border border-muted-foreground/30"
-                : "bg-secondary text-secondary-foreground border border-border"
-            }`}
-          >
-            📦 Archived
           </button>
         </div>
       </div>

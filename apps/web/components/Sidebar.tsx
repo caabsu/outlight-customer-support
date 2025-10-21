@@ -2,9 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useConversations } from "@/lib/ConversationContext";
 
 export default function Sidebar() {
   const [activeView, setActiveView] = useState<"inbox" | "sent">("inbox");
+  const { showArchived, setShowArchived } = useConversations();
+
+  const handleViewChange = (view: "inbox" | "sent" | "archived") => {
+    if (view === "archived") {
+      setShowArchived(true);
+      setActiveView("inbox");
+    } else {
+      setShowArchived(false);
+      setActiveView(view);
+    }
+  };
 
   return (
     <div className="w-64 border-r border-border bg-background flex flex-col">
@@ -17,9 +29,9 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1">
         <button
-          onClick={() => setActiveView("inbox")}
+          onClick={() => handleViewChange("inbox")}
           className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-            activeView === "inbox"
+            activeView === "inbox" && !showArchived
               ? "bg-accent text-accent-foreground"
               : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
           }`}
@@ -27,14 +39,24 @@ export default function Sidebar() {
           Inbox
         </button>
         <button
-          onClick={() => setActiveView("sent")}
+          onClick={() => handleViewChange("sent")}
           className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-            activeView === "sent"
+            activeView === "sent" && !showArchived
               ? "bg-accent text-accent-foreground"
               : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
           }`}
         >
           Sent
+        </button>
+        <button
+          onClick={() => handleViewChange("archived")}
+          className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+            showArchived
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+          }`}
+        >
+          Archived
         </button>
       </nav>
 

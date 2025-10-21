@@ -36,6 +36,8 @@ type ConversationContextType = {
   refreshConversations: () => Promise<void>;
   updateConversationOptimistic: (id: string, updates: Partial<Conversation>) => void;
   loading: boolean;
+  showArchived: boolean;
+  setShowArchived: (show: boolean) => void;
 };
 
 const ConversationContext = createContext<ConversationContextType | undefined>(
@@ -50,6 +52,7 @@ export function ConversationProvider({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showArchived, setShowArchived] = useState(false);
 
   const fetchConversations = async () => {
     try {
@@ -93,6 +96,8 @@ export function ConversationProvider({
         refreshConversations: fetchConversations,
         updateConversationOptimistic,
         loading,
+        showArchived,
+        setShowArchived,
       }}
     >
       {children}

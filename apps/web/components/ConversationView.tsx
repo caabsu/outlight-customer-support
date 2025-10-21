@@ -369,8 +369,8 @@ export default function ConversationView() {
             </button>
           </div>
 
-          {/* Past Conversations List - Max 30% of viewport height */}
-          <div className="overflow-y-auto px-4 py-2 space-y-2 max-h-[30vh]">
+          {/* Past Conversations List - Max 20% of viewport height */}
+          <div className="overflow-y-auto px-4 py-2 space-y-2 max-h-[20vh]">
             {history.map((conv) => (
               <button
                 key={conv.id}
@@ -390,18 +390,18 @@ export default function ConversationView() {
         </>
       )}
 
-      {/* Not Support Button - Clean, minimal, below past conversations */}
+      {/* Not Support Button - High visibility with point color */}
       <div className="p-4 border-t border-border shrink-0 mt-auto">
         {!selectedConversation.tags?.includes("non-customer-support") && (
           <>
             {undoTimer !== null ? (
               <div className="space-y-2">
-                <div className="w-full px-4 py-2 bg-warning/10 text-warning border border-warning/40 text-sm text-center">
-                  Archiving in {undoTimer}s
+                <div className="w-full px-4 py-3 bg-warning text-white border-2 border-warning text-sm font-medium text-center">
+                  Archiving in {undoTimer}s...
                 </div>
                 <button
                   onClick={handleUndoMarkNonSupport}
-                  className="w-full px-4 py-2 bg-background text-foreground border border-border text-sm hover:bg-accent transition-colors"
+                  className="w-full px-4 py-3 bg-success text-white border-2 border-success text-sm font-medium hover:bg-success/90 transition-colors"
                 >
                   Undo
                 </button>
@@ -410,7 +410,7 @@ export default function ConversationView() {
               <button
                 onClick={handleMarkNonSupport}
                 disabled={markingNonSupport}
-                className="w-full px-4 py-2 bg-background text-muted-foreground border border-border text-sm hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-3 bg-warning text-white border-2 border-warning text-sm font-medium hover:bg-warning/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Mark as Non-Support
               </button>

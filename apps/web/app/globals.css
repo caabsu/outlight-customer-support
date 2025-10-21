@@ -110,8 +110,17 @@
   @apply bg-success/10 text-success border border-success/20;
 }
 
+/* Fixed colors for consistency - no dynamic changes */
 .tag-warning {
-  @apply bg-warning/10 text-warning border border-warning/20;
+  background-color: #fff7ed !important;
+  color: #ea580c !important;
+  border: 1px solid #fed7aa !important;
+}
+
+.dark .tag-warning {
+  background-color: rgba(234, 88, 12, 0.1) !important;
+  color: #fb923c !important;
+  border: 1px solid rgba(234, 88, 12, 0.3) !important;
 }
 
 .tag-muted {
@@ -131,28 +140,46 @@
   @apply text-blue-800;
 }
 
-/* Force readable text in email HTML - Override all inline styles */
+/* Force readable text in email HTML - CRITICAL: Override ALL inline styles */
 .email-html-container {
   background-color: #ffffff !important;
-  color: #000000 !important;
+  color: #1f2937 !important;
 }
 
+/* Override every possible element with maximum specificity */
 .email-html-container *,
+.email-html-container *[style],
 .email-html-container p,
+.email-html-container p[style],
 .email-html-container span,
+.email-html-container span[style],
 .email-html-container td,
+.email-html-container td[style],
 .email-html-container div,
+.email-html-container div[style],
 .email-html-container a,
+.email-html-container a[style],
 .email-html-container h1,
 .email-html-container h2,
 .email-html-container h3,
 .email-html-container h4,
 .email-html-container h5,
 .email-html-container h6,
-.email-html-container li {
+.email-html-container li,
+.email-html-container table,
+.email-html-container th,
+.email-html-container strong,
+.email-html-container b,
+.email-html-container i,
+.email-html-container em {
   color: #1f2937 !important;
+  background-color: transparent !important;
 }
 
-.email-html-container[style] {
+/* Force white background on all containers */
+.email-html-container,
+.email-html-container[style],
+.email-html-container > div,
+.email-html-container > table {
   background-color: #ffffff !important;
 }
