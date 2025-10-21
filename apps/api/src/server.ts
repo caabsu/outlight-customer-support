@@ -607,10 +607,16 @@ app.post("/conversations/:id/summary", async (req: Request, res: Response) => {
     }).join('\n\n');
 
     // Load knowledge base (if exists)
+    // Load both general knowledge and summary-specific knowledge
     let knowledgeBaseContext = "";
     try {
       const knowledgeBase = await prisma.knowledgeBase.findMany({
-        where: { active: true },
+        where: {
+          active: true,
+          category: {
+            in: ["general", "summary"]
+          }
+        },
         select: { content: true, title: true }
       });
 
@@ -623,29 +629,31 @@ app.post("/conversations/:id/summary", async (req: Request, res: Response) => {
       console.log("Knowledge base not available yet");
     }
 
-    // Generate summary using GPT-5
-    const systemPrompt = `You are a helpful customer support assistant. Summarize email conversations concisely, highlighting:
+    // Generate summary using GPT-4o-mini
+    // Note: Will upgrade to GPT-5 when Responses API SDK support is available
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are a helpful customer support assistant. Summarize email conversations concisely, highlighting:
 1. Main issue/question
 2. Key points discussed
 3. Current status
 4. Suggested next steps (if applicable)
 
-Keep summaries under 150 words.${knowledgeBaseContext}`;
-
-    const userPrompt = `Summarize this email conversation:\n\nSubject: ${conversation.subject}\n\n${emailThread}`;
-
-    const response = await openai.responses.create({
-      model: "gpt-5-mini",
-      input: `${systemPrompt}\n\n${userPrompt}`,
-      reasoning: {
-        effort: "low"  // Fast, efficient for summaries
-      },
-      text: {
-        verbosity: "medium"  // Balanced conciseness
-      }
+Keep summaries under 150 words.${knowledgeBaseContext}`
+        },
+        {
+          role: "user",
+          content: `Summarize this email conversation:\n\nSubject: ${conversation.subject}\n\n${emailThread}`
+        }
+      ],
+      temperature: 0.5,
+      max_tokens: 300
     });
 
-    const summary = response.output_text;
+    const summary = completion.choices[0].message.content;
 
     // Save summary to database (optional - can cache it)
     await prisma.conversation.update({
@@ -660,6 +668,80 @@ Keep summaries under 150 words.${knowledgeBaseContext}`;
   } catch (error) {
     console.error("Error generating summary:", error);
     res.status(500).json({ error: "Failed to generate summary" });
+  }
+});
+
+// Knowledge Base CRUD Endpoints
+app.get("/knowledge-base", async (req: Request, res: Response) => {
+  try {
+    const entries = await prisma.knowledgeBase.findMany({
+      orderBy: { updatedAt: "desc" }
+    });
+    res.json(entries);
+  } catch (error) {
+    console.error("Error fetching knowledge base:", error);
+    res.status(500).json({ error: "Failed to fetch knowledge base" });
+  }
+});
+
+app.post("/knowledge-base", async (req: Request, res: Response) => {
+  try {
+    const { title, content, category, tags, active } = req.body;
+
+    if (!title || !content) {
+      return res.status(400).json({ error: "Title and content are required" });
+    }
+
+    const entry = await prisma.knowledgeBase.create({
+      data: {
+        title,
+        content,
+        category: category || "general",
+        tags: tags || [],
+        active: active !== undefined ? active : true
+      }
+    });
+
+    res.json(entry);
+  } catch (error) {
+    console.error("Error creating knowledge base entry:", error);
+    res.status(500).json({ error: "Failed to create entry" });
+  }
+});
+
+app.patch("/knowledge-base/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { title, content, category, tags, active } = req.body;
+
+    const entry = await prisma.knowledgeBase.update({
+      where: { id },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(content !== undefined && { content }),
+        ...(category !== undefined && { category }),
+        ...(tags !== undefined && { tags }),
+        ...(active !== undefined && { active })
+      }
+    });
+
+    res.json(entry);
+  } catch (error) {
+    console.error("Error updating knowledge base entry:", error);
+    res.status(500).json({ error: "Failed to update entry" });
+  }
+});
+
+app.delete("/knowledge-base/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.knowledgeBase.delete({
+      where: { id }
+    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting knowledge base entry:", error);
+    res.status(500).json({ error: "Failed to delete entry" });
   }
 });
 

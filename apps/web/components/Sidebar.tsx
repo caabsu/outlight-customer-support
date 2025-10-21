@@ -21,6 +21,7 @@ export default function Sidebar() {
   };
 
   const isAnalyticsActive = pathname === "/analytics";
+  const isKnowledgeBaseActive = pathname === "/knowledge-base";
 
   return (
     <div className="w-64 border-r border-border bg-background flex flex-col" style={{ fontFamily: "Roboto, sans-serif" }}>
@@ -72,7 +73,7 @@ export default function Sidebar() {
           </button>
         </div>
 
-        {/* Analytics Section */}
+        {/* Insights Section */}
         <div className="pt-4 border-t border-border">
           <div className="px-4 py-2 mb-2">
             <h3 className="text-xs font-sans font-semibold text-muted-foreground uppercase tracking-wider">Insights</h3>
@@ -87,6 +88,24 @@ export default function Sidebar() {
           >
             <span className={`w-2 h-2 rounded-full ${isAnalyticsActive ? "bg-warning" : "bg-transparent"}`}></span>
             Analytics
+          </Link>
+        </div>
+
+        {/* Settings Section */}
+        <div className="pt-4 border-t border-border">
+          <div className="px-4 py-2 mb-2">
+            <h3 className="text-xs font-sans font-semibold text-muted-foreground uppercase tracking-wider">Settings</h3>
+          </div>
+          <Link
+            href="/knowledge-base"
+            className={`block w-full text-left px-4 py-2.5 rounded-lg text-sm font-sans font-medium transition-colors flex items-center gap-2 ${
+              isKnowledgeBaseActive
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${isKnowledgeBaseActive ? "bg-purple-500" : "bg-transparent"}`}></span>
+            Knowledge Base
           </Link>
         </div>
       </nav>
