@@ -23,6 +23,7 @@ export default function ConversationView() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   // Fetch conversation history
   useEffect(() => {
@@ -128,6 +129,26 @@ export default function ConversationView() {
       console.error("Failed to mark as non-support:", error);
       // Revert on error
       updateConversationOptimistic(selectedConversation.id, { tags: currentTags });
+    }
+  };
+
+  const goToNextUnreplied = async () => {
+    try {
+      const currentId = selectedConversation?.id;
+      const endpoint = currentId
+        ? `/api/conversations/next-unreplied/${currentId}`
+        : "/api/conversations/next-unreplied";
+
+      const response = await fetch(endpoint);
+      const nextConv = await response.json();
+
+      if (nextConv && nextConv.id) {
+        selectConversation(nextConv.id);
+      } else {
+        alert("No more unreplied emails!");
+      }
+    } catch (error) {
+      console.error("Failed to get next unreplied:", error);
     }
   };
 
@@ -323,10 +344,8 @@ export default function ConversationView() {
         {selectedConversation.messages.map((message) => (
           <div
             key={message.id}
-            className={`rounded-lg border border-border p-4 ${
-              message.direction === "outbound"
-                ? "bg-primary/5 ml-12"
-                : "bg-muted/50"
+            className={`rounded-lg border border-gray-300 p-4 bg-white ${
+              message.direction === "outbound" ? "ml-12" : ""
             }`}
           >
             <div className="flex items-start justify-between mb-3">
@@ -337,26 +356,26 @@ export default function ConversationView() {
                   </span>
                 </div>
                 <div>
-                  <p className="text-sm font-sans font-medium text-foreground">
+                  <p className="text-sm font-sans font-medium text-black">
                     {message.fromEmail}
                   </p>
-                  <p className="text-xs font-sans text-muted-foreground">
+                  <p className="text-xs font-sans text-gray-600">
                     to: {message.toEmails.join(", ")}
                   </p>
                 </div>
               </div>
-              <span className="text-xs font-sans text-muted-foreground">
+              <span className="text-xs font-sans text-gray-600">
                 {formatDate(message.sentAt)}
               </span>
             </div>
             <div className="email-content">
               {message.bodyHtml ? (
                 <div
-                  className="email-html-container font-sans p-4 rounded border border-gray-200 overflow-auto"
+                  className="email-html-container font-sans p-4 rounded border border-gray-200 overflow-auto bg-white text-black"
                   dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
                 />
               ) : (
-                <p className="text-sm font-sans text-foreground whitespace-pre-wrap">
+                <p className="text-sm font-sans text-black whitespace-pre-wrap">
                   {message.bodyText}
                 </p>
               )}
@@ -364,24 +383,6 @@ export default function ConversationView() {
           </div>
         ))}
       </div>
-
-      {/* Mark as Non-Support Button */}
-      {!selectedConversation.tags?.includes("non-customer-support") && (
-        <div className="px-6 pb-4 shrink-0">
-          <button
-            onClick={handleMarkNonSupport}
-            className="group flex items-center justify-between w-full px-5 py-3 bg-background border border-border rounded-lg hover:border-red-500 hover:shadow-sm hover:shadow-red-500/10 transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-red-500 group-hover:scale-125 transition-transform"></div>
-              <span className="text-sm font-sans font-semibold text-foreground">Mark as Non-Support</span>
-            </div>
-            <span className="text-xs font-sans font-medium text-red-500/70 uppercase tracking-wider">
-              Action
-            </span>
-          </button>
-        </div>
-      )}
 
       {/* AI Actions Block */}
       <div className="border-t border-border p-6 shrink-0 bg-gradient-to-b from-purple-500/5 to-transparent">
@@ -514,32 +515,110 @@ export default function ConversationView() {
     </div>
 
     {/* Right Sidebar */}
-    <div className="w-80 border-l border-border bg-secondary flex flex-col shrink-0">
-      {/* Past Conversations Header - Always Visible */}
-      {showHistory && (
-        <>
-          <div className="px-4 py-4 border-b border-border flex items-center justify-between shrink-0">
-            <h3 className="font-sans font-semibold text-foreground text-base">Past Conversations</h3>
+    <div className="w-80 border-l border-border bg-secondary flex flex-col shrink-0 overflow-hidden">
+      {/* Past Conversations Section - Top 15% - Permanent */}
+      <div className="h-[15vh] flex flex-col border-b border-border shrink-0">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
+          <h3 className="font-sans font-semibold text-foreground text-sm">Past Conversations</h3>
+          <button
+            onClick={() => setShowAllHistory(true)}
+            className="text-xs font-sans font-medium text-primary hover:text-primary/80 transition-colors"
+          >
+            View All →
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+          {loadingHistory ? (
+            <>
+              {[1, 2].map((i) => (
+                <div key={i} className="w-full p-2 border border-border bg-background/50 animate-pulse rounded">
+                  <div className="h-2.5 bg-muted rounded w-3/4 mb-1.5"></div>
+                  <div className="h-2 bg-muted rounded w-1/2"></div>
+                </div>
+              ))}
+            </>
+          ) : history.length > 0 ? (
+            history.slice(0, 3).map((conv) => (
+              <button
+                key={conv.id}
+                onClick={() => selectConversation(conv.id)}
+                className="w-full text-left p-2 border border-border bg-background hover:border-primary hover:bg-accent/50 transition-all cursor-pointer rounded"
+              >
+                <p className="text-xs font-sans font-medium text-foreground mb-0.5 truncate">
+                  {conv.subject}
+                </p>
+                <p className="text-[10px] font-sans text-muted-foreground truncate">
+                  {new Date(conv.lastMessageAt).toLocaleDateString()} • {conv.messages.length} msg
+                </p>
+              </button>
+            ))
+          ) : (
+            <div className="p-3 text-center flex items-center justify-center">
+              <p className="text-xs font-sans text-muted-foreground">No past conversations</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Mark as Non-Support Button */}
+      {!selectedConversation.tags?.includes("non-customer-support") && (
+        <div className="px-4 py-3 shrink-0">
+          <button
+            onClick={handleMarkNonSupport}
+            className="group flex items-center justify-between w-full px-4 py-3 bg-background border border-border rounded-lg hover:border-red-500 hover:shadow-sm hover:shadow-red-500/10 transition-all"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-2 h-2 rounded-full bg-red-500 group-hover:scale-125 transition-transform"></div>
+              <span className="text-sm font-sans font-semibold text-foreground">Mark as Non-Support</span>
+            </div>
+            <span className="text-[10px] font-sans font-medium text-red-500/70 uppercase tracking-wider">
+              Action
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Next Button */}
+      <div className="px-4 pb-3 shrink-0">
+        <button
+          onClick={goToNextUnreplied}
+          className="group flex items-center justify-between w-full px-4 py-3 bg-background border border-border rounded-lg hover:border-blue-500 hover:shadow-sm hover:shadow-blue-500/10 transition-all"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-2 h-2 rounded-full bg-blue-500 group-hover:scale-125 transition-transform"></div>
+            <span className="text-sm font-sans font-semibold text-foreground">Next Unreplied</span>
+          </div>
+          <span className="text-[10px] font-sans font-medium text-blue-500/70 uppercase tracking-wider">
+            Navigate
+          </span>
+        </button>
+      </div>
+
+      {/* Spacer */}
+      <div className="flex-1"></div>
+    </div>
+
+    {/* View All Past Conversations Modal */}
+    {showAllHistory && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-background border border-border rounded-lg w-[600px] max-h-[80vh] flex flex-col shadow-xl">
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
+            <h2 className="text-lg font-sans font-bold text-foreground">All Past Conversations</h2>
             <button
-              onClick={() => setShowHistory(false)}
-              className="text-muted-foreground hover:text-foreground transition-colors text-xs font-sans"
+              onClick={() => setShowAllHistory(false)}
+              className="text-muted-foreground hover:text-foreground transition-colors text-xl"
             >
               ✕
             </button>
           </div>
-
-          {/* Past Conversations List - Max 20% of viewport height */}
-          <div className="overflow-y-auto px-4 py-2 space-y-2 max-h-[20vh]">
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
             {loadingHistory ? (
-              // Loading skeleton with consistent box size
               <>
-                {[1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    className="w-full p-2 border border-border bg-background/50 animate-pulse h-[52px]"
-                  >
-                    <div className="h-3 bg-muted rounded w-3/4 mb-2"></div>
-                    <div className="h-2 bg-muted rounded w-1/2"></div>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="w-full p-4 border border-border bg-background/50 animate-pulse rounded-lg">
+                    <div className="h-4 bg-muted rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-muted rounded w-1/2"></div>
                   </div>
                 ))}
               </>
@@ -547,30 +626,29 @@ export default function ConversationView() {
               history.map((conv) => (
                 <button
                   key={conv.id}
-                  onClick={() => selectConversation(conv.id)}
-                  className="w-full text-left p-2 border border-border bg-background hover:border-primary hover:bg-accent/50 transition-all cursor-pointer h-[52px]"
+                  onClick={() => {
+                    selectConversation(conv.id);
+                    setShowAllHistory(false);
+                  }}
+                  className="w-full text-left p-4 border border-border bg-background hover:border-primary hover:bg-accent/50 transition-all cursor-pointer rounded-lg"
                 >
-                  <p className="text-xs font-sans font-medium text-foreground mb-1 truncate">
+                  <p className="text-sm font-sans font-semibold text-foreground mb-1">
                     {conv.subject}
                   </p>
-                  <p className="text-[10px] font-sans text-muted-foreground truncate">
-                    {new Date(conv.lastMessageAt).toLocaleDateString()} •{" "}
-                    {conv.messages.length} msg
+                  <p className="text-xs font-sans text-muted-foreground">
+                    {new Date(conv.lastMessageAt).toLocaleDateString()} • {conv.messages.length} messages
                   </p>
                 </button>
               ))
             ) : (
-              <div className="p-4 text-center h-[52px] flex items-center justify-center">
-                <p className="text-xs font-sans text-muted-foreground">No past conversations</p>
+              <div className="p-8 text-center">
+                <p className="text-sm font-sans text-muted-foreground">No past conversations found</p>
               </div>
             )}
           </div>
-        </>
-      )}
-
-      {/* Spacer */}
-      <div className="flex-1"></div>
-    </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

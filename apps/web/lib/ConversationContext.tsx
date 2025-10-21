@@ -38,6 +38,7 @@ type ConversationContextType = {
   pollAndRefresh: () => Promise<void>;
   updateConversationOptimistic: (id: string, updates: Partial<Conversation>) => void;
   loading: boolean;
+  refreshing: boolean;
   showArchived: boolean;
   setShowArchived: (show: boolean) => void;
 };
@@ -54,6 +55,7 @@ export function ConversationProvider({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
   const fetchConversations = async (silent = false) => {
@@ -84,6 +86,7 @@ export function ConversationProvider({
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
+        setRefreshing(true);
         // Poll Gmail for new emails
         const pollRes = await fetch("/api/gmail/poll", { method: "POST" });
         if (!pollRes.ok) {
@@ -93,6 +96,8 @@ export function ConversationProvider({
         await fetchConversations(true);
       } catch (error) {
         console.error("Auto-refresh failed:", error);
+      } finally {
+        setRefreshing(false);
       }
     }, 30000); // 30 seconds
 
@@ -114,7 +119,7 @@ export function ConversationProvider({
 
   const pollAndRefresh = async () => {
     try {
-      setLoading(true);
+      setRefreshing(true);
       // First, poll Gmail for new emails
       await fetch("/api/gmail/poll", { method: "POST" });
       // Then refresh conversations from database
@@ -122,7 +127,7 @@ export function ConversationProvider({
     } catch (error) {
       console.error("Failed to poll and refresh:", error);
     } finally {
-      setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -136,6 +141,7 @@ export function ConversationProvider({
         pollAndRefresh,
         updateConversationOptimistic,
         loading,
+        refreshing,
         showArchived,
         setShowArchived,
       }}

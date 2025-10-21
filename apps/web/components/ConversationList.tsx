@@ -25,7 +25,7 @@ type Conversation = {
 };
 
 export default function ConversationList() {
-  const { conversations, selectedConversation, selectConversation, loading, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived } =
+  const { conversations, selectedConversation, selectConversation, loading, refreshing, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived } =
     useConversations();
   const [showStarred, setShowStarred] = useState(false);
   const [excludeNonSupport, setExcludeNonSupport] = useState(true);
@@ -219,7 +219,14 @@ export default function ConversationList() {
   }
 
   return (
-    <div className="w-96 border-r border-border bg-background flex flex-col" style={{ fontFamily: "Roboto, sans-serif" }}>
+    <div className="w-96 border-r border-border bg-background flex flex-col relative" style={{ fontFamily: "Roboto, sans-serif" }}>
+      {/* Refresh Progress Indicator */}
+      {refreshing && (
+        <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-50 overflow-hidden">
+          <div className="h-full bg-primary animate-pulse w-full"></div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-3">
