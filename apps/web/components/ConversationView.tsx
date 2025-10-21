@@ -94,6 +94,7 @@ export default function ConversationView() {
     if (!selectedConversation) return;
 
     const conversationId = selectedConversation.id;
+    const currentTags = selectedConversation.tags || [];
 
     // Show optimistic update immediately
     setMarkingNonSupport(true);
@@ -110,13 +111,15 @@ export default function ConversationView() {
       });
     }, 1000);
 
-    // Set timeout to actually archive after 5 seconds
+    // Set timeout to actually tag (NOT archive) after 5 seconds
     const timeout = setTimeout(async () => {
       try {
-        await fetch(`/api/conversations/${conversationId}/archive`, {
+        // Add non-customer-support tag without archiving
+        const updatedTags = [...currentTags, "non-customer-support"];
+        await fetch(`/api/conversations/${conversationId}/tags`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tag: "non-customer-support" }),
+          body: JSON.stringify({ tags: updatedTags }),
         });
         await refreshConversations();
       } catch (error) {
@@ -428,7 +431,7 @@ export default function ConversationView() {
             {undoTimer !== null ? (
               <div className="space-y-2">
                 <div className="w-full px-4 py-3 bg-warning text-white border-2 border-warning text-sm font-medium text-center">
-                  Archiving in {undoTimer}s...
+                  Tagging in {undoTimer}s...
                 </div>
                 <button
                   onClick={handleUndoMarkNonSupport}

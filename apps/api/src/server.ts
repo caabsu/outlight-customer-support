@@ -126,14 +126,18 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
-    // Get the reply-to email from the most recent inbound message
-    const replyToEmail = conversation.messages[0]?.replyToEmail;
+    // Get the reply-to email and from email from the most recent inbound message
+    const lastInbound = conversation.messages[0];
+    const replyToEmail = lastInbound?.replyToEmail;
+    const fromEmail = lastInbound?.fromEmail;
 
-    // CRITICAL FIX: If reply-to exists, ONLY match conversations with that EXACT reply-to
-    // Do NOT match by customer ID, do NOT match by sent-from address
-    // ONLY match messages where replyToEmail field equals our target
+    // NEW LOGIC:
+    // - If reply-to exists: match ONLY by reply-to
+    // - If NO reply-to but has fromEmail: match by fromEmail (for mailer@shopify.com, etc)
+    // - Otherwise: match by customer ID
     const whereClause = replyToEmail
       ? {
+          // Has reply-to: match only conversations with same reply-to
           messages: {
             some: {
               replyToEmail: replyToEmail
@@ -141,7 +145,19 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
           },
           id: { not: req.params.id },
         }
+      : fromEmail
+      ? {
+          // No reply-to but has fromEmail: match by fromEmail
+          messages: {
+            some: {
+              fromEmail: fromEmail,
+              direction: "inbound"
+            }
+          },
+          id: { not: req.params.id },
+        }
       : {
+          // Fallback: match by customer ID
           customerId: conversation.customerId,
           id: { not: req.params.id },
         };
