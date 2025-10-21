@@ -92,7 +92,7 @@ export default function AnalyticsPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading analytics...</p>
+        <p className="text-muted-foreground text-lg">Loading analytics...</p>
       </div>
     );
   }
@@ -100,14 +100,38 @@ export default function AnalyticsPage() {
   if (!data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Failed to load analytics</p>
+        <p className="text-muted-foreground text-lg">Failed to load analytics</p>
       </div>
     );
   }
 
   // Prepare volume trend chart data
   const volumeData = Object.entries(data.volumeTrends).sort((a, b) => a[0].localeCompare(b[0]));
-  const maxVolume = Math.max(...volumeData.map(([_, v]) => v.total));
+  const maxVolume = Math.max(...volumeData.map(([_, v]) => v.total), 1);
+
+  // Graph dimensions
+  const graphWidth = 800;
+  const graphHeight = 300;
+  const graphPadding = { top: 20, right: 20, bottom: 40, left: 60 };
+  const chartWidth = graphWidth - graphPadding.left - graphPadding.right;
+  const chartHeight = graphHeight - graphPadding.top - graphPadding.bottom;
+
+  // Calculate points for the line graph
+  const getPoints = (values: number[]) => {
+    if (values.length === 0) return "";
+    const xStep = chartWidth / Math.max(values.length - 1, 1);
+    return values
+      .map((value, index) => {
+        const x = graphPadding.left + index * xStep;
+        const y = graphPadding.top + chartHeight - (value / maxVolume) * chartHeight;
+        return `${x},${y}`;
+      })
+      .join(" ");
+  };
+
+  const totalValues = volumeData.map(([_, v]) => v.total);
+  const inboundValues = volumeData.map(([_, v]) => v.inbound);
+  const outboundValues = volumeData.map(([_, v]) => v.outbound);
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -133,12 +157,12 @@ export default function AnalyticsPage() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-7xl mx-auto p-8">
+        <div className="max-w-7xl mx-auto p-12">
           {/* Header */}
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-12">
             <div>
-              <h1 className="text-3xl font-bold text-foreground mb-2">Analytics Dashboard</h1>
-              <p className="text-muted-foreground">
+              <h1 className="text-4xl font-bold text-foreground mb-3">Analytics Dashboard</h1>
+              <p className="text-lg text-muted-foreground">
                 Viewing data for the last {data.periodInDays} days
               </p>
             </div>
@@ -149,7 +173,7 @@ export default function AnalyticsPage() {
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     period === p
                       ? "bg-primary text-primary-foreground"
                       : "bg-secondary text-secondary-foreground hover:bg-accent"
@@ -162,19 +186,19 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Overview Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
             {/* Total Conversations */}
-            <div className="bg-secondary border border-border rounded-xl p-6">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-muted-foreground">Total Conversations</h3>
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+            <div className="bg-secondary border border-border rounded-xl p-8">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Total Conversations</h3>
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
                     strokeWidth={2}
                     stroke="currentColor"
-                    className="w-5 h-5 text-primary"
+                    className="w-6 h-6 text-primary"
                   >
                     <path
                       strokeLinecap="round"
@@ -184,22 +208,22 @@ export default function AnalyticsPage() {
                   </svg>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-foreground mb-1">{data.overview.totalConversations}</p>
-              <p className="text-xs text-muted-foreground">{data.overview.totalMessages} total messages</p>
+              <p className="text-4xl font-bold text-foreground mb-2">{data.overview.totalConversations}</p>
+              <p className="text-sm text-muted-foreground">{data.overview.totalMessages} total messages</p>
             </div>
 
             {/* Needs Reply */}
-            <div className="bg-secondary border border-border rounded-xl p-6">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-muted-foreground">Needs Reply</h3>
-                <div className="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center">
+            <div className="bg-secondary border border-border rounded-xl p-8">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Needs Reply</h3>
+                <div className="w-12 h-12 rounded-full bg-warning/10 flex items-center justify-center">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
                     strokeWidth={2}
                     stroke="currentColor"
-                    className="w-5 h-5 text-warning"
+                    className="w-6 h-6 text-warning"
                   >
                     <path
                       strokeLinecap="round"
@@ -209,8 +233,8 @@ export default function AnalyticsPage() {
                   </svg>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-warning mb-1">{data.overview.unrepliedCount}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-4xl font-bold text-warning mb-2">{data.overview.unrepliedCount}</p>
+              <p className="text-sm text-muted-foreground">
                 {data.overview.totalConversations > 0
                   ? Math.round((data.overview.unrepliedCount / data.overview.totalConversations) * 100)
                   : 0}
@@ -219,17 +243,17 @@ export default function AnalyticsPage() {
             </div>
 
             {/* Resolved */}
-            <div className="bg-secondary border border-border rounded-xl p-6">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-muted-foreground">Resolved</h3>
-                <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
+            <div className="bg-secondary border border-border rounded-xl p-8">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Resolved</h3>
+                <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
                     strokeWidth={2}
                     stroke="currentColor"
-                    className="w-5 h-5 text-success"
+                    className="w-6 h-6 text-success"
                   >
                     <path
                       strokeLinecap="round"
@@ -239,24 +263,24 @@ export default function AnalyticsPage() {
                   </svg>
                 </div>
               </div>
-              <p className={`text-3xl font-bold mb-1 ${getStatusColor(data.overview.resolutionRate, "resolution")}`}>
+              <p className={`text-4xl font-bold mb-2 ${getStatusColor(data.overview.resolutionRate, "resolution")}`}>
                 {data.overview.resolvedCount}
               </p>
-              <p className="text-xs text-muted-foreground">{data.overview.resolutionRate}% resolution rate</p>
+              <p className="text-sm text-muted-foreground">{data.overview.resolutionRate}% resolution rate</p>
             </div>
 
             {/* Email Velocity */}
-            <div className="bg-secondary border border-border rounded-xl p-6">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-muted-foreground">Email Velocity</h3>
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+            <div className="bg-secondary border border-border rounded-xl p-8">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Email Velocity</h3>
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
                     strokeWidth={2}
                     stroke="currentColor"
-                    className="w-5 h-5 text-primary"
+                    className="w-6 h-6 text-primary"
                   >
                     <path
                       strokeLinecap="round"
@@ -266,39 +290,171 @@ export default function AnalyticsPage() {
                   </svg>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-foreground mb-1">{data.emailVelocity.total}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-4xl font-bold text-foreground mb-2">{data.emailVelocity.total}</p>
+              <p className="text-sm text-muted-foreground">
                 emails/day ({data.emailVelocity.inbound} in, {data.emailVelocity.outbound} out)
               </p>
             </div>
           </div>
 
+          {/* Volume Trends Graph */}
+          <div className="bg-secondary border border-border rounded-xl p-8 mb-16">
+            <h2 className="text-2xl font-bold text-foreground mb-6">Email Volume Trends</h2>
+            {volumeData.length > 0 ? (
+              <div className="w-full overflow-x-auto">
+                <svg width={graphWidth} height={graphHeight} className="mx-auto">
+                  {/* Grid lines */}
+                  {[0, 1, 2, 3, 4].map((i) => {
+                    const y = graphPadding.top + (chartHeight / 4) * i;
+                    const value = Math.round(maxVolume - (maxVolume / 4) * i);
+                    return (
+                      <g key={i}>
+                        <line
+                          x1={graphPadding.left}
+                          y1={y}
+                          x2={graphWidth - graphPadding.right}
+                          y2={y}
+                          stroke="currentColor"
+                          strokeWidth="1"
+                          className="text-border"
+                          strokeDasharray="4 4"
+                        />
+                        <text
+                          x={graphPadding.left - 10}
+                          y={y + 4}
+                          textAnchor="end"
+                          className="text-xs fill-muted-foreground"
+                        >
+                          {value}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* X-axis labels */}
+                  {volumeData.map(([date], index) => {
+                    const xStep = chartWidth / Math.max(volumeData.length - 1, 1);
+                    const x = graphPadding.left + index * xStep;
+                    const displayDate = new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                    return (
+                      <text
+                        key={date}
+                        x={x}
+                        y={graphHeight - graphPadding.bottom + 20}
+                        textAnchor="middle"
+                        className="text-xs fill-muted-foreground"
+                      >
+                        {displayDate}
+                      </text>
+                    );
+                  })}
+
+                  {/* Area fill for total */}
+                  {totalValues.length > 0 && (
+                    <polygon
+                      points={`${graphPadding.left},${graphPadding.top + chartHeight} ${getPoints(totalValues)} ${graphWidth - graphPadding.right},${graphPadding.top + chartHeight}`}
+                      className="fill-primary/10"
+                    />
+                  )}
+
+                  {/* Lines */}
+                  {totalValues.length > 0 && (
+                    <polyline
+                      points={getPoints(totalValues)}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      className="text-primary"
+                    />
+                  )}
+
+                  {inboundValues.length > 0 && (
+                    <polyline
+                      points={getPoints(inboundValues)}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="text-warning"
+                      strokeDasharray="5 5"
+                    />
+                  )}
+
+                  {outboundValues.length > 0 && (
+                    <polyline
+                      points={getPoints(outboundValues)}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="text-success"
+                      strokeDasharray="5 5"
+                    />
+                  )}
+
+                  {/* Data points */}
+                  {totalValues.map((value, index) => {
+                    const xStep = chartWidth / Math.max(totalValues.length - 1, 1);
+                    const x = graphPadding.left + index * xStep;
+                    const y = graphPadding.top + chartHeight - (value / maxVolume) * chartHeight;
+                    return (
+                      <circle
+                        key={index}
+                        cx={x}
+                        cy={y}
+                        r="4"
+                        className="fill-primary stroke-background"
+                        strokeWidth="2"
+                      />
+                    );
+                  })}
+                </svg>
+
+                {/* Legend */}
+                <div className="flex items-center justify-center gap-8 mt-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-1 bg-primary rounded"></div>
+                    <span className="text-sm text-muted-foreground">Total</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-1 bg-warning rounded" style={{ backgroundImage: 'repeating-linear-gradient(90deg, currentColor, currentColor 5px, transparent 5px, transparent 10px)' }}></div>
+                    <span className="text-sm text-muted-foreground">Inbound</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-1 bg-success rounded" style={{ backgroundImage: 'repeating-linear-gradient(90deg, currentColor, currentColor 5px, transparent 5px, transparent 10px)' }}></div>
+                    <span className="text-sm text-muted-foreground">Outbound</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-center text-muted-foreground py-12 text-lg">No data available for this period</p>
+            )}
+          </div>
+
           {/* Response Time Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
             {/* Average Response Time */}
-            <div className="bg-secondary border border-border rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Average Response Time</h3>
-              <div className="space-y-4">
+            <div className="bg-secondary border border-border rounded-xl p-8">
+              <h2 className="text-2xl font-bold text-foreground mb-6">Response Time Metrics</h2>
+              <div className="space-y-6">
                 <div>
-                  <div className="flex items-end gap-2 mb-1">
-                    <p className={`text-4xl font-bold ${getStatusColor(data.responseTime.averageHours, "response")}`}>
+                  <div className="flex items-end gap-3 mb-2">
+                    <p className={`text-5xl font-bold ${getStatusColor(data.responseTime.averageHours, "response")}`}>
                       {formatHours(data.responseTime.averageHours)}
                     </p>
-                    <p className="text-sm text-muted-foreground mb-2">average</p>
+                    <p className="text-lg text-muted-foreground mb-3">average</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">Based on {data.responseTime.sampleSize} responses</p>
+                  <p className="text-sm text-muted-foreground">Based on {data.responseTime.sampleSize} responses</p>
                 </div>
 
-                <div className="pt-4 border-t border-border">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm text-muted-foreground">Median Response Time</span>
-                    <span className={`text-lg font-bold ${getStatusColor(data.responseTime.medianHours, "response")}`}>
+                <div className="pt-6 border-t border-border space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-base text-muted-foreground">Median Response Time</span>
+                    <span className={`text-2xl font-bold ${getStatusColor(data.responseTime.medianHours, "response")}`}>
                       {formatHours(data.responseTime.medianHours)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">First Response Time</span>
-                    <span className={`text-lg font-bold ${getStatusColor(data.responseTime.firstResponseAverageHours, "response")}`}>
+                    <span className="text-base text-muted-foreground">First Response Time</span>
+                    <span className={`text-2xl font-bold ${getStatusColor(data.responseTime.firstResponseAverageHours, "response")}`}>
                       {formatHours(data.responseTime.firstResponseAverageHours)}
                     </span>
                   </div>
@@ -307,17 +463,17 @@ export default function AnalyticsPage() {
             </div>
 
             {/* Volume Breakdown */}
-            <div className="bg-secondary border border-border rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Volume Breakdown</h3>
-              <div className="space-y-4">
+            <div className="bg-secondary border border-border rounded-xl p-8">
+              <h2 className="text-2xl font-bold text-foreground mb-6">Volume Breakdown</h2>
+              <div className="space-y-6">
                 <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm text-muted-foreground">Inbound Messages</span>
-                    <span className="text-lg font-bold text-primary">{data.overview.inboundMessages}</span>
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-base text-muted-foreground">Inbound Messages</span>
+                    <span className="text-2xl font-bold text-primary">{data.overview.inboundMessages}</span>
                   </div>
-                  <div className="w-full bg-muted rounded-full h-2">
+                  <div className="w-full bg-muted rounded-full h-3">
                     <div
-                      className="bg-primary rounded-full h-2"
+                      className="bg-primary rounded-full h-3 transition-all duration-500"
                       style={{
                         width: `${data.overview.totalMessages > 0 ? (data.overview.inboundMessages / data.overview.totalMessages) * 100 : 0}%`
                       }}
@@ -326,13 +482,13 @@ export default function AnalyticsPage() {
                 </div>
 
                 <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm text-muted-foreground">Outbound Messages</span>
-                    <span className="text-lg font-bold text-success">{data.overview.outboundMessages}</span>
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-base text-muted-foreground">Outbound Messages</span>
+                    <span className="text-2xl font-bold text-success">{data.overview.outboundMessages}</span>
                   </div>
-                  <div className="w-full bg-muted rounded-full h-2">
+                  <div className="w-full bg-muted rounded-full h-3">
                     <div
-                      className="bg-success rounded-full h-2"
+                      className="bg-success rounded-full h-3 transition-all duration-500"
                       style={{
                         width: `${data.overview.totalMessages > 0 ? (data.overview.outboundMessages / data.overview.totalMessages) * 100 : 0}%`
                       }}
@@ -340,60 +496,27 @@ export default function AnalyticsPage() {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-border">
+                <div className="pt-6 border-t border-border">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Total Messages</span>
-                    <span className="text-2xl font-bold text-foreground">{data.overview.totalMessages}</span>
+                    <span className="text-base text-muted-foreground">Total Messages</span>
+                    <span className="text-3xl font-bold text-foreground">{data.overview.totalMessages}</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Volume Trends Chart */}
-          <div className="bg-secondary border border-border rounded-xl p-6 mb-8">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Volume Trends</h3>
-            {volumeData.length > 0 ? (
-              <div className="space-y-3">
-                {volumeData.map(([date, volume]) => (
-                  <div key={date} className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">{new Date(date).toLocaleDateString()}</span>
-                      <span className="text-foreground font-medium">{volume.total} emails</span>
-                    </div>
-                    <div className="flex gap-1 h-8">
-                      <div
-                        className="bg-primary rounded flex items-center justify-center text-xs text-primary-foreground font-medium"
-                        style={{ width: `${maxVolume > 0 ? (volume.inbound / maxVolume) * 100 : 0}%`, minWidth: volume.inbound > 0 ? '30px' : '0' }}
-                      >
-                        {volume.inbound > 0 && volume.inbound}
-                      </div>
-                      <div
-                        className="bg-success rounded flex items-center justify-center text-xs text-white font-medium"
-                        style={{ width: `${maxVolume > 0 ? (volume.outbound / maxVolume) * 100 : 0}%`, minWidth: volume.outbound > 0 ? '30px' : '0' }}
-                      >
-                        {volume.outbound > 0 && volume.outbound}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-center text-muted-foreground py-8">No data available for this period</p>
-            )}
-          </div>
-
           {/* Tag Distribution */}
           {Object.keys(data.tagDistribution).length > 0 && (
-            <div className="bg-secondary border border-border rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Tag Distribution</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="bg-secondary border border-border rounded-xl p-8 mb-16">
+              <h2 className="text-2xl font-bold text-foreground mb-6">Tag Distribution</h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 {Object.entries(data.tagDistribution)
                   .sort((a, b) => b[1] - a[1])
                   .map(([tag, count]) => (
-                    <div key={tag} className="bg-background border border-border rounded-lg p-4">
-                      <p className="text-xs text-muted-foreground mb-1 truncate">{tag}</p>
-                      <p className="text-2xl font-bold text-primary">{count}</p>
+                    <div key={tag} className="bg-background border border-border rounded-lg p-6 hover:border-primary transition-colors">
+                      <p className="text-sm text-muted-foreground mb-2 truncate">{tag}</p>
+                      <p className="text-3xl font-bold text-primary">{count}</p>
                     </div>
                   ))}
               </div>
