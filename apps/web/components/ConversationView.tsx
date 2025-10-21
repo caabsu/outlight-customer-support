@@ -23,14 +23,26 @@ export default function ConversationView() {
   const [markingNonSupport, setMarkingNonSupport] = useState(false);
   const [undoTimer, setUndoTimer] = useState<number | null>(null);
   const [undoTimeout, setUndoTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Fetch conversation history
   useEffect(() => {
     if (selectedConversation?.id) {
+      setLoadingHistory(true);
+      setHistory([]);
       fetch(`/api/conversations/${selectedConversation.id}/history`)
         .then((res) => res.json())
-        .then((data) => setHistory(data))
-        .catch((err) => console.error("Failed to fetch history:", err));
+        .then((data) => {
+          setHistory(data);
+          setLoadingHistory(false);
+        })
+        .catch((err) => {
+          console.error("Failed to fetch history:", err);
+          setLoadingHistory(false);
+        });
+    } else {
+      setHistory([]);
+      setLoadingHistory(false);
     }
   }, [selectedConversation?.id]);
 
@@ -356,8 +368,8 @@ export default function ConversationView() {
 
     {/* Right Sidebar */}
     <div className="w-80 border-l border-border bg-secondary flex flex-col shrink-0">
-      {/* Past Conversations Section */}
-      {showHistory && history.length > 0 && (
+      {/* Past Conversations Header - Always Visible */}
+      {showHistory && (
         <>
           <div className="px-4 py-2 border-b border-border flex items-center justify-between shrink-0">
             <h3 className="font-sans font-semibold text-foreground text-sm">Past Conversations</h3>
@@ -371,21 +383,40 @@ export default function ConversationView() {
 
           {/* Past Conversations List - Max 20% of viewport height */}
           <div className="overflow-y-auto px-4 py-2 space-y-2 max-h-[20vh]">
-            {history.map((conv) => (
-              <button
-                key={conv.id}
-                onClick={() => selectConversation(conv.id)}
-                className="w-full text-left p-2 border border-border bg-background hover:border-primary hover:bg-accent/50 transition-all cursor-pointer"
-              >
-                <p className="text-xs font-medium text-foreground mb-1 truncate">
-                  {conv.subject}
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  {new Date(conv.lastMessageAt).toLocaleDateString()} •{" "}
-                  {conv.messages.length} msg
-                </p>
-              </button>
-            ))}
+            {loadingHistory ? (
+              // Loading skeleton with consistent box size
+              <>
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="w-full p-2 border border-border bg-background/50 animate-pulse h-[52px]"
+                  >
+                    <div className="h-3 bg-muted rounded w-3/4 mb-2"></div>
+                    <div className="h-2 bg-muted rounded w-1/2"></div>
+                  </div>
+                ))}
+              </>
+            ) : history.length > 0 ? (
+              history.map((conv) => (
+                <button
+                  key={conv.id}
+                  onClick={() => selectConversation(conv.id)}
+                  className="w-full text-left p-2 border border-border bg-background hover:border-primary hover:bg-accent/50 transition-all cursor-pointer h-[52px]"
+                >
+                  <p className="text-xs font-medium text-foreground mb-1 truncate">
+                    {conv.subject}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {new Date(conv.lastMessageAt).toLocaleDateString()} •{" "}
+                    {conv.messages.length} msg
+                  </p>
+                </button>
+              ))
+            ) : (
+              <div className="p-4 text-center h-[52px] flex items-center justify-center">
+                <p className="text-xs text-muted-foreground">No past conversations</p>
+              </div>
+            )}
           </div>
         </>
       )}
