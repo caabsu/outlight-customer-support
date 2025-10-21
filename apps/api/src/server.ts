@@ -623,30 +623,29 @@ app.post("/conversations/:id/summary", async (req: Request, res: Response) => {
       console.log("Knowledge base not available yet");
     }
 
-    // Generate summary using GPT
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `You are a helpful customer support assistant. Summarize email conversations concisely, highlighting:
+    // Generate summary using GPT-5
+    const systemPrompt = `You are a helpful customer support assistant. Summarize email conversations concisely, highlighting:
 1. Main issue/question
 2. Key points discussed
 3. Current status
 4. Suggested next steps (if applicable)
 
-Keep summaries under 150 words.${knowledgeBaseContext}`
-        },
-        {
-          role: "user",
-          content: `Summarize this email conversation:\n\nSubject: ${conversation.subject}\n\n${emailThread}`
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 300
+Keep summaries under 150 words.${knowledgeBaseContext}`;
+
+    const userPrompt = `Summarize this email conversation:\n\nSubject: ${conversation.subject}\n\n${emailThread}`;
+
+    const response = await openai.responses.create({
+      model: "gpt-5-mini",
+      input: `${systemPrompt}\n\n${userPrompt}`,
+      reasoning: {
+        effort: "low"  // Fast, efficient for summaries
+      },
+      text: {
+        verbosity: "medium"  // Balanced conciseness
+      }
     });
 
-    const summary = completion.choices[0].message.content;
+    const summary = response.output_text;
 
     // Save summary to database (optional - can cache it)
     await prisma.conversation.update({

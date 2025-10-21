@@ -94,27 +94,29 @@ const knowledgeBase = await prisma.knowledgeBase.findMany({
 **Current Configuration:**
 
 ```typescript
-const completion = await openai.chat.completions.create({
-  model: "gpt-4o-mini",
-  messages: [
-    {
-      role: "system",
-      content: `You are a helpful customer support assistant. Summarize email conversations concisely, highlighting:
+// Using GPT-5 with Responses API
+const systemPrompt = `You are a helpful customer support assistant. Summarize email conversations concisely, highlighting:
 1. Main issue/question
 2. Key points discussed
 3. Current status
 4. Suggested next steps (if applicable)
 
-Keep summaries under 150 words.${knowledgeBaseContext}`
-    },
-    {
-      role: "user",
-      content: `Summarize this email conversation:\n\nSubject: ${conversation.subject}\n\n${emailThread}`
-    }
-  ],
-  temperature: 0.7,
-  max_tokens: 300
+Keep summaries under 150 words.${knowledgeBaseContext}`;
+
+const userPrompt = `Summarize this email conversation:\n\nSubject: ${conversation.subject}\n\n${emailThread}`;
+
+const response = await openai.responses.create({
+  model: "gpt-5-mini",
+  input: `${systemPrompt}\n\n${userPrompt}`,
+  reasoning: {
+    effort: "low"  // Fast, efficient for summaries
+  },
+  text: {
+    verbosity: "medium"  // Balanced conciseness
+  }
 });
+
+const summary = response.output_text;
 ```
 
 ---
@@ -123,12 +125,10 @@ Keep summaries under 150 words.${knowledgeBaseContext}`
 
 ### 1. **System Prompt (Instructions)**
 
-Customize the `content` field in the system message to change how the AI behaves:
+Customize the prompt to change how the AI behaves:
 
 ```typescript
-{
-  role: "system",
-  content: `You are a customer support AI for an e-commerce company.
+const systemPrompt = `You are a customer support AI for an e-commerce company.
 
 TONE: Professional, empathetic, solution-oriented
 FORMAT: Use bullet points and emojis
@@ -141,29 +141,35 @@ Include:
 - ⚡ Urgency (High/Medium/Low)
 - ✅ Next steps
 
-${knowledgeBaseContext}`
-}
+${knowledgeBaseContext}`;
+
+const response = await openai.responses.create({
+  model: "gpt-5-mini",
+  input: `${systemPrompt}\n\n${userPrompt}`,
+  reasoning: { effort: "low" },
+  text: { verbosity: "medium" }
+});
 ```
 
 ### 2. **Output Format**
 
-Control the structure of AI responses:
+Control the structure of AI responses in your prompt:
 
 **JSON Output:**
 ```typescript
-content: `Output your summary as JSON with this structure:
+const systemPrompt = `Output your summary as JSON with this structure:
 {
   "issue": "Brief description",
   "sentiment": "positive/neutral/negative",
   "urgency": "high/medium/low",
   "nextSteps": ["step 1", "step 2"],
   "tags": ["tag1", "tag2"]
-}`
+}`;
 ```
 
 **Markdown Output:**
 ```typescript
-content: `Format your summary in markdown:
+const systemPrompt = `Format your summary in markdown:
 
 ## Issue
 Brief description here
@@ -173,41 +179,47 @@ Current state of conversation
 
 ## Recommended Actions
 - Action 1
-- Action 2`
+- Action 2`;
 ```
 
-### 3. **Temperature (Creativity)**
+### 3. **Reasoning Effort (GPT-5)**
 
-Adjust the `temperature` parameter (0.0 - 2.0):
-- `0.0-0.3`: Very focused and deterministic (good for factual summaries)
-- `0.4-0.7`: Balanced (default, good for most tasks)
-- `0.8-1.2`: More creative (good for drafting replies)
-- `1.3-2.0`: Very creative (rarely needed)
+Adjust the `reasoning.effort` parameter:
+- `minimal`: Very fast, minimal thinking (best for simple tasks)
+- `low`: Fast, efficient (good for summaries, current default)
+- `medium`: Balanced reasoning (good for most tasks)
+- `high`: Deep reasoning (complex multi-step problems)
 
 ```typescript
-temperature: 0.3  // More consistent, less creative
+reasoning: {
+  effort: "medium"  // More thorough reasoning
+}
 ```
 
-### 4. **Max Tokens (Length)**
+### 4. **Text Verbosity (GPT-5)**
 
-Control response length with `max_tokens`:
-- 100 tokens ≈ 75 words
-- 300 tokens ≈ 225 words
-- 500 tokens ≈ 375 words
+Control output length with `text.verbosity`:
+- `low`: Concise, brief responses (~100-150 words)
+- `medium`: Balanced (current default, ~150-250 words)
+- `high`: Detailed, comprehensive (~250-400 words)
 
 ```typescript
-max_tokens: 500  // Longer summaries
+text: {
+  verbosity: "high"  // More detailed summaries
+}
 ```
 
 ### 5. **Model Selection**
 
-Choose different GPT models based on needs:
+Choose different GPT-5 models based on needs:
 
 ```typescript
-model: "gpt-4o-mini"      // Fast, cheap, good for summaries
-model: "gpt-4o"           // More capable, better reasoning
-model: "gpt-3.5-turbo"    // Fastest, cheapest, basic tasks
+model: "gpt-5-mini"      // Cost-optimized, fast (current - best for summaries)
+model: "gpt-5"           // Most capable, complex reasoning
+model: "gpt-5-nano"      // Highest throughput, simple tasks
 ```
+
+**Note:** GPT-5 uses the Responses API (`openai.responses.create()`) instead of Chat Completions. The `temperature` and `top_p` parameters are NOT supported in GPT-5.
 
 ### 6. **Knowledge Base Filtering**
 
