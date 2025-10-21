@@ -366,20 +366,34 @@ export default function ConversationView() {
       </div>
 
       {/* AI Actions Block */}
-      <div className="border-t border-border p-6 shrink-0 bg-secondary/30">
-        <h3 className="text-sm font-sans font-semibold text-foreground mb-3">AI Assistant</h3>
-        <div className="grid grid-cols-2 gap-3 min-h-32">
+      <div className="border-t border-border p-6 shrink-0 bg-gradient-to-b from-purple-500/5 to-transparent">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-8 bg-purple-500 rounded-full"></div>
+          <div>
+            <h3 className="text-xl font-sans font-bold text-foreground">AI Assistant</h3>
+            <p className="text-xs font-sans text-muted-foreground mt-0.5">
+              Intelligent tools powered by GPT to enhance your workflow
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
           {/* AI Action 1: Generate Summary */}
           <button
             onClick={handleGenerateSummary}
             disabled={loadingSummary}
-            className="flex flex-col items-start p-4 bg-background border border-border rounded-lg hover:border-primary hover:bg-accent/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="group flex flex-col items-start p-5 bg-background border border-border rounded-lg hover:border-purple-500 hover:shadow-sm hover:shadow-purple-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <div className="text-2xl mb-2">📝</div>
+            <div className="flex items-center justify-between w-full mb-3">
+              <div className="w-2 h-2 rounded-full bg-purple-500 group-hover:scale-125 transition-transform"></div>
+              <span className="text-xs font-sans font-medium text-purple-500/70 uppercase tracking-wider">
+                {loadingSummary ? "Processing" : "Active"}
+              </span>
+            </div>
             <div className="text-left">
-              <p className="text-sm font-sans font-medium text-foreground">Generate Summary</p>
-              <p className="text-xs font-sans text-muted-foreground mt-1">
-                {loadingSummary ? "Generating..." : "Summarize this email"}
+              <p className="text-base font-sans font-semibold text-foreground mb-1">Generate Summary</p>
+              <p className="text-xs font-sans text-muted-foreground leading-relaxed">
+                {loadingSummary ? "Analyzing conversation and generating concise summary..." : "Create an intelligent summary of the conversation highlighting key points, issues, and next steps"}
               </p>
             </div>
           </button>
@@ -387,44 +401,68 @@ export default function ConversationView() {
           {/* AI Action 2: Placeholder */}
           <button
             disabled
-            className="flex flex-col items-start p-4 bg-background border border-border rounded-lg opacity-50 cursor-not-allowed"
+            className="flex flex-col items-start p-5 bg-background border border-border rounded-lg opacity-40 cursor-not-allowed"
           >
-            <div className="text-2xl mb-2">✨</div>
+            <div className="flex items-center justify-between w-full mb-3">
+              <div className="w-2 h-2 rounded-full bg-muted-foreground"></div>
+              <span className="text-xs font-sans font-medium text-muted-foreground uppercase tracking-wider">
+                Coming Soon
+              </span>
+            </div>
             <div className="text-left">
-              <p className="text-sm font-sans font-medium text-foreground">Draft Reply</p>
-              <p className="text-xs font-sans text-muted-foreground mt-1">Coming soon</p>
+              <p className="text-base font-sans font-semibold text-foreground mb-1">Draft Reply</p>
+              <p className="text-xs font-sans text-muted-foreground leading-relaxed">
+                Generate context-aware reply suggestions based on conversation history and customer needs
+              </p>
             </div>
           </button>
 
           {/* AI Action 3: Placeholder */}
           <button
             disabled
-            className="flex flex-col items-start p-4 bg-background border border-border rounded-lg opacity-50 cursor-not-allowed"
+            className="flex flex-col items-start p-5 bg-background border border-border rounded-lg opacity-40 cursor-not-allowed"
           >
-            <div className="text-2xl mb-2">🏷️</div>
+            <div className="flex items-center justify-between w-full mb-3">
+              <div className="w-2 h-2 rounded-full bg-muted-foreground"></div>
+              <span className="text-xs font-sans font-medium text-muted-foreground uppercase tracking-wider">
+                Coming Soon
+              </span>
+            </div>
             <div className="text-left">
-              <p className="text-sm font-sans font-medium text-foreground">Suggest Tags</p>
-              <p className="text-xs font-sans text-muted-foreground mt-1">Coming soon</p>
+              <p className="text-base font-sans font-semibold text-foreground mb-1">Suggest Tags</p>
+              <p className="text-xs font-sans text-muted-foreground leading-relaxed">
+                Automatically categorize conversations with intelligent tag recommendations
+              </p>
             </div>
           </button>
 
           {/* AI Action 4: Placeholder */}
           <button
             disabled
-            className="flex flex-col items-start p-4 bg-background border border-border rounded-lg opacity-50 cursor-not-allowed"
+            className="flex flex-col items-start p-5 bg-background border border-border rounded-lg opacity-40 cursor-not-allowed"
           >
-            <div className="text-2xl mb-2">🔍</div>
+            <div className="flex items-center justify-between w-full mb-3">
+              <div className="w-2 h-2 rounded-full bg-muted-foreground"></div>
+              <span className="text-xs font-sans font-medium text-muted-foreground uppercase tracking-wider">
+                Coming Soon
+              </span>
+            </div>
             <div className="text-left">
-              <p className="text-sm font-sans font-medium text-foreground">Find Similar</p>
-              <p className="text-xs font-sans text-muted-foreground mt-1">Coming soon</p>
+              <p className="text-base font-sans font-semibold text-foreground mb-1">Find Similar</p>
+              <p className="text-xs font-sans text-muted-foreground leading-relaxed">
+                Discover similar conversations and past solutions to resolve issues faster
+              </p>
             </div>
           </button>
         </div>
 
         {/* AI Summary Display */}
         {aiSummary && (
-          <div className="mt-4 p-4 bg-primary/5 border border-primary/20 rounded-lg">
-            <h4 className="text-xs font-sans font-semibold text-primary mb-2">Summary:</h4>
+          <div className="mt-5 p-5 bg-purple-500/5 border border-purple-500/20 rounded-lg">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+              <h4 className="text-sm font-sans font-bold text-purple-600">AI-Generated Summary</h4>
+            </div>
             <p className="text-sm font-sans text-foreground leading-relaxed whitespace-pre-wrap">{aiSummary}</p>
           </div>
         )}
