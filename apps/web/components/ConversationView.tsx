@@ -425,7 +425,7 @@ export default function ConversationView() {
         {aiSummary && (
           <div className="mt-4 p-4 bg-primary/5 border border-primary/20 rounded-lg">
             <h4 className="text-xs font-sans font-semibold text-primary mb-2">Summary:</h4>
-            <p className="text-sm font-sans text-foreground leading-relaxed">{aiSummary}</p>
+            <p className="text-sm font-sans text-foreground leading-relaxed whitespace-pre-wrap">{aiSummary}</p>
           </div>
         )}
       </div>
