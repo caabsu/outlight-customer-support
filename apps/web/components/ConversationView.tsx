@@ -45,8 +45,8 @@ export default function ConversationView() {
 
     if (inboundMessages.length > 0) {
       const lastInbound = inboundMessages[inboundMessages.length - 1];
-      // Use Reply-To if it exists, otherwise fall back to customer email
-      return (lastInbound as any).replyToEmail || selectedConversation.customer.primaryEmail;
+      // Use Reply-To if it exists, otherwise fall back to fromEmail
+      return lastInbound.replyToEmail || lastInbound.fromEmail;
     }
 
     return selectedConversation.customer.primaryEmail;

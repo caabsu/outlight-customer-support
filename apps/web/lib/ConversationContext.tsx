@@ -10,6 +10,7 @@ type Message = {
   bodyHtml: string | null;
   bodyText: string | null;
   direction: string;
+  replyToEmail: string | null;
 };
 
 type Conversation = {
