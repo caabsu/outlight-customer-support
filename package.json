@@ -4,8 +4,11 @@
     "main": "index.js",
     "scripts": {
         "dev": "ts-node apps/api/src/server.ts",
-        "build": "tsc",
+        "dev:web": "cd apps/web && npm run dev",
+        "dev:all": "npm run dev & npm run dev:web",
+        "build": "tsc && cd apps/web && npm run build",
         "start": "node dist/apps/api/src/server.js",
+        "start:web": "cd apps/web && npm start",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "repository": {
