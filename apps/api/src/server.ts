@@ -310,6 +310,47 @@ app.patch("/conversations/:id/tags", async (req: Request, res: Response) => {
   }
 });
 
+// DEBUG: Check reply-to email values in database
+app.get("/debug/reply-to", async (req: Request, res: Response) => {
+  try {
+    const messages = await prisma.message.findMany({
+      where: { direction: "inbound" },
+      select: {
+        id: true,
+        fromEmail: true,
+        replyToEmail: true,
+        sentAt: true,
+        conversation: {
+          select: {
+            id: true,
+            subject: true,
+          }
+        }
+      },
+      orderBy: { sentAt: "desc" },
+      take: 20,
+    });
+
+    const summary = {
+      total: messages.length,
+      withReplyTo: messages.filter(m => m.replyToEmail).length,
+      withoutReplyTo: messages.filter(m => !m.replyToEmail).length,
+      messages: messages.map(m => ({
+        conversationId: m.conversation.id,
+        subject: m.conversation.subject,
+        fromEmail: m.fromEmail,
+        replyToEmail: m.replyToEmail || "NULL",
+        sentAt: m.sentAt,
+      }))
+    };
+
+    res.json(summary);
+  } catch (error) {
+    console.error("Error checking reply-to:", error);
+    res.status(500).json({ error: "Failed to check reply-to values" });
+  }
+});
+
 // Send a reply to a conversation
 app.post("/messages", async (req: Request, res: Response) => {
   try {
