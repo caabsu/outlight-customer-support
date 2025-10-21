@@ -380,12 +380,12 @@ export default function ConversationView() {
                   <p className="text-sm font-sans font-medium text-black">
                     {message.fromEmail}
                   </p>
-                  <p className="text-xs font-sans text-gray-600">
+                  <p className="text-xs font-sans text-black">
                     to: {message.toEmails.join(", ")}
                   </p>
                 </div>
               </div>
-              <span className="text-xs font-sans text-gray-600">
+              <span className="text-xs font-sans text-black">
                 {formatDate(message.sentAt)}
               </span>
             </div>
@@ -545,25 +545,27 @@ export default function ConversationView() {
     </div>
 
     {/* Right Sidebar */}
-    <div className="w-80 border-l border-border bg-secondary flex flex-col shrink-0 overflow-hidden">
-      {/* Past Conversations Section - Top 15% - Permanent */}
-      <div className="h-[15vh] flex flex-col border-b border-border shrink-0">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
-          <h3 className="font-sans font-semibold text-foreground text-sm">Past Conversations</h3>
-          <button
-            onClick={() => setShowAllHistory(true)}
-            className="text-xs font-sans font-medium text-primary hover:text-primary/80 transition-colors"
-          >
-            View All →
-          </button>
+    <div className="w-80 border-l border-border bg-background flex flex-col shrink-0 overflow-hidden">
+      {/* Past Conversations Section */}
+      <div className="border-b border-border">
+        <div className="px-6 py-4 bg-secondary/30">
+          <div className="flex items-center justify-between">
+            <h3 className="font-sans font-bold text-foreground text-sm uppercase tracking-wide">Past Conversations</h3>
+            <button
+              onClick={() => setShowAllHistory(true)}
+              className="text-xs font-sans font-semibold text-primary hover:text-primary/80 transition-colors"
+            >
+              View All →
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+        <div className="max-h-[200px] overflow-y-auto px-4 py-3 space-y-2">
           {loadingHistory ? (
             <>
               {[1, 2].map((i) => (
-                <div key={i} className="w-full p-2 border border-border bg-background/50 animate-pulse rounded">
-                  <div className="h-2.5 bg-muted rounded w-3/4 mb-1.5"></div>
+                <div key={i} className="w-full p-3 bg-secondary/50 animate-pulse rounded-lg">
+                  <div className="h-3 bg-muted rounded w-3/4 mb-2"></div>
                   <div className="h-2 bg-muted rounded w-1/2"></div>
                 </div>
               ))}
@@ -573,56 +575,86 @@ export default function ConversationView() {
               <button
                 key={conv.id}
                 onClick={() => selectConversation(conv.id)}
-                className="w-full text-left p-2 border border-border bg-background hover:border-primary hover:bg-accent/50 transition-all cursor-pointer rounded"
+                className="w-full text-left p-3 bg-secondary/50 hover:bg-secondary border border-transparent hover:border-primary/20 transition-all cursor-pointer rounded-lg group"
               >
-                <p className="text-xs font-sans font-medium text-foreground mb-0.5 truncate">
+                <p className="text-xs font-sans font-semibold text-foreground mb-1 truncate group-hover:text-primary transition-colors">
                   {conv.subject}
                 </p>
                 <p className="text-[10px] font-sans text-muted-foreground truncate">
-                  {new Date(conv.lastMessageAt).toLocaleDateString()} • {conv.messages.length} msg
+                  {new Date(conv.lastMessageAt).toLocaleDateString()} • {conv.messages.length} messages
                 </p>
               </button>
             ))
           ) : (
-            <div className="p-3 text-center flex items-center justify-center">
+            <div className="p-6 text-center">
               <p className="text-xs font-sans text-muted-foreground">No past conversations</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Mark as Non-Support Button */}
-      {!selectedConversation.tags?.includes("non-customer-support") && (
-        <div className="px-4 py-3 shrink-0">
-          <button
-            onClick={handleMarkNonSupport}
-            className="group flex items-center justify-between w-full px-4 py-3 bg-background border border-border rounded-lg hover:border-red-500 hover:shadow-sm hover:shadow-red-500/10 transition-all"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="w-2 h-2 rounded-full bg-red-500 group-hover:scale-125 transition-transform"></div>
-              <span className="text-sm font-sans font-semibold text-foreground">Mark as Non-Support</span>
-            </div>
-            <span className="text-[10px] font-sans font-medium text-red-500/70 uppercase tracking-wider">
-              Action
-            </span>
-          </button>
+      {/* Quick Actions Section */}
+      <div className="border-b border-border">
+        <div className="px-6 py-4 bg-secondary/30">
+          <h3 className="font-sans font-bold text-foreground text-sm uppercase tracking-wide">Quick Actions</h3>
         </div>
-      )}
 
-      {/* Next Button */}
-      <div className="px-4 pb-3 shrink-0">
-        <button
-          onClick={goToNextUnreplied}
-          className="group flex items-center justify-between w-full px-4 py-3 bg-background border border-border rounded-lg hover:border-blue-500 hover:shadow-sm hover:shadow-blue-500/10 transition-all"
-        >
-          <div className="flex items-center gap-2.5">
-            <div className="w-2 h-2 rounded-full bg-blue-500 group-hover:scale-125 transition-transform"></div>
-            <span className="text-sm font-sans font-semibold text-foreground">Next Unreplied</span>
-          </div>
-          <span className="text-[10px] font-sans font-medium text-blue-500/70 uppercase tracking-wider">
-            Navigate
-          </span>
-        </button>
+        <div className="px-4 py-4 space-y-3">
+          {/* Next Unreplied Button */}
+          <button
+            onClick={goToNextUnreplied}
+            className="w-full px-4 py-3.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md group"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
+                  />
+                </svg>
+                <span className="text-sm font-sans font-bold">Next Unreplied</span>
+              </div>
+              <span className="text-xs font-sans font-medium opacity-80">→</span>
+            </div>
+          </button>
+
+          {/* Mark as Non-Support Button */}
+          {!selectedConversation.tags?.includes("non-customer-support") && (
+            <button
+              onClick={handleMarkNonSupport}
+              className="w-full px-4 py-3.5 bg-background border-2 border-red-500/20 hover:border-red-500 hover:bg-red-50 text-foreground rounded-lg transition-all group"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-5 h-5 text-red-500"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636"
+                    />
+                  </svg>
+                  <span className="text-sm font-sans font-bold group-hover:text-red-600">Mark as Non-Support</span>
+                </div>
+              </div>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Spacer */}
