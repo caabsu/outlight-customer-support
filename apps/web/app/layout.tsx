@@ -16,7 +16,7 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "Outlight Support",
+  title: "outlight - Customer Support",
   description: "Customer Support Platform",
 };
 

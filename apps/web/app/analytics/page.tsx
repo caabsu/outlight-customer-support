@@ -138,19 +138,34 @@ export default function AnalyticsPage() {
       {/* Sidebar */}
       <div className="w-64 border-r border-border bg-background flex flex-col">
         <Link href="/" className="p-6 border-b border-border hover:bg-accent/30 transition-colors">
-          <h1 className="text-xl font-semibold text-foreground">Outlight</h1>
-          <p className="text-sm text-muted-foreground mt-1">Analytics</p>
+          <h1 className="text-2xl font-serif text-foreground">outlight</h1>
+          <p className="text-sm font-sans text-muted-foreground mt-1">Customer Support</p>
         </Link>
 
-        <nav className="flex-1 p-4 space-y-1">
-          <Link
-            href="/emails"
-            className="block w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-          >
-            Inbox
-          </Link>
-          <div className="w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium bg-accent text-accent-foreground">
-            Analytics
+        <nav className="flex-1 p-4 space-y-2">
+          {/* Email Section */}
+          <div className="mb-4">
+            <div className="px-4 py-2 mb-2">
+              <h3 className="text-xs font-sans font-semibold text-muted-foreground uppercase tracking-wider">Email</h3>
+            </div>
+            <Link
+              href="/emails"
+              className="block w-full text-left px-4 py-2.5 rounded-lg text-sm font-sans font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors flex items-center gap-2"
+            >
+              <span className="w-2 h-2 rounded-full bg-transparent"></span>
+              Inbox
+            </Link>
+          </div>
+
+          {/* Analytics Section */}
+          <div className="pt-4 border-t border-border">
+            <div className="px-4 py-2 mb-2">
+              <h3 className="text-xs font-sans font-semibold text-muted-foreground uppercase tracking-wider">Insights</h3>
+            </div>
+            <div className="w-full text-left px-4 py-2.5 rounded-lg text-sm font-sans font-medium bg-accent text-accent-foreground flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-warning"></span>
+              Analytics
+            </div>
           </div>
         </nav>
       </div>
@@ -161,8 +176,8 @@ export default function AnalyticsPage() {
           {/* Header */}
           <div className="flex items-center justify-between mb-12">
             <div>
-              <h1 className="text-4xl font-bold text-foreground mb-3">Analytics Dashboard</h1>
-              <p className="text-lg text-muted-foreground">
+              <h1 className="text-4xl font-sans font-bold text-foreground mb-3">Analytics Dashboard</h1>
+              <p className="text-lg font-sans text-muted-foreground">
                 Viewing data for the last {data.periodInDays} days
               </p>
             </div>
@@ -299,7 +314,7 @@ export default function AnalyticsPage() {
 
           {/* Volume Trends Graph */}
           <div className="bg-secondary border border-border rounded-xl p-8 mb-16">
-            <h2 className="text-2xl font-bold text-foreground mb-6">Email Volume Trends</h2>
+            <h2 className="text-2xl font-sans font-bold text-foreground mb-6">Email Volume Trends</h2>
             {volumeData.length > 0 ? (
               <div className="w-full overflow-x-auto">
                 <svg width={graphWidth} height={graphHeight} className="mx-auto">
@@ -433,7 +448,7 @@ export default function AnalyticsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
             {/* Average Response Time */}
             <div className="bg-secondary border border-border rounded-xl p-8">
-              <h2 className="text-2xl font-bold text-foreground mb-6">Response Time Metrics</h2>
+              <h2 className="text-2xl font-sans font-bold text-foreground mb-6">Response Time Metrics</h2>
               <div className="space-y-6">
                 <div>
                   <div className="flex items-end gap-3 mb-2">
@@ -464,7 +479,7 @@ export default function AnalyticsPage() {
 
             {/* Volume Breakdown */}
             <div className="bg-secondary border border-border rounded-xl p-8">
-              <h2 className="text-2xl font-bold text-foreground mb-6">Volume Breakdown</h2>
+              <h2 className="text-2xl font-sans font-bold text-foreground mb-6">Volume Breakdown</h2>
               <div className="space-y-6">
                 <div>
                   <div className="flex justify-between items-center mb-3">
@@ -509,7 +524,7 @@ export default function AnalyticsPage() {
           {/* Tag Distribution */}
           {Object.keys(data.tagDistribution).length > 0 && (
             <div className="bg-secondary border border-border rounded-xl p-8 mb-16">
-              <h2 className="text-2xl font-bold text-foreground mb-6">Tag Distribution</h2>
+              <h2 className="text-2xl font-sans font-bold text-foreground mb-6">Tag Distribution</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 {Object.entries(data.tagDistribution)
                   .sort((a, b) => b[1] - a[1])

@@ -195,8 +195,8 @@ export default function ConversationView() {
               />
             </svg>
           </div>
-          <h2 className="text-2xl font-semibold text-foreground">Inbox</h2>
-          <p className="text-muted-foreground">
+          <h2 className="text-2xl font-sans font-semibold text-foreground">Inbox</h2>
+          <p className="text-muted-foreground font-sans">
             Select a conversation from the list to view and reply to messages
           </p>
           <div className="pt-4 space-y-2 text-sm text-muted-foreground">
@@ -224,7 +224,7 @@ export default function ConversationView() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header - Fixed Height */}
         <div className="p-6 border-b border-border shrink-0">
-          <h2 className="text-xl font-semibold text-foreground mb-3">
+          <h2 className="text-xl font-sans font-semibold text-foreground mb-3">
             {selectedConversation.subject}
           </h2>
           <div className="flex items-center justify-between gap-4 mb-3">

@@ -224,8 +224,8 @@ export default function ConversationList() {
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Conversations</h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <h2 className="text-lg font-sans font-semibold text-foreground">Conversations</h2>
+            <p className="text-sm font-sans text-muted-foreground mt-1">
               {filteredConversations.length} threads
             </p>
           </div>

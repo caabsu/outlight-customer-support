@@ -6,10 +6,10 @@ export default function Dashboard() {
       {/* Header */}
       <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-6 py-6">
-          <h1 className="text-4xl font-serif font-bold text-foreground">
-            Outlight
+          <h1 className="text-4xl font-serif text-foreground">
+            outlight
           </h1>
-          <p className="text-muted-foreground mt-2">Customer Support Platform</p>
+          <p className="text-muted-foreground mt-2 font-sans">Customer Support Platform</p>
         </div>
       </header>
 
@@ -17,10 +17,10 @@ export default function Dashboard() {
       <main className="flex-1 container mx-auto px-6 py-12">
         {/* Welcome Section */}
         <div className="max-w-3xl mb-16">
-          <h2 className="text-5xl font-serif font-bold text-foreground mb-6">
-            Welcome to Outlight
+          <h2 className="text-5xl font-sans font-bold text-foreground mb-6">
+            Welcome to <span className="font-serif">outlight</span>
           </h2>
-          <p className="text-xl text-muted-foreground leading-relaxed">
+          <p className="text-xl font-sans text-muted-foreground leading-relaxed">
             Streamline your customer support with intelligent email management,
             automated tagging, and powerful insights. Everything you need to
             provide exceptional customer service, all in one place.
@@ -51,10 +51,10 @@ export default function Dashboard() {
                   />
                 </svg>
               </div>
-              <h3 className="text-2xl font-serif font-semibold text-foreground mb-2">
+              <h3 className="text-2xl font-sans font-semibold text-foreground mb-2">
                 Emails
               </h3>
-              <p className="text-muted-foreground mb-4">
+              <p className="text-muted-foreground font-sans mb-4">
                 Manage customer conversations, reply to inquiries, and keep
                 track of all support threads.
               </p>
@@ -101,10 +101,10 @@ export default function Dashboard() {
                   />
                 </svg>
               </div>
-              <h3 className="text-2xl font-serif font-semibold text-foreground mb-2">
+              <h3 className="text-2xl font-sans font-semibold text-foreground mb-2">
                 Analytics
               </h3>
-              <p className="text-muted-foreground mb-4">
+              <p className="text-muted-foreground font-sans mb-4">
                 Track response times, email volume, and customer satisfaction
                 metrics.
               </p>
@@ -153,10 +153,10 @@ export default function Dashboard() {
                   />
                 </svg>
               </div>
-              <h3 className="text-2xl font-serif font-semibold text-foreground mb-2">
+              <h3 className="text-2xl font-sans font-semibold text-foreground mb-2">
                 Settings
               </h3>
-              <p className="text-muted-foreground mb-4">
+              <p className="text-muted-foreground font-sans mb-4">
                 Configure your account, manage team members, and customize
                 workflows.
               </p>
@@ -169,7 +169,7 @@ export default function Dashboard() {
 
         {/* Quick Stats */}
         <div className="mt-16 max-w-6xl">
-          <h3 className="text-2xl font-serif font-semibold text-foreground mb-6">
+          <h3 className="text-2xl font-sans font-semibold text-foreground mb-6">
             Quick Overview
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -197,8 +197,8 @@ export default function Dashboard() {
 
       {/* Footer */}
       <footer className="border-t border-border py-8">
-        <div className="container mx-auto px-6 text-center text-sm text-muted-foreground">
-          <p>&copy; 2025 Outlight. Built for exceptional customer support.</p>
+        <div className="container mx-auto px-6 text-center text-sm text-muted-foreground font-sans">
+          <p>&copy; 2025 <span className="font-serif">outlight</span>. Built for exceptional customer support.</p>
         </div>
       </footer>
     </div>
