@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE "Conversation" ADD COLUMN "starred" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "archived" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "tags" TEXT[] DEFAULT ARRAY[]::TEXT[];
+
+-- AlterTable
+ALTER TABLE "Message" ADD COLUMN "replyToEmail" TEXT,
+ADD COLUMN "isRead" BOOLEAN NOT NULL DEFAULT true;

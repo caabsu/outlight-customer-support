@@ -115,6 +115,7 @@ async function ingestThread(gmail: any, threadId: string) {
     const dir = (getHeader(m, "from") || "").includes(process.env.GMAIL_ACCOUNT_EMAIL!) ? "outbound" : "inbound";
     const sentAt = new Date(Number(m.internalDate!));
     const { html, text } = flattenParts(m.payload);
+    const replyTo = getHeader(m, "reply-to");
 
     await prisma.message.upsert({
       where: { gmailMessageId: m.id! },
@@ -130,6 +131,7 @@ async function ingestThread(gmail: any, threadId: string) {
         bodyHtml: html?.join("\n") || null,
         bodyText: text?.join("\n") || null,
         attachments: [] as any,
+        replyToEmail: replyTo ? parseEmail(replyTo) : null,
       },
     });
   }
@@ -158,17 +160,21 @@ export async function sendReply(conversationId: string, to: string, body: string
   // Get the conversation to find the thread ID
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
-    include: { messages: { orderBy: { sentAt: "asc" } } }
+    include: { messages: { orderBy: { sentAt: "desc" } } }
   });
 
   if (!conversation) {
     throw new Error("Conversation not found");
   }
 
+  // Find the most recent inbound message to check for Reply-To
+  const lastInboundMessage = conversation.messages.find(m => m.direction === "inbound");
+  const recipientEmail = lastInboundMessage?.replyToEmail || to;
+
   // Create email in RFC 2822 format
   const subject = conversation.subject;
   const emailLines = [
-    `To: ${to}`,
+    `To: ${recipientEmail}`,
     `Subject: Re: ${subject}`,
     ``,
     body,
@@ -197,7 +203,7 @@ export async function sendReply(conversationId: string, to: string, body: string
       gmailMessageId: result.data.id!,
       direction: "outbound",
       fromEmail: process.env.GMAIL_ACCOUNT_EMAIL!,
-      toEmails: [to] as any,
+      toEmails: [recipientEmail] as any,
       ccEmails: [] as any,
       sentAt: now,
       bodyHtml: null,

@@ -40,6 +40,9 @@ model Conversation {
   lastHistoryId  BigInt?
   unreadAgent    Boolean   @default(true)
   createdAt      DateTime  @default(now())
+  starred        Boolean   @default(false)
+  archived       Boolean   @default(false)
+  tags           String[]  @default([])
   messages       Message[]
 }
 
@@ -56,6 +59,8 @@ model Message {
   bodyHtml       String?
   bodyText       String?
   attachments    Json         @default("[]")
+  replyToEmail   String?
+  isRead         Boolean      @default(true)
 }
 
 model OAuthToken {
