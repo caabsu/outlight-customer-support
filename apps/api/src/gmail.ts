@@ -87,30 +87,29 @@ export async function pollOnce(_req: Request, res: Response) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
-  res.flushHeaders(); // Flush headers immediately
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
 
   const sendProgress = (stage: string, percent: number, message: string) => {
     const data = JSON.stringify({ stage, percent, message });
     res.write(`data: ${data}\n\n`);
   };
 
+  // Send immediate feedback
+  sendProgress('syncing', 40, 'Syncing...');
+
   try {
-    // Get Gmail client immediately (use cached if available)
-    const gmail = await getAuthedClient();
+    // Start all async operations in parallel
+    const [gmail, existing] = await Promise.all([
+      getAuthedClient(),
+      prisma.conversation.findFirst()
+    ]);
 
-    // Check if initial sync needed
-    const existing = await prisma.conversation.findFirst();
     const isInitialSync = !existing;
-
-    // Determine query and limits
     const query = isInitialSync ? "" : "newer_than:2d";
     const maxResults = isInitialSync ? 50 : 20;
 
-    // Send initial progress
-    sendProgress('fetching', 30, 'Fetching threads...');
-
-    // Fetch thread lists in parallel
+    // Fetch both inbox and sent in parallel
     const [inboxResponse, sentResponse] = await Promise.all([
       gmail.users.threads.list({
         userId: "me",
@@ -124,7 +123,6 @@ export async function pollOnce(_req: Request, res: Response) {
       })
     ]);
 
-    // Combine and deduplicate thread IDs
     const allThreadIds = new Set([
       ...(inboxResponse.data.threads || []).map(t => t.id!),
       ...(sentResponse.data.threads || []).map(t => t.id!)
@@ -140,35 +138,32 @@ export async function pollOnce(_req: Request, res: Response) {
       return;
     }
 
-    sendProgress('syncing', 50, `Syncing ${totalThreads} threads...`);
+    sendProgress('syncing', 60, `${totalThreads} threads`);
 
-    // Process threads in parallel batches with aggressive batching
-    const BATCH_SIZE = 10; // Increased from 5 to 10 for faster processing
+    // Process in larger batches for speed
+    const BATCH_SIZE = 15;
     let processed = 0;
 
     for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
       const batch = threadIds.slice(i, i + BATCH_SIZE);
-
-      // Process batch in parallel
       await Promise.all(
         batch.map(threadId => ingestThread(gmail, threadId).catch(err => {
-          console.error(`Failed to ingest thread ${threadId}:`, err);
-          return null; // Continue even if one fails
+          console.error(`Failed to ingest ${threadId}:`, err);
+          return null;
         }))
       );
 
       processed += batch.length;
-      const percent = 50 + Math.floor((processed / totalThreads) * 45);
+      const percent = 60 + Math.floor((processed / totalThreads) * 35);
       sendProgress('syncing', percent, `${processed}/${totalThreads}`);
     }
 
-    // Complete
-    sendProgress('complete', 100, 'Synced!');
+    sendProgress('complete', 100, 'Done');
     res.write(`data: ${JSON.stringify({ done: true, totalThreads })}\n\n`);
     res.end();
   } catch (error) {
     console.error('Poll error:', error);
-    sendProgress('error', 0, error instanceof Error ? error.message : 'Failed to sync');
+    sendProgress('error', 0, error instanceof Error ? error.message : 'Sync failed');
     res.end();
   }
 }

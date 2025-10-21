@@ -90,7 +90,7 @@ export default function ConversationList() {
   if (loading) {
     return (
       <div className="w-96 border-r border-border bg-background flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading...</p>
+        <p className="text-foreground">Loading...</p>
       </div>
     );
   }
@@ -123,11 +123,11 @@ export default function ConversationList() {
           </button>
         </div>
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-foreground">
             {conversations.length} threads
           </p>
           {timeAgo && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-foreground">
               Updated {timeAgo}
             </p>
           )}
@@ -135,10 +135,10 @@ export default function ConversationList() {
         {syncProgress && syncProgress.stage !== 'complete' && (
           <div className="mt-2">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-muted-foreground">
+              <span className="text-foreground">
                 {syncProgress.message}
               </span>
-              <span className="text-xs text-muted-foreground font-mono">
+              <span className="text-foreground font-mono">
                 {syncProgress.percent}%
               </span>
             </div>
@@ -156,7 +156,7 @@ export default function ConversationList() {
       <div className="flex-1 overflow-y-auto">
         {conversations.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-muted-foreground text-sm">No conversations yet</p>
+            <p className="text-foreground">No conversations yet</p>
           </div>
         ) : (
           conversations.map((conv) => (
@@ -171,23 +171,23 @@ export default function ConversationList() {
             >
               <div className="flex items-start justify-between gap-2 mb-1">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
+                  <p className="font-medium text-foreground truncate">
                     {conv.customer.name || conv.customer.primaryEmail}
                   </p>
                 </div>
-                <span className="text-xs text-muted-foreground shrink-0">
+                <span className="text-foreground shrink-0">
                   {formatDate(conv.lastMessageAt)}
                 </span>
               </div>
-              <p className="text-sm font-medium text-foreground truncate mb-1">
+              <p className="font-medium text-foreground truncate mb-1">
                 {conv.subject}
               </p>
-              <p className="text-sm text-muted-foreground line-clamp-2">
+              <p className="text-foreground line-clamp-2">
                 {getPreview(conv)}
               </p>
               {conv.unreadAgent && (
                 <div className="mt-2">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded font-medium bg-primary/10 text-primary">
                     Unread
                   </span>
                 </div>
