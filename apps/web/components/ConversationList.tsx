@@ -25,11 +25,11 @@ type Conversation = {
 };
 
 export default function ConversationList() {
-  const { conversations, selectedConversation, selectConversation, loading, refreshing, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived, showSent } =
+  const { conversations, selectedConversation, selectConversation, loading, refreshing, refreshProgress, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived, showSent } =
     useConversations();
   const [showStarred, setShowStarred] = useState(false);
   const [excludeNonSupport, setExcludeNonSupport] = useState(true);
-  const [showNeedsReply, setShowNeedsReply] = useState(false);
+  const [showNeedsReply, setShowNeedsReply] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | "needs-reply" | "resolved">("all");
@@ -216,8 +216,18 @@ export default function ConversationList() {
     <div className="w-96 border-r border-border bg-background flex flex-col relative" style={{ fontFamily: "Roboto, sans-serif" }}>
       {/* Refresh Progress Indicator */}
       {refreshing && (
-        <div className="absolute top-0 left-0 right-0 h-1 bg-primary/20 z-50 overflow-hidden">
-          <div className="h-full bg-primary animate-pulse w-full"></div>
+        <div className="absolute top-0 left-0 right-0 z-50">
+          <div className="h-1 bg-primary/20 overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${refreshProgress}%` }}
+            ></div>
+          </div>
+          <div className="flex justify-center py-1 bg-primary/5">
+            <span className="text-xs font-sans font-medium text-primary">
+              {refreshProgress}% - {refreshProgress < 30 ? 'Connecting...' : refreshProgress < 70 ? 'Checking for new emails...' : refreshProgress < 95 ? 'Loading conversations...' : 'Complete!'}
+            </span>
+          </div>
         </div>
       )}
 

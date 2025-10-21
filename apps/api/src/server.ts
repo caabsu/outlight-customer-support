@@ -437,16 +437,11 @@ app.get("/analytics", async (req: Request, res: Response) => {
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     }
 
-    // Fetch conversations and messages in the time period (exclude non-customer-support)
-    const conversations = await prisma.conversation.findMany({
+    // Fetch ALL conversations in the time period (for total count)
+    const allConversationsInPeriod = await prisma.conversation.findMany({
       where: {
         lastMessageAt: {
           gte: startDate
-        },
-        NOT: {
-          tags: {
-            has: "non-customer-support"
-          }
         }
       },
       include: {
@@ -455,6 +450,16 @@ app.get("/analytics", async (req: Request, res: Response) => {
         }
       }
     });
+
+    // Count non-customer-support conversations
+    const nonCustomerSupportConversations = allConversationsInPeriod.filter(conv =>
+      conv.tags?.includes("non-customer-support")
+    );
+
+    // Get customer support conversations only (exclude non-customer-support)
+    const conversations = allConversationsInPeriod.filter(conv =>
+      !conv.tags?.includes("non-customer-support")
+    );
 
     // Get conversation IDs for filtering messages
     const conversationIds = conversations.map(c => c.id);
@@ -586,7 +591,9 @@ app.get("/analytics", async (req: Request, res: Response) => {
         outboundMessages: outboundMessages.length,
         unrepliedCount: unrepliedConversations.length,
         resolvedCount: resolvedConversations.length,
-        resolutionRate: Math.round(resolutionRate * 10) / 10
+        resolutionRate: Math.round(resolutionRate * 10) / 10,
+        totalConversationsIncludingNonSupport: allConversationsInPeriod.length,
+        nonCustomerSupportCount: nonCustomerSupportConversations.length
       },
       emailVelocity: {
         total: Math.round(emailVelocity.total * 10) / 10,

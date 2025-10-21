@@ -39,6 +39,7 @@ type ConversationContextType = {
   updateConversationOptimistic: (id: string, updates: Partial<Conversation>) => void;
   loading: boolean;
   refreshing: boolean;
+  refreshProgress: number;
   showArchived: boolean;
   setShowArchived: (show: boolean) => void;
   showSent: boolean;
@@ -58,6 +59,7 @@ export function ConversationProvider({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshProgress, setRefreshProgress] = useState(0);
   const [showArchived, setShowArchived] = useState(false);
   const [showSent, setShowSent] = useState(false);
 
@@ -153,20 +155,49 @@ export function ConversationProvider({
   const pollAndRefresh = async () => {
     try {
       setRefreshing(true);
-      // First, poll Gmail for new emails
-      const pollRes = await fetch("/api/gmail/poll", { method: "POST" });
-      if (!pollRes.ok && pollRes.status !== 500) {
-        console.error(`Gmail poll failed: ${pollRes.status}`);
+      setRefreshProgress(10);
+
+      // First, poll Gmail for new emails (with 30s timeout)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+      try {
+        setRefreshProgress(20);
+        const pollRes = await fetch("/api/gmail/poll", {
+          method: "POST",
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        setRefreshProgress(60);
+
+        if (!pollRes.ok && pollRes.status !== 500) {
+          console.error(`Gmail poll failed: ${pollRes.status}`);
+        }
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (err instanceof Error && err.name === 'AbortError') {
+          console.error("Gmail poll timed out after 30 seconds");
+        } else {
+          throw err;
+        }
       }
+
+      setRefreshProgress(80);
       // Then refresh conversations from database
       await fetchConversations(true, 1);
+      setRefreshProgress(100);
     } catch (error) {
       // Silently ignore connection errors
       if (error instanceof Error && !error.message.includes('Failed to fetch')) {
         console.error("Failed to poll and refresh:", error);
       }
     } finally {
-      setRefreshing(false);
+      // Small delay to show 100% before hiding
+      setTimeout(() => {
+        setRefreshing(false);
+        setRefreshProgress(0);
+      }, 300);
     }
   };
 
@@ -185,6 +216,7 @@ export function ConversationProvider({
         updateConversationOptimistic,
         loading,
         refreshing,
+        refreshProgress,
         showArchived,
         setShowArchived,
         showSent,

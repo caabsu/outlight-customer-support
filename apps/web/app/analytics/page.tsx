@@ -14,6 +14,8 @@ type AnalyticsData = {
     unrepliedCount: number;
     resolvedCount: number;
     resolutionRate: number;
+    totalConversationsIncludingNonSupport: number;
+    nonCustomerSupportCount: number;
   };
   emailVelocity: {
     total: number;
@@ -201,7 +203,7 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Overview Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
             {/* Total Conversations */}
             <div className="bg-secondary border border-border rounded-xl p-8">
               <div className="flex items-center justify-between mb-4">
@@ -308,6 +310,66 @@ export default function AnalyticsPage() {
               <p className="text-4xl font-bold text-foreground mb-2">{data.emailVelocity.total}</p>
               <p className="text-sm text-muted-foreground">
                 emails/day ({data.emailVelocity.inbound} in, {data.emailVelocity.outbound} out)
+              </p>
+            </div>
+          </div>
+
+          {/* Additional Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-16">
+            {/* Total Emails (Including Non-Support) */}
+            <div className="bg-secondary border border-border rounded-xl p-8">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Total Emails</h3>
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-6 h-6 text-primary"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"
+                    />
+                  </svg>
+                </div>
+              </div>
+              <p className="text-4xl font-bold text-foreground mb-2">{data.overview.totalConversationsIncludingNonSupport}</p>
+              <p className="text-sm text-muted-foreground">
+                All conversations (including {data.overview.nonCustomerSupportCount} non-support)
+              </p>
+            </div>
+
+            {/* Non-Customer Support Count */}
+            <div className="bg-secondary border border-border rounded-xl p-8">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Non-Customer Support</h3>
+                <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-6 h-6 text-red-500"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636"
+                    />
+                  </svg>
+                </div>
+              </div>
+              <p className="text-4xl font-bold text-red-500 mb-2">{data.overview.nonCustomerSupportCount}</p>
+              <p className="text-sm text-muted-foreground">
+                {data.overview.totalConversationsIncludingNonSupport > 0
+                  ? Math.round((data.overview.nonCustomerSupportCount / data.overview.totalConversationsIncludingNonSupport) * 100)
+                  : 0}
+                % of total emails
               </p>
             </div>
           </div>

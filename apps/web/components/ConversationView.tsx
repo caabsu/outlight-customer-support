@@ -24,7 +24,7 @@ export default function ConversationView() {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
-  const [justReplied, setJustReplied] = useState(false);
+  const [summaryMinimized, setSummaryMinimized] = useState(false);
 
   // Fetch conversation history
   useEffect(() => {
@@ -101,7 +101,6 @@ export default function ConversationView() {
         }),
       });
       setReplyText("");
-      setJustReplied(true);
       // Refresh conversations to show the new message
       await refreshConversations();
     } catch (error) {
@@ -111,37 +110,15 @@ export default function ConversationView() {
     }
   };
 
-  const handleMarkResolved = async () => {
-    if (!selectedConversation) return;
-
-    // Optimistic update
-    updateConversationOptimistic(selectedConversation.id, { status: "resolved" });
-    setJustReplied(false);
-
-    try {
-      await fetch(`/api/conversations/${selectedConversation.id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "resolved" }),
-      });
-      await refreshConversations();
-    } catch (error) {
-      console.error("Failed to mark as resolved:", error);
-      // Revert on error
-      updateConversationOptimistic(selectedConversation.id, { status: selectedConversation.status });
-    }
-  };
-
   const handleMarkNonSupport = async () => {
     if (!selectedConversation) return;
 
     const currentTags = selectedConversation.tags || [];
     const updatedTags = [...currentTags, "non-customer-support"];
 
-    // Optimistic update - instant UI feedback, also mark as resolved
+    // Optimistic update - instant UI feedback
     updateConversationOptimistic(selectedConversation.id, {
-      tags: updatedTags,
-      status: "resolved"
+      tags: updatedTags
     });
 
     try {
@@ -151,19 +128,12 @@ export default function ConversationView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: updatedTags }),
       });
-      // Mark as resolved
-      await fetch(`/api/conversations/${selectedConversation.id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "resolved" }),
-      });
       await refreshConversations();
     } catch (error) {
       console.error("Failed to mark as non-support:", error);
       // Revert on error
       updateConversationOptimistic(selectedConversation.id, {
-        tags: currentTags,
-        status: selectedConversation.status
+        tags: currentTags
       });
     }
   };
@@ -529,11 +499,22 @@ export default function ConversationView() {
         {/* AI Summary Display */}
         {aiSummary && (
           <div className="mt-5 p-5 bg-purple-500/5 border border-purple-500/20 rounded-lg">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-              <h4 className="text-sm font-sans font-bold text-purple-600">AI-Generated Summary</h4>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                <h4 className="text-sm font-sans font-bold text-purple-600">AI-Generated Summary</h4>
+              </div>
+              <button
+                onClick={() => setSummaryMinimized(!summaryMinimized)}
+                className="text-xs font-sans font-medium text-purple-500 hover:text-purple-600 transition-colors px-2 py-1"
+                title={summaryMinimized ? "Expand summary" : "Minimize summary"}
+              >
+                {summaryMinimized ? "Expand ▼" : "Minimize ▲"}
+              </button>
             </div>
-            <p className="text-sm font-sans text-foreground leading-relaxed whitespace-pre-wrap">{aiSummary}</p>
+            {!summaryMinimized && (
+              <p className="text-sm font-sans text-foreground leading-relaxed whitespace-pre-wrap">{aiSummary}</p>
+            )}
           </div>
         )}
       </div>
@@ -549,23 +530,13 @@ export default function ConversationView() {
           />
         </div>
         <div className="flex items-center justify-between">
-          <div className="flex gap-2">
-            <button
-              onClick={handleSend}
-              disabled={!replyText.trim() || sending}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-sans font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {sending ? "Sending..." : "Send"}
-            </button>
-            {justReplied && selectedConversation?.status !== "resolved" && (
-              <button
-                onClick={handleMarkResolved}
-                className="px-4 py-2 bg-success text-white rounded-lg text-sm font-sans font-medium hover:bg-success/90 transition-colors"
-              >
-                ✓ Mark as Resolved
-              </button>
-            )}
-          </div>
+          <button
+            onClick={handleSend}
+            disabled={!replyText.trim() || sending}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-sans font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {sending ? "Sending..." : "Send"}
+          </button>
           <p className="text-xs font-sans text-muted-foreground">
             Replying to {getReplyToEmail()}
           </p>
