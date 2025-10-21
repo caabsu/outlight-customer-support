@@ -1,7 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useConversations } from "@/lib/ConversationContext";
+
+// Sanitize HTML to remove inline styles and normalize formatting
+function sanitizeEmailHTML(html: string | null): string {
+  if (!html) return "";
+
+  // Remove style attributes, font tags, and other formatting
+  let sanitized = html
+    .replace(/\s*style="[^"]*"/gi, '')
+    .replace(/\s*style='[^']*'/gi, '')
+    .replace(/<font[^>]*>/gi, '')
+    .replace(/<\/font>/gi, '')
+    .replace(/\s*class="[^"]*"/gi, '')
+    .replace(/\s*id="[^"]*"/gi, '')
+    .replace(/\s*align="[^"]*"/gi, '')
+    .replace(/\s*color="[^"]*"/gi, '')
+    .replace(/\s*size="[^"]*"/gi, '')
+    .replace(/\s*face="[^"]*"/gi, '');
+
+  return sanitized;
+}
 
 export default function ConversationView() {
   const { selectedConversation, refreshConversations } = useConversations();
@@ -107,11 +127,14 @@ export default function ConversationView() {
                 {formatDate(message.sentAt)}
               </span>
             </div>
-            <div className="prose prose-sm dark:prose-invert max-w-none">
+            <div className="email-content">
               {message.bodyHtml ? (
-                <div dangerouslySetInnerHTML={{ __html: message.bodyHtml }} />
+                <div
+                  className="prose prose-sm dark:prose-invert max-w-none"
+                  dangerouslySetInnerHTML={{ __html: sanitizeEmailHTML(message.bodyHtml) }}
+                />
               ) : (
-                <p className="text-sm text-foreground whitespace-pre-wrap">
+                <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
                   {message.bodyText}
                 </p>
               )}

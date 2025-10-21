@@ -87,54 +87,79 @@ export async function pollOnce(_req: Request, res: Response) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders(); // Flush headers immediately
 
   const sendProgress = (stage: string, percent: number, message: string) => {
-    res.write(`data: ${JSON.stringify({ stage, percent, message })}\n\n`);
+    const data = JSON.stringify({ stage, percent, message });
+    res.write(`data: ${data}\n\n`);
   };
 
   try {
-    sendProgress('connecting', 10, 'Connecting to Gmail...');
+    // Step 1: Get Gmail client (15%)
+    sendProgress('connecting', 15, 'Connecting to Gmail...');
     const gmail = await getAuthedClient();
 
-    sendProgress('checking', 20, 'Checking for new emails...');
+    // Step 2: Check if initial sync needed (25%)
+    sendProgress('checking', 25, 'Checking sync status...');
     const existing = await prisma.conversation.findFirst();
+    const isInitialSync = !existing;
 
-    // Fetch both inbox and sent emails
-    let inboxThreads: any[] = [];
-    let sentThreads: any[] = [];
+    // Step 3: Fetch thread lists in parallel (35%)
+    sendProgress('fetching', 35, 'Fetching email threads...');
+    const query = isInitialSync ? "" : "newer_than:2d";
+    const maxResults = isInitialSync ? 50 : 20;
 
-    if (!existing) {
-      sendProgress('fetching', 30, 'Fetching inbox (initial sync)...');
-      const t = await gmail.users.threads.list({ userId: "me", q: "in:inbox", maxResults: 50 });
-      inboxThreads = t.data.threads ?? [];
+    const [inboxResponse, sentResponse] = await Promise.all([
+      gmail.users.threads.list({
+        userId: "me",
+        q: query ? `in:inbox ${query}` : "in:inbox",
+        maxResults
+      }),
+      gmail.users.threads.list({
+        userId: "me",
+        q: query ? `in:sent ${query}` : "in:sent",
+        maxResults
+      })
+    ]);
 
-      sendProgress('fetching_sent', 50, 'Fetching sent emails...');
-      const s = await gmail.users.threads.list({ userId: "me", q: "in:sent", maxResults: 50 });
-      sentThreads = s.data.threads ?? [];
-    } else {
-      sendProgress('fetching', 30, 'Fetching recent inbox...');
-      const t = await gmail.users.threads.list({ userId: "me", q: "in:inbox newer_than:2d", maxResults: 20 });
-      inboxThreads = t.data.threads ?? [];
+    // Combine and deduplicate thread IDs
+    const allThreadIds = new Set([
+      ...(inboxResponse.data.threads || []).map(t => t.id!),
+      ...(sentResponse.data.threads || []).map(t => t.id!)
+    ]);
 
-      sendProgress('fetching_sent', 50, 'Fetching recent sent...');
-      const s = await gmail.users.threads.list({ userId: "me", q: "in:sent newer_than:2d", maxResults: 20 });
-      sentThreads = s.data.threads ?? [];
+    const threadIds = Array.from(allThreadIds);
+    const totalThreads = threadIds.length;
+
+    if (totalThreads === 0) {
+      sendProgress('complete', 100, 'No new emails to sync');
+      res.write(`data: ${JSON.stringify({ done: true, totalThreads: 0 })}\n\n`);
+      res.end();
+      return;
     }
 
-    // Combine and deduplicate threads
-    const allThreadIds = new Set([...inboxThreads.map(t => t.id), ...sentThreads.map(t => t.id)]);
-    const totalThreads = allThreadIds.size;
-
-    sendProgress('processing', 60, `Processing ${totalThreads} threads...`);
+    // Step 4: Process threads in parallel batches (40-95%)
+    sendProgress('processing', 40, `Processing ${totalThreads} threads...`);
+    const BATCH_SIZE = 5; // Process 5 threads at a time
     let processed = 0;
 
-    for (const threadId of allThreadIds) {
-      await ingestThread(gmail, threadId as string);
-      processed++;
-      const percent = 60 + Math.floor((processed / totalThreads) * 30);
-      sendProgress('processing', percent, `Processing thread ${processed}/${totalThreads}...`);
+    for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
+      const batch = threadIds.slice(i, i + BATCH_SIZE);
+
+      // Process batch in parallel
+      await Promise.all(
+        batch.map(threadId => ingestThread(gmail, threadId).catch(err => {
+          console.error(`Failed to ingest thread ${threadId}:`, err);
+          return null; // Continue even if one fails
+        }))
+      );
+
+      processed += batch.length;
+      const percent = 40 + Math.floor((processed / totalThreads) * 55);
+      sendProgress('processing', percent, `Synced ${processed}/${totalThreads} threads`);
     }
 
+    // Step 5: Complete (100%)
     sendProgress('complete', 100, `Synced ${totalThreads} threads successfully`);
     res.write(`data: ${JSON.stringify({ done: true, totalThreads })}\n\n`);
     res.end();

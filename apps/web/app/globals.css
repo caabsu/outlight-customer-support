@@ -78,3 +78,79 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.3);
 }
+
+/* Email content normalization - enforce consistent styling */
+.email-content {
+  @apply text-foreground;
+}
+
+.email-content * {
+  font-family: inherit !important;
+  color: inherit !important;
+  background: transparent !important;
+}
+
+.email-content p,
+.email-content div,
+.email-content span {
+  font-size: 0.875rem !important; /* 14px - consistent with text-sm */
+  font-weight: 400 !important; /* normal weight */
+  line-height: 1.6 !important;
+  margin-bottom: 0.75rem;
+}
+
+.email-content h1,
+.email-content h2,
+.email-content h3,
+.email-content h4,
+.email-content h5,
+.email-content h6 {
+  font-size: 0.9375rem !important; /* 15px - slightly larger for headings */
+  font-weight: 600 !important; /* semibold for headings */
+  line-height: 1.5 !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.email-content strong,
+.email-content b {
+  font-weight: 600 !important; /* semibold for bold text */
+}
+
+.email-content em,
+.email-content i {
+  font-style: italic !important;
+}
+
+.email-content a {
+  color: hsl(var(--primary)) !important;
+  text-decoration: underline;
+}
+
+.email-content ul,
+.email-content ol {
+  margin-left: 1.5rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+.email-content li {
+  font-size: 0.875rem !important;
+  line-height: 1.6 !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.email-content pre,
+.email-content code {
+  font-family: ui-monospace, monospace !important;
+  font-size: 0.8125rem !important; /* 13px - slightly smaller for code */
+  background: hsl(var(--muted)) !important;
+  padding: 0.125rem 0.25rem !important;
+  border-radius: 0.25rem !important;
+}
+
+.email-content blockquote {
+  border-left: 3px solid hsl(var(--border)) !important;
+  padding-left: 1rem !important;
+  margin-left: 0 !important;
+  margin-bottom: 0.75rem !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
