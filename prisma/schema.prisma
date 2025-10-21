@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  name          String?
+  role          String         @default("ADMIN")
+  createdAt     DateTime       @default(now())
+  conversations Conversation[] @relation("UserConversations")
+}
+
+model Customer {
+  id            String         @id @default(uuid())
+  primaryEmail  String         @unique
+  name          String?
+  createdAt     DateTime       @default(now())
+  lastSeenAt    DateTime?
+  conversations Conversation[]
+}
+
+model Conversation {
+  id             String    @id @default(uuid())
+  gmailThreadId  String    @unique
+  subject        String?
+  customer       Customer  @relation(fields: [customerId], references: [id])
+  customerId     String
+  status         String    @default("open")
+  assignedUser   User?     @relation("UserConversations", fields: [assignedUserId], references: [id])
+  assignedUserId String?
+  firstMessageAt DateTime?
+  lastMessageAt  DateTime?
+  lastHistoryId  BigInt?
+  unreadAgent    Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  messages       Message[]
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  gmailMessageId String       @unique
+  direction      String
+  fromEmail      String
+  toEmails       Json         @default("[]")
+  ccEmails       Json         @default("[]")
+  sentAt         DateTime
+  bodyHtml       String?
+  bodyText       String?
+  attachments    Json         @default("[]")
+}
+
+model OAuthToken {
+  id           String   @id @default(uuid())
+  provider     String
+  accountEmail String   @unique
+  accessToken  String
+  refreshToken String
+  expiry       DateTime
+}

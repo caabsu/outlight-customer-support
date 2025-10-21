@@ -1,0 +1,14 @@
+
+.env.local
+# dependencies
+node_modules
+# builds
+dist
+.next
+# env files
+.env
+.env.*
+!.env.example
+# OS/editor
+.DS_Store
+Thumbs.db
