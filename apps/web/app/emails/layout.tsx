@@ -10,7 +10,7 @@ export default function EmailsLayout({
 }) {
   return (
     <ConversationProvider>
-      <div className="flex h-screen overflow-hidden bg-background">
+      <div className="flex h-screen overflow-hidden bg-background font-sans">
         <Sidebar />
         {children}
       </div>

@@ -45,10 +45,6 @@
   body {
     @apply bg-background text-foreground font-sans;
   }
-
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-serif;
-  }
 }
 
 /* Custom scrollbar for dark mode */
@@ -144,6 +140,7 @@
 .email-html-container {
   background-color: #ffffff !important;
   color: #1f2937 !important;
+  font-family: var(--font-roboto), sans-serif !important;
 }
 
 /* Override every possible element with maximum specificity */
@@ -174,6 +171,7 @@
 .email-html-container em {
   color: #1f2937 !important;
   background-color: transparent !important;
+  font-family: var(--font-roboto), sans-serif !important;
 }
 
 /* Force white background on all containers */

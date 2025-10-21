@@ -3,9 +3,9 @@ import ConversationView from "@/components/ConversationView";
 
 export default function EmailsPage() {
   return (
-    <>
+    <div className="flex flex-1 font-sans">
       <ConversationList />
       <ConversationView />
-    </>
+    </div>
   );
 }
