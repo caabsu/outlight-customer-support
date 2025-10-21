@@ -116,6 +116,13 @@ async function ingestThread(gmail: any, threadId: string) {
     const sentAt = new Date(Number(m.internalDate!));
     const { html, text } = flattenParts(m.payload);
     const replyTo = getHeader(m, "reply-to");
+    const fromEmail = getHeader(m, "from") || "";
+
+    // DIAGNOSTIC LOGGING
+    if (dir === "inbound") {
+      const parsed = replyTo ? parseEmail(replyTo) : null;
+      console.log(`[GMAIL POLL] Message ${m.id}: from="${fromEmail}" replyTo="${replyTo}" parsed="${parsed}"`);
+    }
 
     await prisma.message.upsert({
       where: { gmailMessageId: m.id! },
