@@ -384,5 +384,194 @@ app.post("/messages", async (req: Request, res: Response) => {
   }
 });
 
+// Analytics endpoint
+app.get("/analytics", async (req: Request, res: Response) => {
+  try {
+    const { period = "7d" } = req.query;
+
+    // Calculate time range
+    const now = new Date();
+    let startDate: Date;
+
+    switch (period) {
+      case "24h":
+        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        break;
+      case "7d":
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case "30d":
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case "90d":
+        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    }
+
+    // Fetch conversations and messages in the time period
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        lastMessageAt: {
+          gte: startDate
+        }
+      },
+      include: {
+        messages: {
+          orderBy: { sentAt: "asc" }
+        }
+      }
+    });
+
+    const allMessages = await prisma.message.findMany({
+      where: {
+        sentAt: {
+          gte: startDate
+        }
+      },
+      orderBy: { sentAt: "asc" }
+    });
+
+    // Calculate metrics
+    const totalConversations = conversations.length;
+    const totalMessages = allMessages.length;
+    const inboundMessages = allMessages.filter(m => m.direction === "inbound");
+    const outboundMessages = allMessages.filter(m => m.direction === "outbound");
+
+    // Email velocity (emails per day)
+    const periodInDays = (now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+    const emailVelocity = {
+      total: totalMessages / periodInDays,
+      inbound: inboundMessages.length / periodInDays,
+      outbound: outboundMessages.length / periodInDays
+    };
+
+    // Response time calculation
+    const responseTimes: number[] = [];
+
+    conversations.forEach(conv => {
+      const messages = conv.messages;
+      for (let i = 0; i < messages.length - 1; i++) {
+        const current = messages[i];
+        const next = messages[i + 1];
+
+        // If current is inbound and next is outbound, calculate response time
+        if (current.direction === "inbound" && next.direction === "outbound") {
+          const responseTime = new Date(next.sentAt).getTime() - new Date(current.sentAt).getTime();
+          responseTimes.push(responseTime);
+        }
+      }
+    });
+
+    const avgResponseTime = responseTimes.length > 0
+      ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
+      : 0;
+
+    const medianResponseTime = responseTimes.length > 0
+      ? responseTimes.sort((a, b) => a - b)[Math.floor(responseTimes.length / 2)]
+      : 0;
+
+    // Unreplied conversations (needs reply)
+    const unrepliedConversations = conversations.filter(conv => {
+      if (conv.messages.length === 0) return false;
+      const lastMessage = conv.messages[conv.messages.length - 1];
+      return lastMessage.direction === "inbound";
+    });
+
+    // Resolved conversations (last message is outbound)
+    const resolvedConversations = conversations.filter(conv => {
+      if (conv.messages.length === 0) return false;
+      const lastMessage = conv.messages[conv.messages.length - 1];
+      return lastMessage.direction === "outbound";
+    });
+
+    const resolutionRate = totalConversations > 0
+      ? (resolvedConversations.length / totalConversations) * 100
+      : 0;
+
+    // Volume trends (daily breakdown)
+    const dailyVolume: { [key: string]: { inbound: number; outbound: number; total: number } } = {};
+
+    allMessages.forEach(msg => {
+      const dateKey = new Date(msg.sentAt).toISOString().split('T')[0];
+      if (!dailyVolume[dateKey]) {
+        dailyVolume[dateKey] = { inbound: 0, outbound: 0, total: 0 };
+      }
+      dailyVolume[dateKey].total++;
+      if (msg.direction === "inbound") {
+        dailyVolume[dateKey].inbound++;
+      } else {
+        dailyVolume[dateKey].outbound++;
+      }
+    });
+
+    // First response time (time to first reply in a conversation)
+    const firstResponseTimes: number[] = [];
+
+    conversations.forEach(conv => {
+      const messages = conv.messages;
+      if (messages.length < 2) return;
+
+      const firstInbound = messages.find(m => m.direction === "inbound");
+      const firstOutboundAfter = messages.find((m, idx) => {
+        if (m.direction !== "outbound") return false;
+        const firstInboundIdx = messages.indexOf(firstInbound!);
+        return idx > firstInboundIdx;
+      });
+
+      if (firstInbound && firstOutboundAfter) {
+        const responseTime = new Date(firstOutboundAfter.sentAt).getTime() - new Date(firstInbound.sentAt).getTime();
+        firstResponseTimes.push(responseTime);
+      }
+    });
+
+    const avgFirstResponseTime = firstResponseTimes.length > 0
+      ? firstResponseTimes.reduce((a, b) => a + b, 0) / firstResponseTimes.length
+      : 0;
+
+    // Tag distribution
+    const tagCounts: { [key: string]: number } = {};
+    conversations.forEach(conv => {
+      conv.tags?.forEach(tag => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      });
+    });
+
+    res.json({
+      period: period as string,
+      periodInDays: Math.round(periodInDays * 10) / 10,
+      overview: {
+        totalConversations,
+        totalMessages,
+        inboundMessages: inboundMessages.length,
+        outboundMessages: outboundMessages.length,
+        unrepliedCount: unrepliedConversations.length,
+        resolvedCount: resolvedConversations.length,
+        resolutionRate: Math.round(resolutionRate * 10) / 10
+      },
+      emailVelocity: {
+        total: Math.round(emailVelocity.total * 10) / 10,
+        inbound: Math.round(emailVelocity.inbound * 10) / 10,
+        outbound: Math.round(emailVelocity.outbound * 10) / 10
+      },
+      responseTime: {
+        average: avgResponseTime,
+        median: medianResponseTime,
+        averageHours: Math.round((avgResponseTime / (1000 * 60 * 60)) * 10) / 10,
+        medianHours: Math.round((medianResponseTime / (1000 * 60 * 60)) * 10) / 10,
+        firstResponseAverage: avgFirstResponseTime,
+        firstResponseAverageHours: Math.round((avgFirstResponseTime / (1000 * 60 * 60)) * 10) / 10,
+        sampleSize: responseTimes.length
+      },
+      volumeTrends: dailyVolume,
+      tagDistribution: tagCounts
+    });
+  } catch (error) {
+    console.error("Error generating analytics:", error);
+    res.status(500).json({ error: "Failed to generate analytics" });
+  }
+});
+
 const port = process.env.PORT || 3001;
 app.listen(port, () => console.log("API listening on", port));

@@ -20,9 +20,6 @@ export default function ConversationView() {
   const [showHistory, setShowHistory] = useState(true);
   const [editingTags, setEditingTags] = useState(false);
   const [newTag, setNewTag] = useState("");
-  const [markingNonSupport, setMarkingNonSupport] = useState(false);
-  const [undoTimer, setUndoTimer] = useState<number | null>(null);
-  const [undoTimeout, setUndoTimeout] = useState<NodeJS.Timeout | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Fetch conversation history
@@ -93,53 +90,23 @@ export default function ConversationView() {
   const handleMarkNonSupport = async () => {
     if (!selectedConversation) return;
 
-    const conversationId = selectedConversation.id;
     const currentTags = selectedConversation.tags || [];
+    const updatedTags = [...currentTags, "non-customer-support"];
 
-    // Show optimistic update immediately
-    setMarkingNonSupport(true);
-    setUndoTimer(5); // 5 seconds
+    // Optimistic update - instant UI feedback
+    updateConversationOptimistic(selectedConversation.id, { tags: updatedTags });
 
-    // Countdown timer
-    const countdownInterval = setInterval(() => {
-      setUndoTimer((prev) => {
-        if (prev === null || prev <= 1) {
-          clearInterval(countdownInterval);
-          return null;
-        }
-        return prev - 1;
+    try {
+      await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: updatedTags }),
       });
-    }, 1000);
-
-    // Set timeout to actually tag (NOT archive) after 5 seconds
-    const timeout = setTimeout(async () => {
-      try {
-        // Add non-customer-support tag without archiving
-        const updatedTags = [...currentTags, "non-customer-support"];
-        await fetch(`/api/conversations/${conversationId}/tags`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tags: updatedTags }),
-        });
-        await refreshConversations();
-      } catch (error) {
-        console.error("Failed to mark as non-support:", error);
-      } finally {
-        setMarkingNonSupport(false);
-        setUndoTimer(null);
-        setUndoTimeout(null);
-      }
-    }, 5000);
-
-    setUndoTimeout(timeout);
-  };
-
-  const handleUndoMarkNonSupport = () => {
-    if (undoTimeout) {
-      clearTimeout(undoTimeout);
-      setUndoTimeout(null);
-      setUndoTimer(null);
-      setMarkingNonSupport(false);
+      await refreshConversations();
+    } catch (error) {
+      console.error("Failed to mark as non-support:", error);
+      // Revert on error
+      updateConversationOptimistic(selectedConversation.id, { tags: currentTags });
     }
   };
 
@@ -210,8 +177,43 @@ export default function ConversationView() {
 
   if (!selectedConversation) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-background">
-        <p className="text-muted-foreground text-sm">Select a conversation</p>
+      <div className="flex-1 flex flex-col items-center justify-center bg-background p-12">
+        <div className="max-w-md text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              className="w-8 h-8 text-primary"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"
+              />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-semibold text-foreground">Inbox</h2>
+          <p className="text-muted-foreground">
+            Select a conversation from the list to view and reply to messages
+          </p>
+          <div className="pt-4 space-y-2 text-sm text-muted-foreground">
+            <p className="flex items-center gap-2 justify-center">
+              <span className="text-primary">→</span>
+              Use filters to find specific conversations
+            </p>
+            <p className="flex items-center gap-2 justify-center">
+              <span className="text-primary">→</span>
+              Click "Next" to jump to unreplied emails
+            </p>
+            <p className="flex items-center gap-2 justify-center">
+              <span className="text-primary">→</span>
+              Star important conversations for quick access
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -427,29 +429,12 @@ export default function ConversationView() {
       {/* Not Support Button - Always visible, below past conversations */}
       <div className="p-4 border-t border-border shrink-0">
         {!selectedConversation.tags?.includes("non-customer-support") && (
-          <>
-            {undoTimer !== null ? (
-              <div className="space-y-2">
-                <div className="w-full px-4 py-3 bg-warning text-white border-2 border-warning text-sm font-medium text-center">
-                  Tagging in {undoTimer}s...
-                </div>
-                <button
-                  onClick={handleUndoMarkNonSupport}
-                  className="w-full px-4 py-3 bg-success text-white border-2 border-success text-sm font-medium hover:bg-success/90 transition-colors"
-                >
-                  Undo
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleMarkNonSupport}
-                disabled={markingNonSupport}
-                className="w-full px-4 py-3 bg-warning text-white border-2 border-warning text-sm font-medium hover:bg-warning/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Mark as Non-Support
-              </button>
-            )}
-          </>
+          <button
+            onClick={handleMarkNonSupport}
+            className="w-full px-4 py-3 bg-warning text-white border-2 border-warning text-sm font-medium hover:bg-warning/90 transition-all"
+          >
+            Mark as Non-Support
+          </button>
         )}
       </div>
     </div>

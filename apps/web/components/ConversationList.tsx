@@ -29,16 +29,61 @@ export default function ConversationList() {
     useConversations();
   const [showStarred, setShowStarred] = useState(false);
   const [excludeNonSupport, setExcludeNonSupport] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<"all" | "needs-reply" | "resolved">("all");
+  const [dateRange, setDateRange] = useState<"all" | "today" | "week" | "month">("all");
+
+  // Get all unique tags from conversations
+  const allTags = Array.from(
+    new Set(
+      conversations.flatMap((conv: Conversation) => conv.tags || [])
+    )
+  ).sort();
 
   const filteredConversations = conversations.filter((conv: Conversation) => {
+    // Starred filter
     if (showStarred && !conv.starred) return false;
+
+    // Non-support filter
     if (excludeNonSupport && conv.tags?.includes("non-customer-support"))
       return false;
-    // Show archived or non-archived based on filter
+
+    // Archive filter
     if (showArchived && !conv.archived) return false;
     if (!showArchived && conv.archived) return false;
+
+    // Tag filter (must have ALL selected tags)
+    if (selectedTags.length > 0) {
+      const hasAllTags = selectedTags.every(tag => conv.tags?.includes(tag));
+      if (!hasAllTags) return false;
+    }
+
+    // Status filter
+    if (statusFilter === "needs-reply" && !isUnreplied(conv)) return false;
+    if (statusFilter === "resolved" && isUnreplied(conv)) return false;
+
+    // Date range filter
+    if (dateRange !== "all") {
+      const messageDate = new Date(conv.lastMessageAt);
+      const now = new Date();
+      const diffInHours = (now.getTime() - messageDate.getTime()) / (1000 * 60 * 60);
+
+      if (dateRange === "today" && diffInHours > 24) return false;
+      if (dateRange === "week" && diffInHours > 168) return false;
+      if (dateRange === "month" && diffInHours > 720) return false;
+    }
+
     return true;
   });
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tag)
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    );
+  };
 
   const handleStar = async (e: React.MouseEvent, convId: string) => {
     e.stopPropagation();
@@ -193,8 +238,8 @@ export default function ConversationList() {
           </button>
         </div>
 
-        {/* Filter Buttons */}
-        <div className="flex flex-wrap gap-2">
+        {/* Quick Filter Buttons */}
+        <div className="flex flex-wrap gap-2 mb-2">
           <button
             onClick={() => setShowStarred(!showStarred)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -215,7 +260,98 @@ export default function ConversationList() {
           >
             ✓ CS Only
           </button>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              showFilters || selectedTags.length > 0 || statusFilter !== "all" || dateRange !== "all"
+                ? "bg-primary/20 text-primary border border-primary/30"
+                : "bg-secondary text-secondary-foreground border border-border"
+            }`}
+          >
+            🔍 Filters {(selectedTags.length > 0 || statusFilter !== "all" || dateRange !== "all") && `(${selectedTags.length + (statusFilter !== "all" ? 1 : 0) + (dateRange !== "all" ? 1 : 0)})`}
+          </button>
         </div>
+
+        {/* Advanced Filters Panel */}
+        {showFilters && (
+          <div className="mt-3 p-3 bg-secondary rounded-lg border border-border space-y-3">
+            {/* Status Filter */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Status</label>
+              <div className="flex gap-1.5">
+                {(["all", "needs-reply", "resolved"] as const).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setStatusFilter(status)}
+                    className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors ${
+                      statusFilter === status
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    {status === "all" ? "All" : status === "needs-reply" ? "Needs Reply" : "Resolved"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Date Range Filter */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Time Period</label>
+              <div className="flex gap-1.5">
+                {(["all", "today", "week", "month"] as const).map((range) => (
+                  <button
+                    key={range}
+                    onClick={() => setDateRange(range)}
+                    className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors ${
+                      dateRange === range
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    {range === "all" ? "All" : range === "today" ? "Today" : range === "week" ? "This Week" : "This Month"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Tag Filter */}
+            {allTags.length > 0 && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Tags</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {allTags.map((tag) => (
+                    <button
+                      key={tag}
+                      onClick={() => toggleTag(tag)}
+                      className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                        selectedTags.includes(tag)
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background text-muted-foreground hover:bg-accent"
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Clear Filters */}
+            {(selectedTags.length > 0 || statusFilter !== "all" || dateRange !== "all") && (
+              <button
+                onClick={() => {
+                  setSelectedTags([]);
+                  setStatusFilter("all");
+                  setDateRange("all");
+                }}
+                className="w-full px-3 py-1.5 bg-muted text-muted-foreground rounded text-xs font-medium hover:bg-accent transition-colors"
+              >
+                Clear All Filters
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Conversation List */}

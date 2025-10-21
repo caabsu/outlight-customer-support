@@ -58,6 +58,15 @@ export default function Sidebar() {
         >
           Archived
         </button>
+
+        <div className="pt-4">
+          <Link
+            href="/analytics"
+            className="block w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+          >
+            Analytics
+          </Link>
+        </div>
       </nav>
 
       {/* User Section */}
