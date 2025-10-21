@@ -154,30 +154,6 @@ export default function ConversationList() {
     }
   };
 
-  const goToNextUnreplied = async () => {
-    try {
-      const currentId = selectedConversation?.id;
-      const endpoint = currentId
-        ? `/api/conversations/next-unreplied/${currentId}`
-        : "/api/conversations/next-unreplied";
-
-      // Start fetching immediately
-      const fetchPromise = fetch(endpoint).then(res => res.json());
-
-      // Show instant loading state if desired
-      const nextConv = await fetchPromise;
-
-      if (nextConv && nextConv.id) {
-        // Instant navigation
-        selectConversation(nextConv.id);
-      } else {
-        alert("No more unreplied emails!");
-      }
-    } catch (error) {
-      console.error("Failed to get next unreplied:", error);
-    }
-  };
-
   const getPreview = (conv: Conversation) => {
     const lastMessage = conv.messages[conv.messages.length - 1];
     return lastMessage?.bodyText?.slice(0, 80) || "No content";
@@ -236,23 +212,14 @@ export default function ConversationList() {
               {filteredConversations.length} threads
             </p>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => pollAndRefresh()}
-              className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs font-sans font-medium hover:bg-accent transition-colors border border-border"
-              title="Check for new emails"
-              disabled={loading}
-            >
-              ↻
-            </button>
-            <button
-              onClick={goToNextUnreplied}
-              className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-sans font-medium hover:bg-primary/90 transition-colors"
-              title="Go to next unreplied email"
-            >
-              Next →
-            </button>
-          </div>
+          <button
+            onClick={() => pollAndRefresh()}
+            className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs font-sans font-medium hover:bg-accent transition-colors border border-border"
+            title="Check for new emails"
+            disabled={loading}
+          >
+            ↻
+          </button>
         </div>
 
         {/* Quick Filter Buttons */}

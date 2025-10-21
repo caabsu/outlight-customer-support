@@ -12,7 +12,7 @@ type ConversationHistory = {
 };
 
 export default function ConversationView() {
-  const { selectedConversation, selectConversation, refreshConversations, updateConversationOptimistic } = useConversations();
+  const { conversations, selectedConversation, selectConversation, refreshConversations, updateConversationOptimistic } = useConversations();
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
@@ -132,24 +132,39 @@ export default function ConversationView() {
     }
   };
 
-  const goToNextUnreplied = async () => {
-    try {
-      const currentId = selectedConversation?.id;
-      const endpoint = currentId
-        ? `/api/conversations/next-unreplied/${currentId}`
-        : "/api/conversations/next-unreplied";
+  const goToNextUnreplied = () => {
+    // Filter to unreplied conversations (last message is inbound)
+    const unrepliedConversations = conversations.filter((conv) => {
+      // Exclude non-customer-support
+      if (conv.tags?.includes("non-customer-support")) return false;
 
-      const response = await fetch(endpoint);
-      const nextConv = await response.json();
+      // Check if last message is inbound (needs reply)
+      if (conv.messages.length === 0) return false;
+      const lastMessage = conv.messages[conv.messages.length - 1];
+      return lastMessage.direction === "inbound";
+    });
 
-      if (nextConv && nextConv.id) {
-        selectConversation(nextConv.id);
-      } else {
-        alert("No more unreplied emails!");
-      }
-    } catch (error) {
-      console.error("Failed to get next unreplied:", error);
+    // Sort by lastMessageAt (oldest first - priority to older unreplied)
+    const sortedUnreplied = unrepliedConversations.sort((a, b) =>
+      new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
+    );
+
+    if (sortedUnreplied.length === 0) {
+      alert("No unreplied emails!");
+      return;
     }
+
+    // Find current conversation index
+    const currentIndex = selectedConversation
+      ? sortedUnreplied.findIndex(conv => conv.id === selectedConversation.id)
+      : -1;
+
+    // Get next conversation (wrap around to start if at end)
+    const nextIndex = currentIndex >= sortedUnreplied.length - 1 ? 0 : currentIndex + 1;
+    const nextConv = sortedUnreplied[nextIndex];
+
+    // Instant navigation - no API call!
+    selectConversation(nextConv.id);
   };
 
   const handleAddTag = async () => {
