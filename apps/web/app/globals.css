@@ -61,6 +61,21 @@ html, body, div, span, p, a, h1, h2, h3, h4, h5, h6, ul, li, table, tr, td, th, 
   font-family: var(--font-playfair), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif !important;
 }
 
+/* Normalize font weights for UI consistency */
+.font-sans {
+  font-family: var(--font-roboto), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+}
+
+/* Override font-medium to be more subtle */
+.font-medium {
+  font-weight: 500 !important;
+}
+
+/* Keep font-semibold consistent */
+.font-semibold {
+  font-weight: 600 !important;
+}
+
 /* Custom scrollbar for dark mode */
 .dark ::-webkit-scrollbar {
   width: 8px;
@@ -155,6 +170,7 @@ html, body, div, span, p, a, h1, h2, h3, h4, h5, h6, ul, li, table, tr, td, th, 
   background-color: #ffffff !important;
   color: #1f2937 !important;
   font-family: var(--font-roboto), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  font-weight: 400 !important;
 }
 
 /* Override every possible element with maximum specificity */
@@ -186,6 +202,9 @@ html, body, div, span, p, a, h1, h2, h3, h4, h5, h6, ul, li, table, tr, td, th, 
   color: #1f2937 !important;
   background-color: transparent !important;
   font-family: var(--font-roboto), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  font-weight: 400 !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
 }
 
 /* Force white background on all containers */
