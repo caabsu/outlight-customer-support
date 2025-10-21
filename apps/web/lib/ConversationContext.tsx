@@ -60,6 +60,9 @@ export function ConversationProvider({
     try {
       if (!silent) setLoading(true);
       const res = await fetch("/api/conversations");
+      if (!res.ok) {
+        throw new Error(`API returned ${res.status}: ${res.statusText}`);
+      }
       const data = await res.json();
       setConversations(data);
       if (data.length > 0 && !selectedId) {
@@ -82,7 +85,10 @@ export function ConversationProvider({
     const interval = setInterval(async () => {
       try {
         // Poll Gmail for new emails
-        await fetch("/api/gmail/poll", { method: "POST" });
+        const pollRes = await fetch("/api/gmail/poll", { method: "POST" });
+        if (!pollRes.ok) {
+          console.error(`Gmail poll failed: ${pollRes.status}`);
+        }
         // Then refresh conversations silently
         await fetchConversations(true);
       } catch (error) {
