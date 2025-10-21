@@ -229,13 +229,22 @@ export default function ConversationList() {
               {filteredConversations.length} threads
             </p>
           </div>
-          <button
-            onClick={goToNextUnreplied}
-            className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-sans font-medium hover:bg-primary/90 transition-colors"
-            title="Go to next unreplied email"
-          >
-            Next →
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => refreshConversations()}
+              className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs font-sans font-medium hover:bg-accent transition-colors border border-border"
+              title="Refresh inbox"
+            >
+              ↻
+            </button>
+            <button
+              onClick={goToNextUnreplied}
+              className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-sans font-medium hover:bg-primary/90 transition-colors"
+              title="Go to next unreplied email"
+            >
+              Next →
+            </button>
+          </div>
         </div>
 
         {/* Quick Filter Buttons */}

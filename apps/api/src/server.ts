@@ -2,9 +2,15 @@ import express, { type Request, type Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
+import OpenAI from "openai";
 
 import { googleAuthStart, googleAuthCallback, pollOnce, sendReply } from "./gmail";
 import { prisma } from "./db";
+
+// Initialize OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 const app = express();
 app.use(cors());
@@ -570,6 +576,91 @@ app.get("/analytics", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error generating analytics:", error);
     res.status(500).json({ error: "Failed to generate analytics" });
+  }
+});
+
+// Email Summary Endpoint using GPT
+app.post("/conversations/:id/summary", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch conversation with messages
+    const conversation = await prisma.conversation.findUnique({
+      where: { id },
+      include: {
+        messages: {
+          orderBy: { sentAt: "asc" }
+        },
+        customer: true
+      }
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+
+    // Build email thread context for GPT
+    const emailThread = conversation.messages.map((msg: any) => {
+      const direction = msg.direction === "inbound" ? "Customer" : "Agent";
+      const content = msg.bodyText || msg.bodyHtml?.replace(/<[^>]*>/g, '') || '';
+      return `${direction}: ${content.substring(0, 1000)}`;
+    }).join('\n\n');
+
+    // Load knowledge base (if exists)
+    let knowledgeBaseContext = "";
+    try {
+      const knowledgeBase = await prisma.knowledgeBase.findMany({
+        where: { active: true },
+        select: { content: true, title: true }
+      });
+
+      if (knowledgeBase.length > 0) {
+        knowledgeBaseContext = "\n\nKnowledge Base:\n" +
+          knowledgeBase.map(kb => `- ${kb.title}: ${kb.content}`).join('\n');
+      }
+    } catch (error) {
+      // Knowledge base table might not exist yet, continue without it
+      console.log("Knowledge base not available yet");
+    }
+
+    // Generate summary using GPT
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are a helpful customer support assistant. Summarize email conversations concisely, highlighting:
+1. Main issue/question
+2. Key points discussed
+3. Current status
+4. Suggested next steps (if applicable)
+
+Keep summaries under 150 words.${knowledgeBaseContext}`
+        },
+        {
+          role: "user",
+          content: `Summarize this email conversation:\n\nSubject: ${conversation.subject}\n\n${emailThread}`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 300
+    });
+
+    const summary = completion.choices[0].message.content;
+
+    // Save summary to database (optional - can cache it)
+    await prisma.conversation.update({
+      where: { id },
+      data: {
+        aiSummary: summary,
+        aiSummaryGeneratedAt: new Date()
+      }
+    });
+
+    res.json({ summary });
+  } catch (error) {
+    console.error("Error generating summary:", error);
+    res.status(500).json({ error: "Failed to generate summary" });
   }
 });
 

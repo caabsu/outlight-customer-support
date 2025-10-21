@@ -55,9 +55,9 @@ export function ConversationProvider({
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
 
-  const fetchConversations = async () => {
+  const fetchConversations = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await fetch("/api/conversations");
       const data = await res.json();
       setConversations(data);
@@ -67,13 +67,23 @@ export function ConversationProvider({
     } catch (error) {
       console.error("Failed to fetch conversations:", error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
+  // Initial fetch
   useEffect(() => {
     fetchConversations();
   }, []);
+
+  // Auto-refresh every 30 seconds (silent - no loading indicator)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchConversations(true);
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [selectedId]);
 
   const selectedConversation =
     conversations.find((c) => c.id === selectedId) || null;

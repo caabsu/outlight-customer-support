@@ -21,6 +21,8 @@ export default function ConversationView() {
   const [editingTags, setEditingTags] = useState(false);
   const [newTag, setNewTag] = useState("");
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
 
   // Fetch conversation history
   useEffect(() => {
@@ -40,6 +42,29 @@ export default function ConversationView() {
     } else {
       setHistory([]);
       setLoadingHistory(false);
+    }
+  }, [selectedConversation?.id]);
+
+  // Fetch AI summary
+  useEffect(() => {
+    if (selectedConversation?.id) {
+      setLoadingSummary(true);
+      setAiSummary(null);
+      fetch(`/api/conversations/${selectedConversation.id}/summary`, {
+        method: "POST"
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          setAiSummary(data.summary);
+          setLoadingSummary(false);
+        })
+        .catch((err) => {
+          console.error("Failed to fetch summary:", err);
+          setLoadingSummary(false);
+        });
+    } else {
+      setAiSummary(null);
+      setLoadingSummary(false);
     }
   }, [selectedConversation?.id]);
 
@@ -426,7 +451,27 @@ export default function ConversationView() {
         </>
       )}
 
-      {/* Not Support Button - Always visible, below past conversations */}
+      {/* AI Summary Section */}
+      <div className="flex-1 overflow-y-auto p-4 border-t border-border">
+        <h3 className="font-sans font-semibold text-foreground text-base mb-3">AI Summary</h3>
+        {loadingSummary ? (
+          <div className="space-y-2">
+            <div className="h-3 bg-muted rounded w-full animate-pulse"></div>
+            <div className="h-3 bg-muted rounded w-5/6 animate-pulse"></div>
+            <div className="h-3 bg-muted rounded w-4/6 animate-pulse"></div>
+          </div>
+        ) : aiSummary ? (
+          <div className="text-sm font-sans text-foreground bg-background p-3 rounded-lg border border-border leading-relaxed">
+            {aiSummary}
+          </div>
+        ) : (
+          <p className="text-xs font-sans text-muted-foreground italic">
+            No summary available
+          </p>
+        )}
+      </div>
+
+      {/* Not Support Button - Always visible, below AI summary */}
       <div className="p-4 border-t border-border shrink-0">
         {!selectedConversation.tags?.includes("non-customer-support") && (
           <button
