@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useConversations } from "@/lib/ConversationContext";
+import { useRouter } from "next/navigation";
 
 type ConversationHistory = {
   id: string;
@@ -11,11 +12,15 @@ type ConversationHistory = {
 };
 
 export default function ConversationView() {
-  const { selectedConversation, refreshConversations } = useConversations();
+  const { selectedConversation, selectConversation, refreshConversations, updateConversationOptimistic } = useConversations();
+  const router = useRouter();
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
   const [history, setHistory] = useState<ConversationHistory[]>([]);
   const [showHistory, setShowHistory] = useState(true);
+  const [editingTags, setEditingTags] = useState(false);
+  const [newTag, setNewTag] = useState("");
+  const [markingNonSupport, setMarkingNonSupport] = useState(false);
 
   // Fetch conversation history
   useEffect(() => {
@@ -71,6 +76,81 @@ export default function ConversationView() {
     }
   };
 
+  const handleMarkNonSupport = async () => {
+    if (!selectedConversation) return;
+
+    if (!confirm("Mark this email as non-customer-support and archive it?")) {
+      return;
+    }
+
+    setMarkingNonSupport(true);
+    try {
+      await fetch(`/api/conversations/${selectedConversation.id}/archive`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag: "non-customer-support" }),
+      });
+      await refreshConversations();
+    } catch (error) {
+      console.error("Failed to mark as non-support:", error);
+    } finally {
+      setMarkingNonSupport(false);
+    }
+  };
+
+  const handleAddTag = async () => {
+    if (!newTag.trim() || !selectedConversation) return;
+
+    const currentTags = selectedConversation.tags || [];
+    if (currentTags.includes(newTag.trim())) {
+      setNewTag("");
+      return;
+    }
+
+    const updatedTags = [...currentTags, newTag.trim()];
+
+    // Optimistic update - instant UI feedback
+    updateConversationOptimistic(selectedConversation.id, { tags: updatedTags });
+    setNewTag("");
+    setEditingTags(false);
+
+    try {
+      await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: updatedTags }),
+      });
+      await refreshConversations();
+    } catch (error) {
+      console.error("Failed to add tag:", error);
+      // Revert on error
+      updateConversationOptimistic(selectedConversation.id, { tags: currentTags });
+    }
+  };
+
+  const handleRemoveTag = async (tagToRemove: string) => {
+    if (!selectedConversation) return;
+
+    const currentTags = selectedConversation.tags || [];
+    const newTags = currentTags.filter(tag => tag !== tagToRemove);
+
+    // Optimistic update - instant UI feedback
+    updateConversationOptimistic(selectedConversation.id, { tags: newTags });
+
+    try {
+      await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: newTags }),
+      });
+      await refreshConversations();
+    } catch (error) {
+      console.error("Failed to remove tag:", error);
+      // Revert on error
+      updateConversationOptimistic(selectedConversation.id, { tags: currentTags });
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleString("en-US", {
@@ -92,30 +172,83 @@ export default function ConversationView() {
   }
 
   return (
-    <div className="flex-1 flex bg-background">
+    <div className="flex-1 flex bg-background overflow-hidden">
       {/* Main Email View */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="p-6 border-b border-border">
-        <h2 className="text-xl font-semibold text-foreground mb-2">
-          {selectedConversation.subject}
-        </h2>
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-            <span className="text-sm font-medium text-primary">
-              {(selectedConversation.customer.name || selectedConversation.customer.primaryEmail)[0].toUpperCase()}
-            </span>
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header - Fixed Height */}
+        <div className="p-6 border-b border-border shrink-0">
+          <h2 className="text-xl font-semibold text-foreground mb-3">
+            {selectedConversation.subject}
+          </h2>
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <span className="text-sm font-medium text-primary">
+                  {(selectedConversation.customer.name || selectedConversation.customer.primaryEmail)[0].toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {selectedConversation.customer.name || selectedConversation.customer.primaryEmail}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedConversation.customer.primaryEmail}
+                </p>
+              </div>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-medium text-foreground">
-              {selectedConversation.customer.name || selectedConversation.customer.primaryEmail}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {selectedConversation.customer.primaryEmail}
-            </p>
+
+          {/* Tag Management */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {selectedConversation.tags?.map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs rounded-md border border-primary/20"
+              >
+                {tag}
+                <button
+                  onClick={() => handleRemoveTag(tag)}
+                  className="hover:text-primary/70 ml-1"
+                  title="Remove tag"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            {editingTags ? (
+              <div className="inline-flex items-center gap-1">
+                <input
+                  type="text"
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddTag()}
+                  placeholder="New tag..."
+                  className="px-2 py-1 text-xs bg-muted border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary w-24"
+                  autoFocus
+                />
+                <button
+                  onClick={handleAddTag}
+                  className="px-2 py-1 bg-success text-white text-xs rounded-md hover:bg-success/90"
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => { setEditingTags(false); setNewTag(""); }}
+                  className="px-2 py-1 bg-muted text-muted-foreground text-xs rounded-md hover:bg-muted/80"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setEditingTags(true)}
+                className="px-2 py-1 bg-muted text-muted-foreground text-xs rounded-md hover:bg-accent transition-colors"
+              >
+                + Tag
+              </button>
+            )}
           </div>
         </div>
-      </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -191,36 +324,55 @@ export default function ConversationView() {
       </div>
     </div>
 
-    {/* Conversation History Sidebar */}
-    {showHistory && history.length > 0 && (
-      <div className="w-80 border-l border-border bg-secondary flex flex-col">
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <h3 className="font-semibold text-foreground">Past Conversations</h3>
+    {/* Right Sidebar */}
+    <div className="w-80 border-l border-border bg-secondary flex flex-col shrink-0">
+      {/* Not Support Button */}
+      <div className="p-4 border-b border-border shrink-0">
+        {!selectedConversation.tags?.includes("non-customer-support") && (
           <button
-            onClick={() => setShowHistory(false)}
-            className="text-muted-foreground hover:text-foreground"
+            onClick={handleMarkNonSupport}
+            disabled={markingNonSupport}
+            className="w-full px-4 py-3 bg-warning/20 text-warning border-2 border-warning/40 rounded-lg font-medium text-sm hover:bg-warning/30 hover:border-warning/60 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            ✕
+            {markingNonSupport ? "Archiving..." : "Mark as Non-Support"}
           </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {history.map((conv) => (
-            <div
-              key={conv.id}
-              className="p-3 rounded-lg border border-border bg-background hover:border-primary transition-colors cursor-pointer"
-            >
-              <p className="text-sm font-medium text-foreground mb-1 truncate">
-                {conv.subject}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {new Date(conv.lastMessageAt).toLocaleDateString()} •{" "}
-                {conv.messages.length} messages
-              </p>
-            </div>
-          ))}
-        </div>
+        )}
       </div>
-    )}
+
+      {/* Past Conversations Header - Fixed Size */}
+      {showHistory && history.length > 0 && (
+        <>
+          <div className="p-4 border-b border-border flex items-center justify-between shrink-0 h-14">
+            <h3 className="font-semibold text-foreground text-sm">Past Conversations</h3>
+            <button
+              onClick={() => setShowHistory(false)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Past Conversations List - Max 30% of viewport height */}
+          <div className="overflow-y-auto p-4 space-y-3 max-h-[30vh]">
+            {history.map((conv) => (
+              <button
+                key={conv.id}
+                onClick={() => selectConversation(conv.id)}
+                className="w-full text-left p-3 rounded-lg border border-border bg-background hover:border-primary hover:bg-accent/50 transition-all cursor-pointer"
+              >
+                <p className="text-sm font-medium text-foreground mb-1 truncate">
+                  {conv.subject}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(conv.lastMessageAt).toLocaleDateString()} •{" "}
+                  {conv.messages.length} messages
+                </p>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
     </div>
   );
 }

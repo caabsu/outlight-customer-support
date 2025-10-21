@@ -112,17 +112,42 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
   try {
     const conversation = await prisma.conversation.findUnique({
       where: { id: req.params.id },
-      include: { customer: true },
+      include: {
+        customer: true,
+        messages: {
+          where: { direction: "inbound" },
+          orderBy: { sentAt: "desc" },
+          take: 1,
+        }
+      },
     });
 
     if (!conversation) {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
-    // Find all other conversations with the same customer
+    // Get the reply-to email from the most recent inbound message
+    const replyToEmail = conversation.messages[0]?.replyToEmail;
+
+    // Search criteria: match by customer ID OR by reply-to email
+    const searchEmails = [conversation.customer.primaryEmail];
+    if (replyToEmail && replyToEmail !== conversation.customer.primaryEmail) {
+      searchEmails.push(replyToEmail);
+    }
+
+    // Find all other conversations with the same customer or reply-to email
     const history = await prisma.conversation.findMany({
       where: {
-        customerId: conversation.customerId,
+        OR: [
+          { customerId: conversation.customerId },
+          {
+            messages: {
+              some: {
+                OR: searchEmails.map(email => ({ replyToEmail: email }))
+              }
+            }
+          }
+        ],
         id: { not: req.params.id },
       },
       include: {

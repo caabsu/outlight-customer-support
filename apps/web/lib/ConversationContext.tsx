@@ -19,6 +19,9 @@ type Conversation = {
   status: string;
   lastMessageAt: string;
   unreadAgent: boolean;
+  starred?: boolean;
+  archived?: boolean;
+  tags?: string[];
   customer: {
     name: string | null;
     primaryEmail: string;
@@ -31,6 +34,7 @@ type ConversationContextType = {
   selectedConversation: Conversation | null;
   selectConversation: (id: string) => void;
   refreshConversations: () => Promise<void>;
+  updateConversationOptimistic: (id: string, updates: Partial<Conversation>) => void;
   loading: boolean;
 };
 
@@ -74,6 +78,12 @@ export function ConversationProvider({
     setSelectedId(id);
   };
 
+  const updateConversationOptimistic = (id: string, updates: Partial<Conversation>) => {
+    setConversations((prev) =>
+      prev.map((conv) => (conv.id === id ? { ...conv, ...updates } : conv))
+    );
+  };
+
   return (
     <ConversationContext.Provider
       value={{
@@ -81,6 +91,7 @@ export function ConversationProvider({
         selectedConversation,
         selectConversation,
         refreshConversations: fetchConversations,
+        updateConversationOptimistic,
         loading,
       }}
     >

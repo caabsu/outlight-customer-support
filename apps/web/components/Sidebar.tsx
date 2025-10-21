@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 export default function Sidebar() {
   const [activeView, setActiveView] = useState<"inbox" | "sent">("inbox");
@@ -8,10 +9,10 @@ export default function Sidebar() {
   return (
     <div className="w-64 border-r border-border bg-background flex flex-col">
       {/* Logo/Header */}
-      <div className="p-6 border-b border-border">
+      <Link href="/" className="p-6 border-b border-border hover:bg-accent/30 transition-colors cursor-pointer">
         <h1 className="text-xl font-semibold text-foreground">Outlight</h1>
         <p className="text-sm text-muted-foreground mt-1">Support</p>
-      </div>
+      </Link>
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1">

@@ -25,7 +25,7 @@ type Conversation = {
 };
 
 export default function ConversationList() {
-  const { conversations, selectedConversation, selectConversation, loading, refreshConversations } =
+  const { conversations, selectedConversation, selectConversation, loading, refreshConversations, updateConversationOptimistic } =
     useConversations();
   const [showStarred, setShowStarred] = useState(false);
   const [excludeNonSupport, setExcludeNonSupport] = useState(true);
@@ -41,13 +41,24 @@ export default function ConversationList() {
 
   const handleStar = async (e: React.MouseEvent, convId: string) => {
     e.stopPropagation();
+
+    // Find the conversation to get current state
+    const conv = conversations.find(c => c.id === convId);
+    if (!conv) return;
+
+    // Optimistic update - instant UI feedback
+    updateConversationOptimistic(convId, { starred: !conv.starred });
+
     try {
       await fetch(`/api/conversations/${convId}/star`, {
         method: "PATCH",
       });
+      // Refresh to ensure we're in sync with server
       await refreshConversations();
     } catch (error) {
       console.error("Failed to toggle star:", error);
+      // Revert on error
+      updateConversationOptimistic(convId, { starred: conv.starred });
     }
   };
 
@@ -74,10 +85,14 @@ export default function ConversationList() {
         ? `/api/conversations/next-unreplied/${currentId}`
         : "/api/conversations/next-unreplied";
 
-      const res = await fetch(endpoint);
-      const nextConv = await res.json();
+      // Start fetching immediately
+      const fetchPromise = fetch(endpoint).then(res => res.json());
+
+      // Show instant loading state if desired
+      const nextConv = await fetchPromise;
 
       if (nextConv && nextConv.id) {
+        // Instant navigation
         selectConversation(nextConv.id);
       } else {
         alert("No more unreplied emails!");
@@ -190,10 +205,10 @@ export default function ConversationList() {
           </div>
         ) : (
           filteredConversations.map((conv: Conversation) => (
-            <button
+            <div
               key={conv.id}
               onClick={() => selectConversation(conv.id)}
-              className={`w-full text-left p-4 border-b border-border transition-colors relative ${
+              className={`w-full text-left p-4 border-b border-border transition-colors relative cursor-pointer ${
                 selectedConversation?.id === conv.id
                   ? "bg-accent"
                   : "hover:bg-accent/50"
@@ -203,7 +218,7 @@ export default function ConversationList() {
                 <div className="flex-1 min-w-0 flex items-start gap-2">
                   <button
                     onClick={(e) => handleStar(e, conv.id)}
-                    className="mt-0.5 text-lg hover:scale-110 transition-transform"
+                    className="mt-0.5 text-lg hover:scale-110 transition-transform text-yellow-400 hover:text-yellow-300"
                     title={conv.starred ? "Unstar" : "Star"}
                   >
                     {conv.starred ? "⭐" : "☆"}
@@ -235,17 +250,7 @@ export default function ConversationList() {
                   </span>
                 ))}
               </div>
-              {/* Non-Support Button */}
-              {!conv.tags?.includes("non-customer-support") && (
-                <button
-                  onClick={(e) => handleMarkNonSupport(e, conv.id)}
-                  className="absolute bottom-2 right-2 px-2 py-1 bg-muted hover:bg-muted/80 text-xs text-muted-foreground rounded transition-colors"
-                  title="Mark as non-customer-support and archive"
-                >
-                  Not Support
-                </button>
-              )}
-            </button>
+            </div>
           ))
         )}
       </div>
