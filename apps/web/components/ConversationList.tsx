@@ -132,19 +132,19 @@ export default function ConversationList() {
             </p>
           )}
         </div>
-        {syncProgress && (
-          <div className="mt-3">
+        {syncProgress && syncProgress.stage !== 'complete' && (
+          <div className="mt-2">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-muted-foreground">
                 {syncProgress.message}
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground font-mono">
                 {syncProgress.percent}%
               </span>
             </div>
-            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="w-full h-1 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary transition-all duration-300 ease-out"
+                className="h-full bg-primary transition-all duration-200 ease-out"
                 style={{ width: `${syncProgress.percent}%` }}
               />
             </div>

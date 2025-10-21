@@ -87,6 +87,7 @@ export async function pollOnce(_req: Request, res: Response) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
   res.flushHeaders(); // Flush headers immediately
 
   const sendProgress = (stage: string, percent: number, message: string) => {
@@ -95,20 +96,21 @@ export async function pollOnce(_req: Request, res: Response) {
   };
 
   try {
-    // Step 1: Get Gmail client (15%)
-    sendProgress('connecting', 15, 'Connecting to Gmail...');
+    // Get Gmail client immediately (use cached if available)
     const gmail = await getAuthedClient();
 
-    // Step 2: Check if initial sync needed (25%)
-    sendProgress('checking', 25, 'Checking sync status...');
+    // Check if initial sync needed
     const existing = await prisma.conversation.findFirst();
     const isInitialSync = !existing;
 
-    // Step 3: Fetch thread lists in parallel (35%)
-    sendProgress('fetching', 35, 'Fetching email threads...');
+    // Determine query and limits
     const query = isInitialSync ? "" : "newer_than:2d";
     const maxResults = isInitialSync ? 50 : 20;
 
+    // Send initial progress
+    sendProgress('fetching', 30, 'Fetching threads...');
+
+    // Fetch thread lists in parallel
     const [inboxResponse, sentResponse] = await Promise.all([
       gmail.users.threads.list({
         userId: "me",
@@ -132,15 +134,16 @@ export async function pollOnce(_req: Request, res: Response) {
     const totalThreads = threadIds.length;
 
     if (totalThreads === 0) {
-      sendProgress('complete', 100, 'No new emails to sync');
+      sendProgress('complete', 100, 'Up to date');
       res.write(`data: ${JSON.stringify({ done: true, totalThreads: 0 })}\n\n`);
       res.end();
       return;
     }
 
-    // Step 4: Process threads in parallel batches (40-95%)
-    sendProgress('processing', 40, `Processing ${totalThreads} threads...`);
-    const BATCH_SIZE = 5; // Process 5 threads at a time
+    sendProgress('syncing', 50, `Syncing ${totalThreads} threads...`);
+
+    // Process threads in parallel batches with aggressive batching
+    const BATCH_SIZE = 10; // Increased from 5 to 10 for faster processing
     let processed = 0;
 
     for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
@@ -155,17 +158,17 @@ export async function pollOnce(_req: Request, res: Response) {
       );
 
       processed += batch.length;
-      const percent = 40 + Math.floor((processed / totalThreads) * 55);
-      sendProgress('processing', percent, `Synced ${processed}/${totalThreads} threads`);
+      const percent = 50 + Math.floor((processed / totalThreads) * 45);
+      sendProgress('syncing', percent, `${processed}/${totalThreads}`);
     }
 
-    // Step 5: Complete (100%)
-    sendProgress('complete', 100, `Synced ${totalThreads} threads successfully`);
+    // Complete
+    sendProgress('complete', 100, 'Synced!');
     res.write(`data: ${JSON.stringify({ done: true, totalThreads })}\n\n`);
     res.end();
   } catch (error) {
     console.error('Poll error:', error);
-    sendProgress('error', 0, error instanceof Error ? error.message : 'Failed to sync emails');
+    sendProgress('error', 0, error instanceof Error ? error.message : 'Failed to sync');
     res.end();
   }
 }

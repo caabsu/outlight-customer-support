@@ -78,10 +78,14 @@ export function ConversationProvider({
   };
 
   const syncFromGmail = async () => {
+    // Don't sync if already syncing
+    if (syncing) return;
+
     try {
       setSyncing(true);
-      setSyncProgress({ stage: 'starting', percent: 0, message: 'Starting sync...' });
+      setSyncProgress({ stage: 'syncing', percent: 50, message: 'Syncing...' });
 
+      // Start the background sync
       const response = await fetch("/api/gmail/poll", {
         method: "POST",
       });
@@ -92,27 +96,33 @@ export function ConversationProvider({
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || '';
 
         for (const line of lines) {
           if (line.startsWith("data: ")) {
-            const data = JSON.parse(line.substring(6));
-            if (data.done) {
-              // Sync completed, refresh conversations
-              await fetchConversations();
-              setSyncProgress({ stage: 'complete', percent: 100, message: data.message || 'Sync complete' });
-            } else if (data.stage) {
-              setSyncProgress({
-                stage: data.stage,
-                percent: data.percent,
-                message: data.message,
-              });
+            try {
+              const data = JSON.parse(line.substring(6));
+              if (data.done) {
+                // Sync completed, refresh conversations immediately
+                await fetchConversations();
+                setSyncProgress({ stage: 'complete', percent: 100, message: 'Synced!' });
+              } else if (data.stage) {
+                setSyncProgress({
+                  stage: data.stage,
+                  percent: data.percent,
+                  message: data.message,
+                });
+              }
+            } catch (e) {
+              console.error('Failed to parse SSE data:', e);
             }
           }
         }
@@ -122,7 +132,7 @@ export function ConversationProvider({
       setSyncProgress({ stage: 'error', percent: 0, message: 'Sync failed' });
     } finally {
       setSyncing(false);
-      setTimeout(() => setSyncProgress(null), 2000); // Clear progress after 2s
+      setTimeout(() => setSyncProgress(null), 1500); // Clear progress after 1.5s
     }
   };
 
