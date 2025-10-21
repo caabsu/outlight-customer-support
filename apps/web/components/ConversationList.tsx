@@ -1,6 +1,7 @@
 "use client";
 
 import { useConversations } from "@/lib/ConversationContext";
+import { useState } from "react";
 
 type Conversation = {
   id: string;
@@ -9,6 +10,9 @@ type Conversation = {
   status: string;
   lastMessageAt: string;
   unreadAgent: boolean;
+  starred: boolean;
+  archived: boolean;
+  tags: string[];
   customer: {
     name: string | null;
     primaryEmail: string;
@@ -16,12 +20,72 @@ type Conversation = {
   messages: {
     bodyText: string | null;
     fromEmail: string;
+    direction: string;
   }[];
 };
 
 export default function ConversationList() {
-  const { conversations, selectedConversation, selectConversation, loading } =
+  const { conversations, selectedConversation, selectConversation, loading, refreshConversations } =
     useConversations();
+  const [showStarred, setShowStarred] = useState(false);
+  const [excludeNonSupport, setExcludeNonSupport] = useState(true);
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+
+  const filteredConversations = conversations.filter((conv: Conversation) => {
+    if (showStarred && !conv.starred) return false;
+    if (excludeNonSupport && conv.tags?.includes("non-customer-support"))
+      return false;
+    if (showUnreadOnly && !conv.unreadAgent) return false;
+    return true;
+  });
+
+  const handleStar = async (e: React.MouseEvent, convId: string) => {
+    e.stopPropagation();
+    try {
+      await fetch(`/api/conversations/${convId}/star`, {
+        method: "PATCH",
+      });
+      await refreshConversations();
+    } catch (error) {
+      console.error("Failed to toggle star:", error);
+    }
+  };
+
+  const handleMarkNonSupport = async (e: React.MouseEvent, convId: string) => {
+    e.stopPropagation();
+    if (confirm("Mark this email as non-customer-support and archive it?")) {
+      try {
+        await fetch(`/api/conversations/${convId}/archive`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tag: "non-customer-support" }),
+        });
+        await refreshConversations();
+      } catch (error) {
+        console.error("Failed to mark as non-support:", error);
+      }
+    }
+  };
+
+  const goToNextUnreplied = async () => {
+    try {
+      const currentId = selectedConversation?.id;
+      const endpoint = currentId
+        ? `/api/conversations/next-unreplied/${currentId}`
+        : "/api/conversations/next-unreplied";
+
+      const res = await fetch(endpoint);
+      const nextConv = await res.json();
+
+      if (nextConv && nextConv.id) {
+        selectConversation(nextConv.id);
+      } else {
+        alert("No more unreplied emails!");
+      }
+    } catch (error) {
+      console.error("Failed to get next unreplied:", error);
+    }
+  };
 
   const getPreview = (conv: Conversation) => {
     const lastMessage = conv.messages[conv.messages.length - 1];
@@ -49,6 +113,12 @@ export default function ConversationList() {
     }
   };
 
+  const isUnreplied = (conv: Conversation) => {
+    if (conv.messages.length === 0) return false;
+    const lastMessage = conv.messages[conv.messages.length - 1];
+    return lastMessage.direction === "inbound";
+  };
+
   if (loading) {
     return (
       <div className="w-96 border-r border-border bg-background flex items-center justify-center">
@@ -61,31 +131,83 @@ export default function ConversationList() {
     <div className="w-96 border-r border-border bg-background flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-border">
-        <h2 className="text-lg font-semibold text-foreground">Conversations</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {conversations.length} threads
-        </p>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Conversations</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              {filteredConversations.length} threads
+            </p>
+          </div>
+          <button
+            onClick={goToNextUnreplied}
+            className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors"
+            title="Go to next unreplied email"
+          >
+            Next →
+          </button>
+        </div>
+
+        {/* Filter Buttons */}
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setShowStarred(!showStarred)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              showStarred
+                ? "bg-starred/20 text-starred border border-starred/30"
+                : "bg-secondary text-secondary-foreground border border-border"
+            }`}
+          >
+            ⭐ Starred
+          </button>
+          <button
+            onClick={() => setExcludeNonSupport(!excludeNonSupport)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              excludeNonSupport
+                ? "bg-primary/20 text-primary border border-primary/30"
+                : "bg-secondary text-secondary-foreground border border-border"
+            }`}
+          >
+            ✓ CS Only
+          </button>
+          <button
+            onClick={() => setShowUnreadOnly(!showUnreadOnly)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              showUnreadOnly
+                ? "bg-warning/20 text-warning border border-warning/30"
+                : "bg-secondary text-secondary-foreground border border-border"
+            }`}
+          >
+            Unread
+          </button>
+        </div>
       </div>
 
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto">
-        {conversations.length === 0 ? (
+        {filteredConversations.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-muted-foreground text-sm">No conversations yet</p>
+            <p className="text-muted-foreground text-sm">No conversations match filters</p>
           </div>
         ) : (
-          conversations.map((conv) => (
+          filteredConversations.map((conv: Conversation) => (
             <button
               key={conv.id}
               onClick={() => selectConversation(conv.id)}
-              className={`w-full text-left p-4 border-b border-border transition-colors ${
+              className={`w-full text-left p-4 border-b border-border transition-colors relative ${
                 selectedConversation?.id === conv.id
                   ? "bg-accent"
                   : "hover:bg-accent/50"
               }`}
             >
               <div className="flex items-start justify-between gap-2 mb-1">
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 flex items-start gap-2">
+                  <button
+                    onClick={(e) => handleStar(e, conv.id)}
+                    className="mt-0.5 text-lg hover:scale-110 transition-transform"
+                    title={conv.starred ? "Unstar" : "Star"}
+                  >
+                    {conv.starred ? "⭐" : "☆"}
+                  </button>
                   <p className="text-sm font-medium text-foreground truncate">
                     {conv.customer.name || conv.customer.primaryEmail}
                   </p>
@@ -94,18 +216,34 @@ export default function ConversationList() {
                   {formatDate(conv.lastMessageAt)}
                 </span>
               </div>
-              <p className="text-sm font-medium text-foreground truncate mb-1">
+              <p className="text-sm font-medium text-foreground truncate mb-1 ml-7">
                 {conv.subject}
               </p>
-              <p className="text-sm text-muted-foreground line-clamp-2">
+              <p className="text-sm text-muted-foreground line-clamp-2 ml-7">
                 {getPreview(conv)}
               </p>
-              {conv.unreadAgent && (
-                <div className="mt-2">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
-                    Unread
+              <div className="flex items-center gap-2 mt-2 ml-7">
+                {conv.unreadAgent && (
+                  <span className="tag tag-primary">Unread</span>
+                )}
+                {isUnreplied(conv) && (
+                  <span className="tag tag-warning">Needs Reply</span>
+                )}
+                {conv.tags?.map((tag) => (
+                  <span key={tag} className="tag tag-muted">
+                    {tag}
                   </span>
-                </div>
+                ))}
+              </div>
+              {/* Non-Support Button */}
+              {!conv.tags?.includes("non-customer-support") && (
+                <button
+                  onClick={(e) => handleMarkNonSupport(e, conv.id)}
+                  className="absolute bottom-2 right-2 px-2 py-1 bg-muted hover:bg-muted/80 text-xs text-muted-foreground rounded transition-colors"
+                  title="Mark as non-customer-support and archive"
+                >
+                  Not Support
+                </button>
               )}
             </button>
           ))

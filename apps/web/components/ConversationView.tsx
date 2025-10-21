@@ -1,24 +1,63 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useConversations } from "@/lib/ConversationContext";
+
+type ConversationHistory = {
+  id: string;
+  subject: string;
+  lastMessageAt: string;
+  messages: { direction: string }[];
+};
 
 export default function ConversationView() {
   const { selectedConversation, refreshConversations } = useConversations();
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
+  const [history, setHistory] = useState<ConversationHistory[]>([]);
+  const [showHistory, setShowHistory] = useState(true);
+
+  // Fetch conversation history
+  useEffect(() => {
+    if (selectedConversation?.id) {
+      fetch(`/api/conversations/${selectedConversation.id}/history`)
+        .then((res) => res.json())
+        .then((data) => setHistory(data))
+        .catch((err) => console.error("Failed to fetch history:", err));
+    }
+  }, [selectedConversation?.id]);
+
+  // Get the correct reply-to email
+  const getReplyToEmail = () => {
+    if (!selectedConversation) return "";
+
+    // Find the most recent inbound message
+    const inboundMessages = selectedConversation.messages.filter(
+      (m) => m.direction === "inbound"
+    );
+
+    if (inboundMessages.length > 0) {
+      const lastInbound = inboundMessages[inboundMessages.length - 1];
+      // Use Reply-To if it exists, otherwise fall back to customer email
+      return (lastInbound as any).replyToEmail || selectedConversation.customer.primaryEmail;
+    }
+
+    return selectedConversation.customer.primaryEmail;
+  };
 
   const handleSend = async () => {
     if (!replyText.trim() || !selectedConversation) return;
 
     setSending(true);
     try {
+      const recipientEmail = getReplyToEmail();
+
       await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           conversationId: selectedConversation.id,
-          to: selectedConversation.customer.primaryEmail,
+          to: recipientEmail,
           body: replyText,
         }),
       });
@@ -53,9 +92,11 @@ export default function ConversationView() {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-background">
-      {/* Header */}
-      <div className="p-6 border-b border-border">
+    <div className="flex-1 flex bg-background">
+      {/* Main Email View */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="p-6 border-b border-border">
         <h2 className="text-xl font-semibold text-foreground mb-2">
           {selectedConversation.subject}
         </h2>
@@ -144,10 +185,42 @@ export default function ConversationView() {
             </button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Replying to {selectedConversation.customer.primaryEmail}
+            Replying to {getReplyToEmail()}
           </p>
         </div>
       </div>
+    </div>
+
+    {/* Conversation History Sidebar */}
+    {showHistory && history.length > 0 && (
+      <div className="w-80 border-l border-border bg-secondary flex flex-col">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <h3 className="font-semibold text-foreground">Past Conversations</h3>
+          <button
+            onClick={() => setShowHistory(false)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {history.map((conv) => (
+            <div
+              key={conv.id}
+              className="p-3 rounded-lg border border-border bg-background hover:border-primary transition-colors cursor-pointer"
+            >
+              <p className="text-sm font-medium text-foreground mb-1 truncate">
+                {conv.subject}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {new Date(conv.lastMessageAt).toLocaleDateString()} •{" "}
+                {conv.messages.length} messages
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
     </div>
   );
 }
