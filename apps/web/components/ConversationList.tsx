@@ -25,7 +25,7 @@ type Conversation = {
 };
 
 export default function ConversationList() {
-  const { conversations, selectedConversation, selectConversation, loading, refreshConversations, updateConversationOptimistic, showArchived } =
+  const { conversations, selectedConversation, selectConversation, loading, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived } =
     useConversations();
   const [showStarred, setShowStarred] = useState(false);
   const [excludeNonSupport, setExcludeNonSupport] = useState(true);
@@ -231,9 +231,10 @@ export default function ConversationList() {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => refreshConversations()}
+              onClick={() => pollAndRefresh()}
               className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs font-sans font-medium hover:bg-accent transition-colors border border-border"
-              title="Refresh inbox"
+              title="Check for new emails"
+              disabled={loading}
             >
               ↻
             </button>

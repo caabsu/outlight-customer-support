@@ -35,6 +35,7 @@ type ConversationContextType = {
   selectedConversation: Conversation | null;
   selectConversation: (id: string) => void;
   refreshConversations: () => Promise<void>;
+  pollAndRefresh: () => Promise<void>;
   updateConversationOptimistic: (id: string, updates: Partial<Conversation>) => void;
   loading: boolean;
   showArchived: boolean;
@@ -76,10 +77,17 @@ export function ConversationProvider({
     fetchConversations();
   }, []);
 
-  // Auto-refresh every 30 seconds (silent - no loading indicator)
+  // Auto-refresh every 30 seconds (silent - polls Gmail and refreshes)
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchConversations(true);
+    const interval = setInterval(async () => {
+      try {
+        // Poll Gmail for new emails
+        await fetch("/api/gmail/poll", { method: "POST" });
+        // Then refresh conversations silently
+        await fetchConversations(true);
+      } catch (error) {
+        console.error("Auto-refresh failed:", error);
+      }
     }, 30000); // 30 seconds
 
     return () => clearInterval(interval);
@@ -98,6 +106,20 @@ export function ConversationProvider({
     );
   };
 
+  const pollAndRefresh = async () => {
+    try {
+      setLoading(true);
+      // First, poll Gmail for new emails
+      await fetch("/api/gmail/poll", { method: "POST" });
+      // Then refresh conversations from database
+      await fetchConversations(true);
+    } catch (error) {
+      console.error("Failed to poll and refresh:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <ConversationContext.Provider
       value={{
@@ -105,6 +127,7 @@ export function ConversationProvider({
         selectedConversation,
         selectConversation,
         refreshConversations: fetchConversations,
+        pollAndRefresh,
         updateConversationOptimistic,
         loading,
         showArchived,

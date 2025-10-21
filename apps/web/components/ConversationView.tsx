@@ -45,28 +45,24 @@ export default function ConversationView() {
     }
   }, [selectedConversation?.id]);
 
-  // Fetch AI summary
-  useEffect(() => {
-    if (selectedConversation?.id) {
-      setLoadingSummary(true);
-      setAiSummary(null);
-      fetch(`/api/conversations/${selectedConversation.id}/summary`, {
+  // Manual AI summary generation
+  const handleGenerateSummary = async () => {
+    if (!selectedConversation?.id) return;
+
+    setLoadingSummary(true);
+    setAiSummary(null);
+    try {
+      const res = await fetch(`/api/conversations/${selectedConversation.id}/summary`, {
         method: "POST"
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          setAiSummary(data.summary);
-          setLoadingSummary(false);
-        })
-        .catch((err) => {
-          console.error("Failed to fetch summary:", err);
-          setLoadingSummary(false);
-        });
-    } else {
-      setAiSummary(null);
+      });
+      const data = await res.json();
+      setAiSummary(data.summary);
+    } catch (err) {
+      console.error("Failed to fetch summary:", err);
+    } finally {
       setLoadingSummary(false);
     }
-  }, [selectedConversation?.id]);
+  };
 
   // Get the correct reply-to email
   const getReplyToEmail = () => {
@@ -369,6 +365,71 @@ export default function ConversationView() {
         ))}
       </div>
 
+      {/* AI Actions Block */}
+      <div className="border-t border-border p-6 shrink-0 bg-secondary/30">
+        <h3 className="text-sm font-sans font-semibold text-foreground mb-3">AI Assistant</h3>
+        <div className="grid grid-cols-2 gap-3 min-h-32">
+          {/* AI Action 1: Generate Summary */}
+          <button
+            onClick={handleGenerateSummary}
+            disabled={loadingSummary}
+            className="flex flex-col items-start p-4 bg-background border border-border rounded-lg hover:border-primary hover:bg-accent/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <div className="text-2xl mb-2">📝</div>
+            <div className="text-left">
+              <p className="text-sm font-sans font-medium text-foreground">Generate Summary</p>
+              <p className="text-xs font-sans text-muted-foreground mt-1">
+                {loadingSummary ? "Generating..." : "Summarize this email"}
+              </p>
+            </div>
+          </button>
+
+          {/* AI Action 2: Placeholder */}
+          <button
+            disabled
+            className="flex flex-col items-start p-4 bg-background border border-border rounded-lg opacity-50 cursor-not-allowed"
+          >
+            <div className="text-2xl mb-2">✨</div>
+            <div className="text-left">
+              <p className="text-sm font-sans font-medium text-foreground">Draft Reply</p>
+              <p className="text-xs font-sans text-muted-foreground mt-1">Coming soon</p>
+            </div>
+          </button>
+
+          {/* AI Action 3: Placeholder */}
+          <button
+            disabled
+            className="flex flex-col items-start p-4 bg-background border border-border rounded-lg opacity-50 cursor-not-allowed"
+          >
+            <div className="text-2xl mb-2">🏷️</div>
+            <div className="text-left">
+              <p className="text-sm font-sans font-medium text-foreground">Suggest Tags</p>
+              <p className="text-xs font-sans text-muted-foreground mt-1">Coming soon</p>
+            </div>
+          </button>
+
+          {/* AI Action 4: Placeholder */}
+          <button
+            disabled
+            className="flex flex-col items-start p-4 bg-background border border-border rounded-lg opacity-50 cursor-not-allowed"
+          >
+            <div className="text-2xl mb-2">🔍</div>
+            <div className="text-left">
+              <p className="text-sm font-sans font-medium text-foreground">Find Similar</p>
+              <p className="text-xs font-sans text-muted-foreground mt-1">Coming soon</p>
+            </div>
+          </button>
+        </div>
+
+        {/* AI Summary Display */}
+        {aiSummary && (
+          <div className="mt-4 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+            <h4 className="text-xs font-sans font-semibold text-primary mb-2">Summary:</h4>
+            <p className="text-sm font-sans text-foreground leading-relaxed">{aiSummary}</p>
+          </div>
+        )}
+      </div>
+
       {/* Reply Section */}
       <div className="border-t border-border p-6 shrink-0">
         <div className="mb-4">
@@ -451,27 +512,10 @@ export default function ConversationView() {
         </>
       )}
 
-      {/* AI Summary Section */}
-      <div className="flex-1 overflow-y-auto p-4 border-t border-border">
-        <h3 className="font-sans font-semibold text-foreground text-base mb-3">AI Summary</h3>
-        {loadingSummary ? (
-          <div className="space-y-2">
-            <div className="h-3 bg-muted rounded w-full animate-pulse"></div>
-            <div className="h-3 bg-muted rounded w-5/6 animate-pulse"></div>
-            <div className="h-3 bg-muted rounded w-4/6 animate-pulse"></div>
-          </div>
-        ) : aiSummary ? (
-          <div className="text-sm font-sans text-foreground bg-background p-3 rounded-lg border border-border leading-relaxed">
-            {aiSummary}
-          </div>
-        ) : (
-          <p className="text-xs font-sans text-muted-foreground italic">
-            No summary available
-          </p>
-        )}
-      </div>
+      {/* Spacer */}
+      <div className="flex-1"></div>
 
-      {/* Not Support Button - Always visible, below AI summary */}
+      {/* Not Support Button - Always visible at bottom */}
       <div className="p-4 border-t border-border shrink-0">
         {!selectedConversation.tags?.includes("non-customer-support") && (
           <button
