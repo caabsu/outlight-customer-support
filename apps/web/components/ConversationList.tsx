@@ -231,7 +231,7 @@ export default function ConversationList() {
           </div>
           <button
             onClick={goToNextUnreplied}
-            className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors"
+            className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-sans font-medium hover:bg-primary/90 transition-colors"
             title="Go to next unreplied email"
           >
             Next →
@@ -242,7 +242,7 @@ export default function ConversationList() {
         <div className="flex flex-wrap gap-2 mb-2">
           <button
             onClick={() => setShowStarred(!showStarred)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-sans font-medium transition-colors ${
               showStarred
                 ? "bg-starred/20 text-starred border border-starred/30"
                 : "bg-secondary text-secondary-foreground border border-border"
@@ -252,7 +252,7 @@ export default function ConversationList() {
           </button>
           <button
             onClick={() => setExcludeNonSupport(!excludeNonSupport)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-sans font-medium transition-colors ${
               excludeNonSupport
                 ? "bg-primary/20 text-primary border border-primary/30"
                 : "bg-secondary text-secondary-foreground border border-border"
@@ -262,7 +262,7 @@ export default function ConversationList() {
           </button>
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-sans font-medium transition-colors ${
               showFilters || selectedTags.length > 0 || statusFilter !== "all" || dateRange !== "all"
                 ? "bg-primary/20 text-primary border border-primary/30"
                 : "bg-secondary text-secondary-foreground border border-border"
@@ -277,13 +277,13 @@ export default function ConversationList() {
           <div className="mt-3 p-3 bg-secondary rounded-lg border border-border space-y-3">
             {/* Status Filter */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Status</label>
+              <label className="text-xs font-sans font-medium text-muted-foreground mb-1.5 block">Status</label>
               <div className="flex gap-1.5">
                 {(["all", "needs-reply", "resolved"] as const).map((status) => (
                   <button
                     key={status}
                     onClick={() => setStatusFilter(status)}
-                    className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors ${
+                    className={`flex-1 px-2 py-1.5 rounded text-xs font-sans font-medium transition-colors ${
                       statusFilter === status
                         ? "bg-primary text-primary-foreground"
                         : "bg-background text-muted-foreground hover:bg-accent"
@@ -297,13 +297,13 @@ export default function ConversationList() {
 
             {/* Date Range Filter */}
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Time Period</label>
+              <label className="text-xs font-sans font-medium text-muted-foreground mb-1.5 block">Time Period</label>
               <div className="flex gap-1.5">
                 {(["all", "today", "week", "month"] as const).map((range) => (
                   <button
                     key={range}
                     onClick={() => setDateRange(range)}
-                    className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors ${
+                    className={`flex-1 px-2 py-1.5 rounded text-xs font-sans font-medium transition-colors ${
                       dateRange === range
                         ? "bg-primary text-primary-foreground"
                         : "bg-background text-muted-foreground hover:bg-accent"
@@ -318,13 +318,13 @@ export default function ConversationList() {
             {/* Tag Filter */}
             {allTags.length > 0 && (
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Tags</label>
+                <label className="text-xs font-sans font-medium text-muted-foreground mb-1.5 block">Tags</label>
                 <div className="flex flex-wrap gap-1.5">
                   {allTags.map((tag) => (
                     <button
                       key={tag}
                       onClick={() => toggleTag(tag)}
-                      className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      className={`px-2 py-1 rounded text-xs font-sans font-medium transition-colors ${
                         selectedTags.includes(tag)
                           ? "bg-primary text-primary-foreground"
                           : "bg-background text-muted-foreground hover:bg-accent"
@@ -345,7 +345,7 @@ export default function ConversationList() {
                   setStatusFilter("all");
                   setDateRange("all");
                 }}
-                className="w-full px-3 py-1.5 bg-muted text-muted-foreground rounded text-xs font-medium hover:bg-accent transition-colors"
+                className="w-full px-3 py-1.5 bg-muted text-muted-foreground rounded text-xs font-sans font-medium hover:bg-accent transition-colors"
               >
                 Clear All Filters
               </button>
@@ -358,7 +358,7 @@ export default function ConversationList() {
       <div className="flex-1 overflow-y-auto">
         {filteredConversations.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-muted-foreground text-sm">No conversations match filters</p>
+            <p className="text-muted-foreground font-sans text-sm">No conversations match filters</p>
           </div>
         ) : (
           filteredConversations.map((conv: Conversation) => (
@@ -380,31 +380,31 @@ export default function ConversationList() {
                   >
                     {conv.starred ? "⭐" : "☆"}
                   </button>
-                  <p className="text-sm font-medium text-foreground truncate">
+                  <p className="text-sm font-sans font-medium text-foreground truncate">
                     {conv.customer.name || conv.customer.primaryEmail}
                   </p>
                 </div>
-                <span className="text-xs text-muted-foreground shrink-0">
+                <span className="text-xs font-sans text-muted-foreground shrink-0">
                   {formatDate(conv.lastMessageAt)}
                 </span>
               </div>
-              <p className="text-sm font-medium text-foreground truncate mb-1 ml-7">
+              <p className="text-sm font-sans font-medium text-foreground truncate mb-1 ml-7">
                 {conv.subject}
               </p>
-              <p className="text-sm text-muted-foreground line-clamp-2 ml-7">
+              <p className="text-sm font-sans text-muted-foreground line-clamp-2 ml-7">
                 {getPreview(conv)}
               </p>
               {/* Status Badge */}
               {isUnreplied(conv) && (
                 <div className="flex items-center gap-2 mt-2 ml-7">
-                  <span className="tag tag-warning">Needs Reply</span>
+                  <span className="tag tag-warning font-sans">Needs Reply</span>
                 </div>
               )}
               {/* Tags - Separate row, more visible */}
               {conv.tags && conv.tags.length > 0 && (
                 <div className="flex items-center gap-2 mt-2 ml-7 flex-wrap">
                   {conv.tags.map((tag) => (
-                    <span key={tag} className="px-2 py-0.5 bg-primary/15 text-primary text-xs font-medium border border-primary/30 rounded">
+                    <span key={tag} className="px-2 py-0.5 bg-primary/15 text-primary text-xs font-sans font-medium border border-primary/30 rounded">
                       {tag}
                     </span>
                   ))}
@@ -415,7 +415,7 @@ export default function ConversationList() {
                 <div className="mt-2 ml-7">
                   <button
                     onClick={(e) => handleUnarchive(e, conv.id)}
-                    className="text-xs text-primary hover:text-primary/80 font-medium"
+                    className="text-xs font-sans text-primary hover:text-primary/80 font-medium"
                   >
                     Unarchive
                   </button>
