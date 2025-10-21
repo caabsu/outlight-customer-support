@@ -387,37 +387,37 @@ export default function ConversationView() {
               </button>
             ))}
           </div>
+
+          {/* Not Support Button - Right below past conversations */}
+          <div className="p-4 border-t border-border shrink-0">
+            {!selectedConversation.tags?.includes("non-customer-support") && (
+              <>
+                {undoTimer !== null ? (
+                  <div className="space-y-2">
+                    <div className="w-full px-4 py-3 bg-warning text-white border-2 border-warning text-sm font-medium text-center">
+                      Archiving in {undoTimer}s...
+                    </div>
+                    <button
+                      onClick={handleUndoMarkNonSupport}
+                      className="w-full px-4 py-3 bg-success text-white border-2 border-success text-sm font-medium hover:bg-success/90 transition-colors"
+                    >
+                      Undo
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleMarkNonSupport}
+                    disabled={markingNonSupport}
+                    className="w-full px-4 py-3 bg-warning text-white border-2 border-warning text-sm font-medium hover:bg-warning/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Mark as Non-Support
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </>
       )}
-
-      {/* Not Support Button - High visibility with point color */}
-      <div className="p-4 border-t border-border shrink-0 mt-auto">
-        {!selectedConversation.tags?.includes("non-customer-support") && (
-          <>
-            {undoTimer !== null ? (
-              <div className="space-y-2">
-                <div className="w-full px-4 py-3 bg-warning text-white border-2 border-warning text-sm font-medium text-center">
-                  Archiving in {undoTimer}s...
-                </div>
-                <button
-                  onClick={handleUndoMarkNonSupport}
-                  className="w-full px-4 py-3 bg-success text-white border-2 border-success text-sm font-medium hover:bg-success/90 transition-colors"
-                >
-                  Undo
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleMarkNonSupport}
-                disabled={markingNonSupport}
-                className="w-full px-4 py-3 bg-warning text-white border-2 border-warning text-sm font-medium hover:bg-warning/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Mark as Non-Support
-              </button>
-            )}
-          </>
-        )}
-      </div>
     </div>
     </div>
   );

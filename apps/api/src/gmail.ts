@@ -119,7 +119,10 @@ async function ingestThread(gmail: any, threadId: string) {
 
     await prisma.message.upsert({
       where: { gmailMessageId: m.id! },
-      update: {},
+      update: {
+        // Update replyToEmail for existing messages on re-poll
+        replyToEmail: replyTo ? parseEmail(replyTo) : null,
+      },
       create: {
         conversationId: convo.id,
         gmailMessageId: m.id!,
