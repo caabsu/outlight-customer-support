@@ -63,13 +63,13 @@ export function ConversationProvider({
   const [showArchived, setShowArchived] = useState(false);
   const [showSent, setShowSent] = useState(false);
 
-  const fetchConversations = async (silent = false, retryCount = 0) => {
+  const fetchConversations = async (silent = false, retryCount = 0, suppressErrors = false) => {
     try {
       if (!silent) setLoading(true);
       const res = await fetch("/api/conversations");
       if (!res.ok) {
-        // Don't log 500 errors during initial startup (API might not be ready)
-        if (retryCount === 0 || res.status !== 500) {
+        // Don't log errors if suppressed (during auto-refresh)
+        if (!suppressErrors && (retryCount === 0 || res.status !== 500)) {
           console.error(`API returned ${res.status}: ${res.statusText}`);
         }
         return;
@@ -78,7 +78,9 @@ export function ConversationProvider({
       // Check if response has content before parsing
       const text = await res.text();
       if (!text || text.trim() === '') {
-        console.error("Empty response from API");
+        if (!suppressErrors) {
+          console.error("Empty response from API");
+        }
         return;
       }
 
@@ -86,8 +88,10 @@ export function ConversationProvider({
       try {
         data = JSON.parse(text);
       } catch (parseError) {
-        console.error("Failed to parse JSON response:", parseError);
-        console.error("Response text:", text.substring(0, 200));
+        if (!suppressErrors) {
+          console.error("Failed to parse JSON response:", parseError);
+          console.error("Response text:", text.substring(0, 200));
+        }
         return;
       }
 
@@ -96,14 +100,17 @@ export function ConversationProvider({
         setSelectedId(data[0].id);
       }
     } catch (error) {
-      // Silently handle connection errors during startup
-      if (retryCount === 0) {
-        // Only log non-connection errors
-        if (error instanceof Error && !error.message.includes('Failed to fetch')) {
+      // Only log if not suppressed
+      if (!suppressErrors) {
+        // Silently handle connection errors during startup
+        if (retryCount === 0) {
+          // Only log non-connection errors
+          if (error instanceof Error && !error.message.includes('Failed to fetch')) {
+            console.error("Failed to fetch conversations:", error);
+          }
+        } else {
           console.error("Failed to fetch conversations:", error);
         }
-      } else {
-        console.error("Failed to fetch conversations:", error);
       }
     } finally {
       if (!silent) setLoading(false);
@@ -118,12 +125,12 @@ export function ConversationProvider({
     // Small delay to let API server start
     const timer = setTimeout(async () => {
       if (!mounted) return;
-      await fetchConversations(false, 0);
+      await fetchConversations(false, 0, false); // Don't suppress initial errors
 
       // If still no data after 2 seconds, retry once
       retryTimer = setTimeout(async () => {
         if (!mounted) return;
-        await fetchConversations(false, 1);
+        await fetchConversations(false, 1, false); // Don't suppress retry errors
 
         // Force loading to false after final retry
         setTimeout(() => {
@@ -156,24 +163,18 @@ export function ConversationProvider({
             signal: controller.signal
           });
           clearTimeout(timeoutId);
-
-          if (!pollRes.ok && pollRes.status !== 500) {
-            console.error(`Gmail poll failed: ${pollRes.status}`);
-          }
+          // Silently ignore errors during auto-refresh
         } catch (err) {
           clearTimeout(timeoutId);
-          // Silently ignore abort errors
+          // Silently ignore abort and fetch errors
         }
 
         setRefreshProgress(60);
-        // Then refresh conversations silently
-        await fetchConversations(true, 1);
+        // Then refresh conversations silently with error suppression
+        await fetchConversations(true, 1, true); // suppressErrors = true
         setRefreshProgress(100);
       } catch (error) {
-        // Silently ignore connection errors during refresh
-        if (error instanceof Error && !error.message.includes('Failed to fetch')) {
-          console.error("Auto-refresh failed:", error);
-        }
+        // Silently ignore all errors during auto-refresh
       } finally {
         setTimeout(() => {
           setRefreshing(false);
@@ -224,14 +225,13 @@ export function ConversationProvider({
         clearTimeout(timeoutId);
         if (err instanceof Error && err.name === 'AbortError') {
           console.error("Gmail poll timed out after 30 seconds");
-        } else {
-          throw err;
         }
+        // Don't re-throw, just continue to refresh conversations
       }
 
       setRefreshProgress(80);
-      // Then refresh conversations from database
-      await fetchConversations(true, 1);
+      // Then refresh conversations from database (don't suppress errors for manual refresh)
+      await fetchConversations(true, 1, false);
       setRefreshProgress(100);
     } catch (error) {
       // Silently ignore connection errors
@@ -248,7 +248,7 @@ export function ConversationProvider({
   };
 
   const refreshConversations = async () => {
-    await fetchConversations(false, 1);
+    await fetchConversations(false, 1, false); // Don't suppress errors for manual refresh
   };
 
   return (
