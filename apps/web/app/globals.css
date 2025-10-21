@@ -38,6 +38,29 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.6;
+  }
+
+  /* Force consistent font across ALL elements */
+  input, textarea, button, select, div, p, span, h1, h2, h3, h4, h5, h6 {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  }
+
+  /* Normalize text inputs and textareas */
+  input, textarea {
+    font-size: 14px !important;
+    font-weight: 400 !important;
+    line-height: 1.5 !important;
+  }
+
+  textarea::placeholder,
+  input::placeholder {
+    font-size: 14px !important;
+    font-weight: 400 !important;
+    opacity: 0.6;
   }
 }
 
@@ -77,4 +100,104 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.3);
+}
+
+/* Email content normalization - enforce consistent styling */
+.email-content {
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 1.6 !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Ultra-aggressive overrides for all email content */
+.email-content *,
+.email-content *::before,
+.email-content *::after {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  color: hsl(var(--foreground)) !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 1.6 !important;
+}
+
+.email-content p,
+.email-content div,
+.email-content span,
+.email-content td,
+.email-content th,
+.email-content table,
+.email-content tbody,
+.email-content tr,
+.email-content a {
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 1.6 !important;
+  color: hsl(var(--foreground)) !important;
+  margin-bottom: 0.5rem;
+}
+
+.email-content h1,
+.email-content h2,
+.email-content h3,
+.email-content h4,
+.email-content h5,
+.email-content h6 {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  line-height: 1.5 !important;
+  margin-bottom: 0.5rem !important;
+  margin-top: 0.5rem !important;
+}
+
+.email-content strong,
+.email-content b {
+  font-weight: 600 !important;
+}
+
+.email-content em,
+.email-content i {
+  font-style: italic !important;
+  font-weight: 400 !important;
+}
+
+.email-content a {
+  color: hsl(var(--primary)) !important;
+  text-decoration: underline;
+  font-size: 14px !important;
+}
+
+.email-content ul,
+.email-content ol {
+  margin-left: 1.5rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+.email-content li {
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  margin-bottom: 0.25rem !important;
+  font-weight: 400 !important;
+}
+
+.email-content pre,
+.email-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 13px !important;
+  background: hsl(var(--muted)) !important;
+  padding: 0.125rem 0.25rem !important;
+  border-radius: 0.25rem !important;
+  font-weight: 400 !important;
+}
+
+.email-content blockquote {
+  border-left: 3px solid hsl(var(--border)) !important;
+  padding-left: 1rem !important;
+  margin-left: 0 !important;
+  margin-bottom: 0.75rem !important;
+  color: hsl(var(--muted-foreground)) !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
 }

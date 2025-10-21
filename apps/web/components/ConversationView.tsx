@@ -1,7 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useConversations } from "@/lib/ConversationContext";
+
+// Sanitize HTML to remove inline styles and normalize formatting
+function sanitizeEmailHTML(html: string | null): string {
+  if (!html) return "";
+
+  // Remove style attributes, font tags, and other formatting
+  let sanitized = html
+    .replace(/\s*style="[^"]*"/gi, '')
+    .replace(/\s*style='[^']*'/gi, '')
+    .replace(/<font[^>]*>/gi, '')
+    .replace(/<\/font>/gi, '')
+    .replace(/\s*class="[^"]*"/gi, '')
+    .replace(/\s*id="[^"]*"/gi, '')
+    .replace(/\s*align="[^"]*"/gi, '')
+    .replace(/\s*color="[^"]*"/gi, '')
+    .replace(/\s*size="[^"]*"/gi, '')
+    .replace(/\s*face="[^"]*"/gi, '');
+
+  return sanitized;
+}
 
 export default function ConversationView() {
   const { selectedConversation, refreshConversations } = useConversations();
@@ -47,7 +67,7 @@ export default function ConversationView() {
   if (!selectedConversation) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background">
-        <p className="text-muted-foreground text-sm">Select a conversation</p>
+        <p className="text-foreground">Select a conversation</p>
       </div>
     );
   }
@@ -61,15 +81,15 @@ export default function ConversationView() {
         </h2>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-            <span className="text-sm font-medium text-primary">
+            <span className="font-medium text-primary">
               {(selectedConversation.customer.name || selectedConversation.customer.primaryEmail)[0].toUpperCase()}
             </span>
           </div>
           <div>
-            <p className="text-sm font-medium text-foreground">
+            <p className="font-medium text-foreground">
               {selectedConversation.customer.name || selectedConversation.customer.primaryEmail}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-foreground">
               {selectedConversation.customer.primaryEmail}
             </p>
           </div>
@@ -90,28 +110,30 @@ export default function ConversationView() {
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-xs font-medium text-primary">
+                  <span className="font-medium text-primary">
                     {message.fromEmail[0].toUpperCase()}
                   </span>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-foreground">
+                  <p className="font-medium" style={{ color: 'hsl(var(--foreground))', fontSize: '14px', fontWeight: '500' }}>
                     {message.fromEmail}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p style={{ color: 'hsl(var(--foreground))', fontSize: '14px', fontWeight: '400' }}>
                     to: {message.toEmails.join(", ")}
                   </p>
                 </div>
               </div>
-              <span className="text-xs text-muted-foreground">
+              <span style={{ color: 'hsl(var(--foreground))', fontSize: '14px', fontWeight: '400' }}>
                 {formatDate(message.sentAt)}
               </span>
             </div>
-            <div className="prose prose-sm dark:prose-invert max-w-none">
+            <div className="email-content">
               {message.bodyHtml ? (
-                <div dangerouslySetInnerHTML={{ __html: message.bodyHtml }} />
+                <div
+                  dangerouslySetInnerHTML={{ __html: sanitizeEmailHTML(message.bodyHtml) }}
+                />
               ) : (
-                <p className="text-sm text-foreground whitespace-pre-wrap">
+                <p className="text-foreground whitespace-pre-wrap">
                   {message.bodyText}
                 </p>
               )}
@@ -127,7 +149,7 @@ export default function ConversationView() {
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
             placeholder="Type your reply..."
-            className="w-full min-h-32 p-4 bg-muted rounded-lg border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+            className="w-full min-h-32 p-4 bg-muted rounded-lg border border-border text-foreground placeholder:text-foreground placeholder:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
           />
         </div>
         <div className="flex items-center justify-between">
@@ -135,12 +157,12 @@ export default function ConversationView() {
             <button
               onClick={handleSend}
               disabled={!replyText.trim() || sending}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {sending ? "Sending..." : "Send"}
             </button>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-foreground">
             Replying to {selectedConversation.customer.primaryEmail}
           </p>
         </div>
