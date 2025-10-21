@@ -437,11 +437,16 @@ app.get("/analytics", async (req: Request, res: Response) => {
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     }
 
-    // Fetch conversations and messages in the time period
+    // Fetch conversations and messages in the time period (exclude non-customer-support)
     const conversations = await prisma.conversation.findMany({
       where: {
         lastMessageAt: {
           gte: startDate
+        },
+        NOT: {
+          tags: {
+            has: "non-customer-support"
+          }
         }
       },
       include: {
@@ -451,10 +456,16 @@ app.get("/analytics", async (req: Request, res: Response) => {
       }
     });
 
+    // Get conversation IDs for filtering messages
+    const conversationIds = conversations.map(c => c.id);
+
     const allMessages = await prisma.message.findMany({
       where: {
         sentAt: {
           gte: startDate
+        },
+        conversationId: {
+          in: conversationIds
         }
       },
       orderBy: { sentAt: "asc" }

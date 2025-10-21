@@ -7,15 +7,21 @@ import { usePathname } from "next/navigation";
 
 export default function Sidebar() {
   const [activeView, setActiveView] = useState<"inbox" | "sent">("inbox");
-  const { showArchived, setShowArchived } = useConversations();
+  const { showArchived, setShowArchived, showSent, setShowSent } = useConversations();
   const pathname = usePathname();
 
   const handleViewChange = (view: "inbox" | "sent" | "archived") => {
     if (view === "archived") {
       setShowArchived(true);
+      setShowSent(false);
       setActiveView("inbox");
+    } else if (view === "sent") {
+      setShowArchived(false);
+      setShowSent(true);
+      setActiveView("sent");
     } else {
       setShowArchived(false);
+      setShowSent(false);
       setActiveView(view);
     }
   };

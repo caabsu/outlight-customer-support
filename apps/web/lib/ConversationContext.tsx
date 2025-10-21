@@ -41,6 +41,8 @@ type ConversationContextType = {
   refreshing: boolean;
   showArchived: boolean;
   setShowArchived: (show: boolean) => void;
+  showSent: boolean;
+  setShowSent: (show: boolean) => void;
 };
 
 const ConversationContext = createContext<ConversationContextType | undefined>(
@@ -57,6 +59,7 @@ export function ConversationProvider({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [showSent, setShowSent] = useState(false);
 
   const fetchConversations = async (silent = false, retryCount = 0) => {
     try {
@@ -184,6 +187,8 @@ export function ConversationProvider({
         refreshing,
         showArchived,
         setShowArchived,
+        showSent,
+        setShowSent,
       }}
     >
       {children}

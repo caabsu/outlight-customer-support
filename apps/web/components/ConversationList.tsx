@@ -25,7 +25,7 @@ type Conversation = {
 };
 
 export default function ConversationList() {
-  const { conversations, selectedConversation, selectConversation, loading, refreshing, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived } =
+  const { conversations, selectedConversation, selectConversation, loading, refreshing, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived, showSent } =
     useConversations();
   const [showStarred, setShowStarred] = useState(false);
   const [excludeNonSupport, setExcludeNonSupport] = useState(true);
@@ -43,6 +43,12 @@ export default function ConversationList() {
   ).sort();
 
   const filteredConversations = conversations.filter((conv: Conversation) => {
+    // Sent filter - only show conversations with outbound messages
+    if (showSent) {
+      const hasOutboundMessage = conv.messages.some(msg => msg.direction === "outbound");
+      if (!hasOutboundMessage) return false;
+    }
+
     // Starred filter
     if (showStarred && !conv.starred) return false;
 
@@ -80,6 +86,13 @@ export default function ConversationList() {
 
     return true;
   });
+
+  // Sort: Sent view shows newest first (descending)
+  const sortedConversations = showSent
+    ? [...filteredConversations].sort((a, b) =>
+        new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+      )
+    : filteredConversations;
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev =>
@@ -213,7 +226,7 @@ export default function ConversationList() {
           <div>
             <h2 className="text-lg font-sans font-semibold text-foreground">Conversations</h2>
             <p className="text-sm font-sans text-muted-foreground mt-1">
-              {filteredConversations.length} threads
+              {sortedConversations.length} threads
             </p>
           </div>
           <button
@@ -354,12 +367,12 @@ export default function ConversationList() {
 
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto">
-        {filteredConversations.length === 0 ? (
+        {sortedConversations.length === 0 ? (
           <div className="p-8 text-center">
             <p className="text-muted-foreground font-sans text-sm">No conversations match filters</p>
           </div>
         ) : (
-          filteredConversations.map((conv: Conversation) => (
+          sortedConversations.map((conv: Conversation) => (
             <div
               key={conv.id}
               onClick={() => selectConversation(conv.id)}
