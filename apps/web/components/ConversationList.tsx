@@ -1,6 +1,7 @@
 "use client";
 
 import { useConversations } from "@/lib/ConversationContext";
+import { useState, useEffect } from "react";
 
 type Conversation = {
   id: string;
@@ -20,8 +21,45 @@ type Conversation = {
 };
 
 export default function ConversationList() {
-  const { conversations, selectedConversation, selectConversation, loading } =
-    useConversations();
+  const {
+    conversations,
+    selectedConversation,
+    selectConversation,
+    loading,
+    syncing,
+    syncProgress,
+    syncFromGmail,
+    lastUpdated,
+  } = useConversations();
+
+  const [timeAgo, setTimeAgo] = useState<string>("");
+
+  // Update "time ago" every minute
+  useEffect(() => {
+    const updateTimeAgo = () => {
+      if (!lastUpdated) {
+        setTimeAgo("");
+        return;
+      }
+
+      const now = new Date();
+      const diffMs = now.getTime() - lastUpdated.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+
+      if (diffMins < 1) {
+        setTimeAgo("Just now");
+      } else if (diffMins < 60) {
+        setTimeAgo(`${diffMins} min${diffMins > 1 ? 's' : ''} ago`);
+      } else {
+        setTimeAgo(`${diffHours} hour${diffHours > 1 ? 's' : ''} ago`);
+      }
+    };
+
+    updateTimeAgo();
+    const interval = setInterval(updateTimeAgo, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, [lastUpdated]);
 
   const getPreview = (conv: Conversation) => {
     const lastMessage = conv.messages[conv.messages.length - 1];
@@ -61,10 +99,57 @@ export default function ConversationList() {
     <div className="w-96 border-r border-border bg-background flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-border">
-        <h2 className="text-lg font-semibold text-foreground">Conversations</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {conversations.length} threads
-        </p>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg font-semibold text-foreground">Conversations</h2>
+          <button
+            onClick={syncFromGmail}
+            disabled={syncing || loading}
+            className="p-2 hover:bg-accent rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Refresh from Gmail"
+          >
+            <svg
+              className={`w-4 h-4 text-foreground ${syncing ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+          </button>
+        </div>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {conversations.length} threads
+          </p>
+          {timeAgo && (
+            <p className="text-xs text-muted-foreground">
+              Updated {timeAgo}
+            </p>
+          )}
+        </div>
+        {syncProgress && (
+          <div className="mt-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-muted-foreground">
+                {syncProgress.message}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {syncProgress.percent}%
+              </span>
+            </div>
+            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300 ease-out"
+                style={{ width: `${syncProgress.percent}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Conversation List */}
