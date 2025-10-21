@@ -5,7 +5,7 @@ export default function EmailsPage() {
   return (
     <div
       className="flex flex-1 font-sans"
-      style={{ fontFamily: "var(--font-roboto), sans-serif" }}
+      style={{ fontFamily: "Roboto, sans-serif" }}
     >
       <ConversationList />
       <ConversationView />

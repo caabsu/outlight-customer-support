@@ -12,7 +12,7 @@ export default function EmailsLayout({
     <ConversationProvider>
       <div
         className="flex h-screen overflow-hidden bg-background font-sans"
-        style={{ fontFamily: "var(--font-roboto), sans-serif" }}
+        style={{ fontFamily: "Roboto, sans-serif" }}
       >
         <Sidebar />
         {children}

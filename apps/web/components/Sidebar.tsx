@@ -23,7 +23,7 @@ export default function Sidebar() {
   const isAnalyticsActive = pathname === "/analytics";
 
   return (
-    <div className="w-64 border-r border-border bg-background flex flex-col" style={{ fontFamily: "var(--font-roboto), sans-serif" }}>
+    <div className="w-64 border-r border-border bg-background flex flex-col" style={{ fontFamily: "Roboto, sans-serif" }}>
       {/* Logo/Header */}
       <Link href="/" className="p-6 border-b border-border hover:bg-accent/30 transition-colors cursor-pointer">
         <h1 className="text-2xl font-serif text-foreground">outlight</h1>

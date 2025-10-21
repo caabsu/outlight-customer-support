@@ -219,7 +219,7 @@ export default function ConversationList() {
   }
 
   return (
-    <div className="w-96 border-r border-border bg-background flex flex-col" style={{ fontFamily: "var(--font-roboto), sans-serif" }}>
+    <div className="w-96 border-r border-border bg-background flex flex-col" style={{ fontFamily: "Roboto, sans-serif" }}>
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-3">
