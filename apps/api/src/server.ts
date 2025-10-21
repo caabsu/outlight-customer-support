@@ -129,27 +129,24 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
     // Get the reply-to email from the most recent inbound message
     const replyToEmail = conversation.messages[0]?.replyToEmail;
 
-    // Search criteria: match by customer ID OR by reply-to email
-    const searchEmails = [conversation.customer.primaryEmail];
-    if (replyToEmail && replyToEmail !== conversation.customer.primaryEmail) {
-      searchEmails.push(replyToEmail);
-    }
-
-    // Find all other conversations with the same customer or reply-to email
-    const history = await prisma.conversation.findMany({
-      where: {
-        OR: [
-          { customerId: conversation.customerId },
-          {
-            messages: {
-              some: {
-                OR: searchEmails.map(email => ({ replyToEmail: email }))
-              }
+    // If reply-to exists, ONLY query by reply-to email. Otherwise, use customer ID
+    const whereClause = replyToEmail
+      ? {
+          messages: {
+            some: {
+              replyToEmail: replyToEmail
             }
-          }
-        ],
-        id: { not: req.params.id },
-      },
+          },
+          id: { not: req.params.id },
+        }
+      : {
+          customerId: conversation.customerId,
+          id: { not: req.params.id },
+        };
+
+    // Find all other conversations matching the criteria
+    const history = await prisma.conversation.findMany({
+      where: whereClause,
       include: {
         messages: {
           orderBy: { sentAt: "asc" },
@@ -237,6 +234,27 @@ app.patch("/conversations/:id/star", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error toggling star:", error);
     res.status(500).json({ error: "Failed to toggle star" });
+  }
+});
+
+// Update conversation
+app.patch("/conversations/:id", async (req: Request, res: Response) => {
+  try {
+    const { archived, starred } = req.body;
+    const data: any = {};
+
+    if (archived !== undefined) data.archived = archived;
+    if (starred !== undefined) data.starred = starred;
+
+    const updated = await prisma.conversation.update({
+      where: { id: req.params.id },
+      data,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error("Error updating conversation:", error);
+    res.status(500).json({ error: "Failed to update conversation" });
   }
 });
 

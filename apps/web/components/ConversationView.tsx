@@ -21,6 +21,8 @@ export default function ConversationView() {
   const [editingTags, setEditingTags] = useState(false);
   const [newTag, setNewTag] = useState("");
   const [markingNonSupport, setMarkingNonSupport] = useState(false);
+  const [undoTimer, setUndoTimer] = useState<number | null>(null);
+  const [undoTimeout, setUndoTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Fetch conversation history
   useEffect(() => {
@@ -79,21 +81,49 @@ export default function ConversationView() {
   const handleMarkNonSupport = async () => {
     if (!selectedConversation) return;
 
-    if (!confirm("Mark this email as non-customer-support and archive it?")) {
-      return;
-    }
+    const conversationId = selectedConversation.id;
 
+    // Show optimistic update immediately
     setMarkingNonSupport(true);
-    try {
-      await fetch(`/api/conversations/${selectedConversation.id}/archive`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tag: "non-customer-support" }),
+    setUndoTimer(5); // 5 seconds
+
+    // Countdown timer
+    const countdownInterval = setInterval(() => {
+      setUndoTimer((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(countdownInterval);
+          return null;
+        }
+        return prev - 1;
       });
-      await refreshConversations();
-    } catch (error) {
-      console.error("Failed to mark as non-support:", error);
-    } finally {
+    }, 1000);
+
+    // Set timeout to actually archive after 5 seconds
+    const timeout = setTimeout(async () => {
+      try {
+        await fetch(`/api/conversations/${conversationId}/archive`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tag: "non-customer-support" }),
+        });
+        await refreshConversations();
+      } catch (error) {
+        console.error("Failed to mark as non-support:", error);
+      } finally {
+        setMarkingNonSupport(false);
+        setUndoTimer(null);
+        setUndoTimeout(null);
+      }
+    }, 5000);
+
+    setUndoTimeout(timeout);
+  };
+
+  const handleUndoMarkNonSupport = () => {
+    if (undoTimeout) {
+      clearTimeout(undoTimeout);
+      setUndoTimeout(null);
+      setUndoTimer(null);
       setMarkingNonSupport(false);
     }
   };
@@ -284,7 +314,7 @@ export default function ConversationView() {
             <div className="email-content">
               {message.bodyHtml ? (
                 <div
-                  className="bg-white text-gray-900 p-4 rounded border border-gray-200 overflow-auto max-h-96"
+                  className="email-html-container p-4 rounded border border-gray-200 overflow-auto max-h-96"
                   dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
                 />
               ) : (
@@ -326,52 +356,68 @@ export default function ConversationView() {
 
     {/* Right Sidebar */}
     <div className="w-80 border-l border-border bg-secondary flex flex-col shrink-0">
-      {/* Not Support Button */}
-      <div className="p-4 border-b border-border shrink-0">
-        {!selectedConversation.tags?.includes("non-customer-support") && (
-          <button
-            onClick={handleMarkNonSupport}
-            disabled={markingNonSupport}
-            className="w-full px-4 py-3 bg-warning/20 text-warning border-2 border-warning/40 rounded-lg font-medium text-sm hover:bg-warning/30 hover:border-warning/60 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {markingNonSupport ? "Archiving..." : "Mark as Non-Support"}
-          </button>
-        )}
-      </div>
-
       {/* Past Conversations Header - Fixed Size */}
       {showHistory && history.length > 0 && (
         <>
-          <div className="p-4 border-b border-border flex items-center justify-between shrink-0 h-14">
-            <h3 className="font-semibold text-foreground text-sm">Past Conversations</h3>
+          <div className="px-4 py-2 border-b border-border flex items-center justify-between shrink-0">
+            <h3 className="font-medium text-foreground text-xs uppercase tracking-wide">Past Conversations</h3>
             <button
               onClick={() => setShowHistory(false)}
-              className="text-muted-foreground hover:text-foreground transition-colors"
+              className="text-muted-foreground hover:text-foreground transition-colors text-xs"
             >
               ✕
             </button>
           </div>
 
           {/* Past Conversations List - Max 30% of viewport height */}
-          <div className="overflow-y-auto p-4 space-y-3 max-h-[30vh]">
+          <div className="overflow-y-auto px-4 py-2 space-y-2 max-h-[30vh]">
             {history.map((conv) => (
               <button
                 key={conv.id}
                 onClick={() => selectConversation(conv.id)}
-                className="w-full text-left p-3 rounded-lg border border-border bg-background hover:border-primary hover:bg-accent/50 transition-all cursor-pointer"
+                className="w-full text-left p-2 border border-border bg-background hover:border-primary hover:bg-accent/50 transition-all cursor-pointer"
               >
-                <p className="text-sm font-medium text-foreground mb-1 truncate">
+                <p className="text-xs font-medium text-foreground mb-1 truncate">
                   {conv.subject}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[10px] text-muted-foreground">
                   {new Date(conv.lastMessageAt).toLocaleDateString()} •{" "}
-                  {conv.messages.length} messages
+                  {conv.messages.length} msg
                 </p>
               </button>
             ))}
           </div>
         </>
       )}
+
+      {/* Not Support Button - Clean, minimal, below past conversations */}
+      <div className="p-4 border-t border-border shrink-0 mt-auto">
+        {!selectedConversation.tags?.includes("non-customer-support") && (
+          <>
+            {undoTimer !== null ? (
+              <div className="space-y-2">
+                <div className="w-full px-4 py-2 bg-warning/10 text-warning border border-warning/40 text-sm text-center">
+                  Archiving in {undoTimer}s
+                </div>
+                <button
+                  onClick={handleUndoMarkNonSupport}
+                  className="w-full px-4 py-2 bg-background text-foreground border border-border text-sm hover:bg-accent transition-colors"
+                >
+                  Undo
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleMarkNonSupport}
+                disabled={markingNonSupport}
+                className="w-full px-4 py-2 bg-background text-muted-foreground border border-border text-sm hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Mark as Non-Support
+              </button>
+            )}
+          </>
+        )}
+      </div>
     </div>
     </div>
   );

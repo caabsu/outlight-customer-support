@@ -29,13 +29,15 @@ export default function ConversationList() {
     useConversations();
   const [showStarred, setShowStarred] = useState(false);
   const [excludeNonSupport, setExcludeNonSupport] = useState(true);
-  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const filteredConversations = conversations.filter((conv: Conversation) => {
     if (showStarred && !conv.starred) return false;
     if (excludeNonSupport && conv.tags?.includes("non-customer-support"))
       return false;
-    if (showUnreadOnly && !conv.unreadAgent) return false;
+    // Show archived or non-archived based on filter
+    if (showArchived && !conv.archived) return false;
+    if (!showArchived && conv.archived) return false;
     return true;
   });
 
@@ -75,6 +77,36 @@ export default function ConversationList() {
       } catch (error) {
         console.error("Failed to mark as non-support:", error);
       }
+    }
+  };
+
+  const handleUnarchive = async (e: React.MouseEvent, convId: string) => {
+    e.stopPropagation();
+    const conv = conversations.find(c => c.id === convId);
+    if (!conv) return;
+
+    // Optimistic update
+    updateConversationOptimistic(convId, { archived: false });
+
+    try {
+      // Remove non-customer-support tag and unarchive
+      const newTags = (conv.tags || []).filter(tag => tag !== "non-customer-support");
+      await fetch(`/api/conversations/${convId}/tags`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: newTags }),
+      });
+      // Update archived status
+      await fetch(`/api/conversations/${convId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived: false }),
+      });
+      await refreshConversations();
+    } catch (error) {
+      console.error("Failed to unarchive:", error);
+      // Revert on error
+      updateConversationOptimistic(convId, { archived: conv.archived });
     }
   };
 
@@ -185,14 +217,14 @@ export default function ConversationList() {
             ✓ CS Only
           </button>
           <button
-            onClick={() => setShowUnreadOnly(!showUnreadOnly)}
+            onClick={() => setShowArchived(!showArchived)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              showUnreadOnly
-                ? "bg-warning/20 text-warning border border-warning/30"
+              showArchived
+                ? "bg-muted text-foreground border border-muted-foreground/30"
                 : "bg-secondary text-secondary-foreground border border-border"
             }`}
           >
-            Unread
+            📦 Archived
           </button>
         </div>
       </div>
@@ -218,7 +250,7 @@ export default function ConversationList() {
                 <div className="flex-1 min-w-0 flex items-start gap-2">
                   <button
                     onClick={(e) => handleStar(e, conv.id)}
-                    className="mt-0.5 text-lg hover:scale-110 transition-transform text-yellow-400 hover:text-yellow-300"
+                    className="mt-0.5 text-lg hover:scale-110 transition-transform text-foreground/60 hover:text-foreground"
                     title={conv.starred ? "Unstar" : "Star"}
                   >
                     {conv.starred ? "⭐" : "☆"}
@@ -237,19 +269,33 @@ export default function ConversationList() {
               <p className="text-sm text-muted-foreground line-clamp-2 ml-7">
                 {getPreview(conv)}
               </p>
-              <div className="flex items-center gap-2 mt-2 ml-7">
-                {conv.unreadAgent && (
-                  <span className="tag tag-primary">Unread</span>
-                )}
-                {isUnreplied(conv) && (
+              {/* Status Badge */}
+              {isUnreplied(conv) && (
+                <div className="flex items-center gap-2 mt-2 ml-7">
                   <span className="tag tag-warning">Needs Reply</span>
-                )}
-                {conv.tags?.map((tag) => (
-                  <span key={tag} className="tag tag-muted">
-                    {tag}
-                  </span>
-                ))}
-              </div>
+                </div>
+              )}
+              {/* Tags - Separate row, more visible */}
+              {conv.tags && conv.tags.length > 0 && (
+                <div className="flex items-center gap-2 mt-2 ml-7 flex-wrap">
+                  {conv.tags.map((tag) => (
+                    <span key={tag} className="px-2 py-0.5 bg-primary/15 text-primary text-xs font-medium border border-primary/30 rounded">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* Unarchive button for archived items */}
+              {conv.archived && (
+                <div className="mt-2 ml-7">
+                  <button
+                    onClick={(e) => handleUnarchive(e, conv.id)}
+                    className="text-xs text-primary hover:text-primary/80 font-medium"
+                  >
+                    Unarchive
+                  </button>
+                </div>
+              )}
             </div>
           ))
         )}

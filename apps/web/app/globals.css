@@ -131,14 +131,28 @@
   @apply text-blue-800;
 }
 
-/* Force readable text in email HTML */
-.email-content div[style*="color"] {
+/* Force readable text in email HTML - Override all inline styles */
+.email-html-container {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+.email-html-container *,
+.email-html-container p,
+.email-html-container span,
+.email-html-container td,
+.email-html-container div,
+.email-html-container a,
+.email-html-container h1,
+.email-html-container h2,
+.email-html-container h3,
+.email-html-container h4,
+.email-html-container h5,
+.email-html-container h6,
+.email-html-container li {
   color: #1f2937 !important;
 }
 
-.email-content p,
-.email-content span,
-.email-content td,
-.email-content div {
-  color: inherit !important;
+.email-html-container[style] {
+  background-color: #ffffff !important;
 }
