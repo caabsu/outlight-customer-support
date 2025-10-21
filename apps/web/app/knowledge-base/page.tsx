@@ -20,6 +20,7 @@ export default function KnowledgeBasePage() {
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<KnowledgeEntry | null>(null);
+  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
 
   // Form state
   const [title, setTitle] = useState("");
@@ -27,6 +28,18 @@ export default function KnowledgeBasePage() {
   const [category, setCategory] = useState("general");
   const [tags, setTags] = useState("");
   const [active, setActive] = useState(true);
+
+  const toggleExpanded = (id: string) => {
+    setExpandedEntries((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
 
   useEffect(() => {
     fetchEntries();
@@ -291,69 +304,100 @@ export default function KnowledgeBasePage() {
               No knowledge base entries yet. Add your first entry to get started!
             </div>
           ) : (
-            <div className="space-y-4">
-              {entries.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="p-4 bg-background border border-border rounded-lg hover:border-primary/50 transition-colors"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-lg font-sans font-semibold text-foreground">
-                          {entry.title}
-                        </h3>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-sans border ${getCategoryBadgeColor(entry.category)}`}>
-                          {entry.category}
-                        </span>
-                        {!entry.active && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-sans bg-muted text-muted-foreground border border-border">
-                            Inactive
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm font-sans text-foreground whitespace-pre-wrap">
-                        {entry.content}
-                      </p>
-                      {entry.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {entry.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="px-2 py-0.5 bg-muted text-muted-foreground text-xs font-sans rounded"
-                            >
-                              {tag}
+            <div className="space-y-3">
+              {entries.map((entry) => {
+                const isExpanded = expandedEntries.has(entry.id);
+                const contentPreview = entry.content.split('\n')[0].substring(0, 80) + (entry.content.length > 80 ? '...' : '');
+
+                return (
+                  <div
+                    key={entry.id}
+                    className="bg-background border border-border rounded-lg hover:border-primary/50 transition-colors overflow-hidden"
+                  >
+                    {/* Collapsed View */}
+                    <div className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-base font-sans font-semibold text-foreground truncate">
+                              {entry.title}
+                            </h3>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-sans border whitespace-nowrap ${getCategoryBadgeColor(entry.category)}`}>
+                              {entry.category}
                             </span>
-                          ))}
+                            {!entry.active && (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-sans bg-muted text-muted-foreground border border-border whitespace-nowrap">
+                                Inactive
+                              </span>
+                            )}
+                          </div>
+                          {!isExpanded && (
+                            <p className="text-sm font-sans text-muted-foreground truncate">
+                              {contentPreview}
+                            </p>
+                          )}
                         </div>
-                      )}
+                        <div className="flex gap-2 shrink-0">
+                          <button
+                            onClick={() => toggleExpanded(entry.id)}
+                            className="px-3 py-1 bg-primary/10 text-primary rounded text-xs font-sans hover:bg-primary/20 transition-colors whitespace-nowrap"
+                          >
+                            {isExpanded ? "Collapse" : "Expand"}
+                          </button>
+                          <button
+                            onClick={() => handleToggleActive(entry)}
+                            className="px-3 py-1 bg-secondary text-secondary-foreground rounded text-xs font-sans hover:bg-accent transition-colors whitespace-nowrap"
+                          >
+                            {entry.active ? "Deactivate" : "Activate"}
+                          </button>
+                          <button
+                            onClick={() => handleEdit(entry)}
+                            className="px-3 py-1 bg-secondary text-secondary-foreground rounded text-xs font-sans hover:bg-accent transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(entry.id)}
+                            className="px-3 py-1 bg-warning/10 text-warning rounded text-xs font-sans hover:bg-warning/20 transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex gap-2 ml-4">
-                      <button
-                        onClick={() => handleToggleActive(entry)}
-                        className="px-3 py-1 bg-secondary text-secondary-foreground rounded text-xs font-sans hover:bg-accent transition-colors"
-                      >
-                        {entry.active ? "Deactivate" : "Activate"}
-                      </button>
-                      <button
-                        onClick={() => handleEdit(entry)}
-                        className="px-3 py-1 bg-secondary text-secondary-foreground rounded text-xs font-sans hover:bg-accent transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(entry.id)}
-                        className="px-3 py-1 bg-warning/10 text-warning rounded text-xs font-sans hover:bg-warning/20 transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
+
+                    {/* Expanded View */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 border-t border-border/50 pt-3">
+                        <div className="mb-3">
+                          <h4 className="text-xs font-sans font-semibold text-muted-foreground uppercase mb-2">Content</h4>
+                          <p className="text-sm font-sans text-foreground whitespace-pre-wrap bg-secondary/30 p-3 rounded border border-border max-h-96 overflow-y-auto">
+                            {entry.content}
+                          </p>
+                        </div>
+                        {entry.tags.length > 0 && (
+                          <div className="mb-3">
+                            <h4 className="text-xs font-sans font-semibold text-muted-foreground uppercase mb-2">Tags</h4>
+                            <div className="flex flex-wrap gap-1">
+                              {entry.tags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="px-2 py-0.5 bg-muted text-muted-foreground text-xs font-sans rounded"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div className="text-xs font-sans text-muted-foreground">
+                          Created {new Date(entry.createdAt).toLocaleDateString()} • Updated {new Date(entry.updatedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-xs font-sans text-muted-foreground">
-                    Updated {new Date(entry.updatedAt).toLocaleDateString()}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

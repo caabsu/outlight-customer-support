@@ -111,18 +111,12 @@ async function ingestThread(gmail: any, threadId: string) {
     },
   });
 
-  for (const m of messages) {
+  // Process all messages in parallel for better performance
+  await Promise.all(messages.map(async (m) => {
     const dir = (getHeader(m, "from") || "").includes(process.env.GMAIL_ACCOUNT_EMAIL!) ? "outbound" : "inbound";
     const sentAt = new Date(Number(m.internalDate!));
     const { html, text } = flattenParts(m.payload);
     const replyTo = getHeader(m, "reply-to");
-    const fromEmail = getHeader(m, "from") || "";
-
-    // DIAGNOSTIC LOGGING
-    if (dir === "inbound") {
-      const parsed = replyTo ? parseEmail(replyTo) : null;
-      console.log(`[GMAIL POLL] Message ${m.id}: from="${fromEmail}" replyTo="${replyTo}" parsed="${parsed}"`);
-    }
 
     await prisma.message.upsert({
       where: { gmailMessageId: m.id! },
@@ -144,7 +138,7 @@ async function ingestThread(gmail: any, threadId: string) {
         replyToEmail: replyTo ? parseEmail(replyTo) : null,
       },
     });
-  }
+  }));
 }
 
 function getHeader(msg: any, name: string): string | undefined {
