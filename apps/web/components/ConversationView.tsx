@@ -115,15 +115,15 @@ export default function ConversationView() {
                   </span>
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">
+                  <p className="font-medium" style={{ color: 'hsl(var(--foreground))', fontSize: '14px', fontWeight: '500' }}>
                     {message.fromEmail}
                   </p>
-                  <p className="text-foreground">
+                  <p style={{ color: 'hsl(var(--foreground))', fontSize: '14px', fontWeight: '400' }}>
                     to: {message.toEmails.join(", ")}
                   </p>
                 </div>
               </div>
-              <span className="text-foreground">
+              <span style={{ color: 'hsl(var(--foreground))', fontSize: '14px', fontWeight: '400' }}>
                 {formatDate(message.sentAt)}
               </span>
             </div>

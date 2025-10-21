@@ -104,16 +104,23 @@
 
 /* Email content normalization - enforce consistent styling */
 .email-content {
-  @apply text-foreground;
   font-size: 14px !important;
   font-weight: 400 !important;
   line-height: 1.6 !important;
+  color: hsl(var(--foreground)) !important;
 }
 
-.email-content * {
+/* Ultra-aggressive overrides for all email content */
+.email-content *,
+.email-content *::before,
+.email-content *::after {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
   color: hsl(var(--foreground)) !important;
   background: transparent !important;
+  background-color: transparent !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 1.6 !important;
 }
 
 .email-content p,
@@ -121,10 +128,14 @@
 .email-content span,
 .email-content td,
 .email-content th,
-.email-content table {
+.email-content table,
+.email-content tbody,
+.email-content tr,
+.email-content a {
   font-size: 14px !important;
   font-weight: 400 !important;
   line-height: 1.6 !important;
+  color: hsl(var(--foreground)) !important;
   margin-bottom: 0.5rem;
 }
 
