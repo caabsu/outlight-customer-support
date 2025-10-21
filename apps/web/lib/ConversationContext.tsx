@@ -58,12 +58,16 @@ export function ConversationProvider({
   const [refreshing, setRefreshing] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
-  const fetchConversations = async (silent = false) => {
+  const fetchConversations = async (silent = false, retryCount = 0) => {
     try {
       if (!silent) setLoading(true);
       const res = await fetch("/api/conversations");
       if (!res.ok) {
-        throw new Error(`API returned ${res.status}: ${res.statusText}`);
+        // Don't log 500 errors during initial startup (API might not be ready)
+        if (retryCount === 0 || res.status !== 500) {
+          console.error(`API returned ${res.status}: ${res.statusText}`);
+        }
+        return;
       }
       const data = await res.json();
       setConversations(data);
@@ -71,15 +75,37 @@ export function ConversationProvider({
         setSelectedId(data[0].id);
       }
     } catch (error) {
-      console.error("Failed to fetch conversations:", error);
+      // Silently handle connection errors during startup
+      if (retryCount === 0) {
+        // Only log non-connection errors
+        if (error instanceof Error && !error.message.includes('Failed to fetch')) {
+          console.error("Failed to fetch conversations:", error);
+        }
+      } else {
+        console.error("Failed to fetch conversations:", error);
+      }
     } finally {
       if (!silent) setLoading(false);
     }
   };
 
-  // Initial fetch
+  // Initial fetch with delay and retry
   useEffect(() => {
-    fetchConversations();
+    let retryTimer: NodeJS.Timeout;
+
+    // Small delay to let API server start
+    const timer = setTimeout(async () => {
+      await fetchConversations(false, 0);
+      // If still no data after 2 seconds, retry once
+      retryTimer = setTimeout(async () => {
+        await fetchConversations(false, 1);
+      }, 2000);
+    }, 500);
+
+    return () => {
+      clearTimeout(timer);
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, []);
 
   // Auto-refresh every 30 seconds (silent - polls Gmail and refreshes)
@@ -89,13 +115,17 @@ export function ConversationProvider({
         setRefreshing(true);
         // Poll Gmail for new emails
         const pollRes = await fetch("/api/gmail/poll", { method: "POST" });
-        if (!pollRes.ok) {
+        if (!pollRes.ok && pollRes.status !== 500) {
+          // Silently ignore 500 errors (API might be restarting)
           console.error(`Gmail poll failed: ${pollRes.status}`);
         }
         // Then refresh conversations silently
-        await fetchConversations(true);
+        await fetchConversations(true, 1);
       } catch (error) {
-        console.error("Auto-refresh failed:", error);
+        // Silently ignore connection errors during refresh
+        if (error instanceof Error && !error.message.includes('Failed to fetch')) {
+          console.error("Auto-refresh failed:", error);
+        }
       } finally {
         setRefreshing(false);
       }
@@ -121,14 +151,24 @@ export function ConversationProvider({
     try {
       setRefreshing(true);
       // First, poll Gmail for new emails
-      await fetch("/api/gmail/poll", { method: "POST" });
+      const pollRes = await fetch("/api/gmail/poll", { method: "POST" });
+      if (!pollRes.ok && pollRes.status !== 500) {
+        console.error(`Gmail poll failed: ${pollRes.status}`);
+      }
       // Then refresh conversations from database
-      await fetchConversations(true);
+      await fetchConversations(true, 1);
     } catch (error) {
-      console.error("Failed to poll and refresh:", error);
+      // Silently ignore connection errors
+      if (error instanceof Error && !error.message.includes('Failed to fetch')) {
+        console.error("Failed to poll and refresh:", error);
+      }
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const refreshConversations = async () => {
+    await fetchConversations(false, 1);
   };
 
   return (
@@ -137,7 +177,7 @@ export function ConversationProvider({
         conversations,
         selectedConversation,
         selectConversation,
-        refreshConversations: fetchConversations,
+        refreshConversations,
         pollAndRefresh,
         updateConversationOptimistic,
         loading,
