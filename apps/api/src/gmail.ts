@@ -112,7 +112,7 @@ async function ingestThread(gmail: any, threadId: string) {
   });
 
   // Process all messages in parallel for better performance
-  await Promise.all(messages.map(async (m) => {
+  await Promise.all(messages.map(async (m: any) => {
     const dir = (getHeader(m, "from") || "").includes(process.env.GMAIL_ACCOUNT_EMAIL!) ? "outbound" : "inbound";
     const sentAt = new Date(Number(m.internalDate!));
     const { html, text } = flattenParts(m.payload);
