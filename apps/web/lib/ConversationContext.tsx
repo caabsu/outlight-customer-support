@@ -74,7 +74,23 @@ export function ConversationProvider({
         }
         return;
       }
-      const data = await res.json();
+
+      // Check if response has content before parsing
+      const text = await res.text();
+      if (!text || text.trim() === '') {
+        console.error("Empty response from API");
+        return;
+      }
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error("Failed to parse JSON response:", parseError);
+        console.error("Response text:", text.substring(0, 200));
+        return;
+      }
+
       setConversations(data);
       if (data.length > 0 && !selectedId) {
         setSelectedId(data[0].id);
@@ -118,21 +134,41 @@ export function ConversationProvider({
     const interval = setInterval(async () => {
       try {
         setRefreshing(true);
-        // Poll Gmail for new emails
-        const pollRes = await fetch("/api/gmail/poll", { method: "POST" });
-        if (!pollRes.ok && pollRes.status !== 500) {
-          // Silently ignore 500 errors (API might be restarting)
-          console.error(`Gmail poll failed: ${pollRes.status}`);
+        setRefreshProgress(10);
+
+        // Poll Gmail for new emails with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+        try {
+          const pollRes = await fetch("/api/gmail/poll", {
+            method: "POST",
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (!pollRes.ok && pollRes.status !== 500) {
+            console.error(`Gmail poll failed: ${pollRes.status}`);
+          }
+        } catch (err) {
+          clearTimeout(timeoutId);
+          // Silently ignore abort errors
         }
+
+        setRefreshProgress(60);
         // Then refresh conversations silently
         await fetchConversations(true, 1);
+        setRefreshProgress(100);
       } catch (error) {
         // Silently ignore connection errors during refresh
         if (error instanceof Error && !error.message.includes('Failed to fetch')) {
           console.error("Auto-refresh failed:", error);
         }
       } finally {
-        setRefreshing(false);
+        setTimeout(() => {
+          setRefreshing(false);
+          setRefreshProgress(0);
+        }, 300);
       }
     }, 30000); // 30 seconds
 
