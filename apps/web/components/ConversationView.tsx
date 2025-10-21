@@ -219,7 +219,7 @@ export default function ConversationView() {
   }
 
   return (
-    <div className="flex-1 flex bg-background overflow-hidden">
+    <div className="flex-1 flex bg-background overflow-hidden" style={{ fontFamily: "var(--font-roboto), sans-serif" }}>
       {/* Main Email View */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header - Fixed Height */}
@@ -376,8 +376,8 @@ export default function ConversationView() {
       {/* Past Conversations Header - Always Visible */}
       {showHistory && (
         <>
-          <div className="px-4 py-2 border-b border-border flex items-center justify-between shrink-0">
-            <h3 className="font-sans font-semibold text-foreground text-sm">Past Conversations</h3>
+          <div className="px-4 py-4 border-b border-border flex items-center justify-between shrink-0">
+            <h3 className="font-sans font-semibold text-foreground text-base">Past Conversations</h3>
             <button
               onClick={() => setShowHistory(false)}
               className="text-muted-foreground hover:text-foreground transition-colors text-xs font-sans"
