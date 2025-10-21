@@ -42,6 +42,13 @@ export default function ConversationList() {
     )
   ).sort();
 
+  // Helper function to check if conversation is unreplied
+  const isUnreplied = (conv: Conversation) => {
+    if (conv.messages.length === 0) return false;
+    const lastMessage = conv.messages[conv.messages.length - 1];
+    return lastMessage.direction === "inbound";
+  };
+
   const filteredConversations = conversations.filter((conv: Conversation) => {
     // Sent filter - only show conversations with outbound messages
     if (showSent) {
@@ -195,12 +202,6 @@ export default function ConversationList() {
         day: "numeric",
       });
     }
-  };
-
-  const isUnreplied = (conv: Conversation) => {
-    if (conv.messages.length === 0) return false;
-    const lastMessage = conv.messages[conv.messages.length - 1];
-    return lastMessage.direction === "inbound";
   };
 
   if (loading) {
