@@ -365,6 +365,24 @@ export default function ConversationView() {
         ))}
       </div>
 
+      {/* Mark as Non-Support Button */}
+      {!selectedConversation.tags?.includes("non-customer-support") && (
+        <div className="px-6 pb-4 shrink-0">
+          <button
+            onClick={handleMarkNonSupport}
+            className="group flex items-center justify-between w-full px-5 py-3 bg-background border border-border rounded-lg hover:border-red-500 hover:shadow-sm hover:shadow-red-500/10 transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-red-500 group-hover:scale-125 transition-transform"></div>
+              <span className="text-sm font-sans font-semibold text-foreground">Mark as Non-Support</span>
+            </div>
+            <span className="text-xs font-sans font-medium text-red-500/70 uppercase tracking-wider">
+              Action
+            </span>
+          </button>
+        </div>
+      )}
+
       {/* AI Actions Block */}
       <div className="border-t border-border p-6 shrink-0 bg-gradient-to-b from-purple-500/5 to-transparent">
         <div className="flex items-center gap-3 mb-6">
@@ -552,18 +570,6 @@ export default function ConversationView() {
 
       {/* Spacer */}
       <div className="flex-1"></div>
-
-      {/* Not Support Button - Always visible at bottom */}
-      <div className="p-4 border-t border-border shrink-0">
-        {!selectedConversation.tags?.includes("non-customer-support") && (
-          <button
-            onClick={handleMarkNonSupport}
-            className="w-full px-4 py-3 bg-warning text-white border-2 border-warning text-sm font-sans font-medium hover:bg-warning/90 transition-all"
-          >
-            Mark as Non-Support
-          </button>
-        )}
-      </div>
     </div>
     </div>
   );
