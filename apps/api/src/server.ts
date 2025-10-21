@@ -141,42 +141,51 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
   }
 });
 
-// Get next unreplied conversation
-app.get("/conversations/next-unreplied/:currentId?", async (req: Request, res: Response) => {
+// Helper function to get unreplied conversations
+async function getUnrepliedConversations() {
+  const conversations = await prisma.conversation.findMany({
+    where: {
+      archived: false,
+      NOT: {
+        tags: { has: "non-customer-support" }
+      }
+    },
+    include: {
+      messages: {
+        orderBy: { sentAt: "desc" },
+        take: 1,
+      },
+    },
+    orderBy: { lastMessageAt: "asc" }, // Oldest first
+  });
+
+  // Filter to only those where last message is inbound
+  return conversations.filter(c =>
+    c.messages.length > 0 && c.messages[0].direction === "inbound"
+  );
+}
+
+// Get oldest unreplied conversation
+app.get("/conversations/next-unreplied", async (_req: Request, res: Response) => {
+  try {
+    const unreplied = await getUnrepliedConversations();
+    res.json(unreplied[0] || null);
+  } catch (error) {
+    console.error("Error fetching next unreplied:", error);
+    res.status(500).json({ error: "Failed to fetch next unreplied" });
+  }
+});
+
+// Get next unreplied conversation after a specific one
+app.get("/conversations/next-unreplied/:currentId", async (req: Request, res: Response) => {
   try {
     const { currentId } = req.params;
+    const unreplied = await getUnrepliedConversations();
 
-    // Find conversations where the last message is inbound (from customer)
-    const conversations = await prisma.conversation.findMany({
-      where: {
-        archived: false,
-        NOT: {
-          tags: { has: "non-customer-support" }
-        }
-      },
-      include: {
-        messages: {
-          orderBy: { sentAt: "desc" },
-          take: 1,
-        },
-      },
-      orderBy: { lastMessageAt: "asc" }, // Oldest first
-    });
-
-    // Filter to only those where last message is inbound
-    const unreplied = conversations.filter(c =>
-      c.messages.length > 0 && c.messages[0].direction === "inbound"
-    );
-
-    if (currentId) {
-      // Find the next one after current
-      const currentIndex = unreplied.findIndex(c => c.id === currentId);
-      const next = unreplied[currentIndex + 1] || unreplied[0];
-      return res.json(next || null);
-    }
-
-    // Return the oldest unreplied
-    res.json(unreplied[0] || null);
+    // Find the next one after current
+    const currentIndex = unreplied.findIndex(c => c.id === currentId);
+    const next = unreplied[currentIndex + 1] || unreplied[0];
+    res.json(next || null);
   } catch (error) {
     console.error("Error fetching next unreplied:", error);
     res.status(500).json({ error: "Failed to fetch next unreplied" });
