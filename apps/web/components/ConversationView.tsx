@@ -360,7 +360,7 @@ export default function ConversationView() {
       {showHistory && history.length > 0 && (
         <>
           <div className="px-4 py-2 border-b border-border flex items-center justify-between shrink-0">
-            <h3 className="font-medium text-foreground text-xs uppercase tracking-wide">Past Conversations</h3>
+            <h3 className="font-sans font-semibold text-foreground text-sm">Past Conversations</h3>
             <button
               onClick={() => setShowHistory(false)}
               className="text-muted-foreground hover:text-foreground transition-colors text-xs"
