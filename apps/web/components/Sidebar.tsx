@@ -1,0 +1,54 @@
+"use client";
+
+import { useState } from "react";
+
+export default function Sidebar() {
+  const [activeView, setActiveView] = useState<"inbox" | "sent">("inbox");
+
+  return (
+    <div className="w-64 border-r border-border bg-background flex flex-col">
+      {/* Logo/Header */}
+      <div className="p-6 border-b border-border">
+        <h1 className="text-xl font-semibold text-foreground">Outlight</h1>
+        <p className="text-sm text-muted-foreground mt-1">Support</p>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 p-4 space-y-1">
+        <button
+          onClick={() => setActiveView("inbox")}
+          className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+            activeView === "inbox"
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+          }`}
+        >
+          Inbox
+        </button>
+        <button
+          onClick={() => setActiveView("sent")}
+          className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+            activeView === "sent"
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+          }`}
+        >
+          Sent
+        </button>
+      </nav>
+
+      {/* User Section */}
+      <div className="p-4 border-t border-border">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+            <span className="text-sm font-medium text-primary">U</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground truncate">User</p>
+            <p className="text-xs text-muted-foreground truncate">user@outlight.com</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

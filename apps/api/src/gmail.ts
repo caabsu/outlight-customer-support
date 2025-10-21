@@ -151,3 +151,66 @@ function flattenParts(payload: any): { html?: string[]; text?: string[] } {
   walk(payload);
   return out;
 }
+
+export async function sendReply(conversationId: string, to: string, body: string) {
+  const gmail = await getAuthedClient();
+
+  // Get the conversation to find the thread ID
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: { messages: { orderBy: { sentAt: "asc" } } }
+  });
+
+  if (!conversation) {
+    throw new Error("Conversation not found");
+  }
+
+  // Create email in RFC 2822 format
+  const subject = conversation.subject;
+  const emailLines = [
+    `To: ${to}`,
+    `Subject: Re: ${subject}`,
+    ``,
+    body,
+  ];
+  const email = emailLines.join("\r\n");
+  const encodedMessage = Buffer.from(email)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+  // Send the email as part of the thread
+  const result = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: {
+      raw: encodedMessage,
+      threadId: conversation.gmailThreadId,
+    },
+  });
+
+  // Store the sent message in the database
+  const now = new Date();
+  await prisma.message.create({
+    data: {
+      conversationId: conversation.id,
+      gmailMessageId: result.data.id!,
+      direction: "outbound",
+      fromEmail: process.env.GMAIL_ACCOUNT_EMAIL!,
+      toEmails: [to] as any,
+      ccEmails: [] as any,
+      sentAt: now,
+      bodyHtml: null,
+      bodyText: body,
+      attachments: [] as any,
+    },
+  });
+
+  // Update conversation last message time
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { lastMessageAt: now },
+  });
+
+  return result.data;
+}
