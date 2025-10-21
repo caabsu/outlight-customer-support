@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 type KnowledgeEntry = {
   id: string;
@@ -14,6 +15,7 @@ type KnowledgeEntry = {
 };
 
 export default function KnowledgeBasePage() {
+  const router = useRouter();
   const [entries, setEntries] = useState<KnowledgeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -142,6 +144,14 @@ export default function KnowledgeBasePage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="p-6 border-b border-border">
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => router.push("/emails")}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ← Back to Emails
+            </button>
+          </div>
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-sans font-bold text-foreground">Knowledge Base</h1>
