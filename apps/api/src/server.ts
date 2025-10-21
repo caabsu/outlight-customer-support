@@ -332,6 +332,27 @@ app.patch("/conversations/:id/tags", async (req: Request, res: Response) => {
   }
 });
 
+// Update conversation status
+app.patch("/conversations/:id/status", async (req: Request, res: Response) => {
+  try {
+    const { status } = req.body;
+
+    if (!["open", "resolved", "pending"].includes(status)) {
+      return res.status(400).json({ error: "Invalid status value" });
+    }
+
+    const updated = await prisma.conversation.update({
+      where: { id: req.params.id },
+      data: { status },
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error("Error updating status:", error);
+    res.status(500).json({ error: "Failed to update status" });
+  }
+});
+
 // DEBUG: Check reply-to email values in database
 app.get("/debug/reply-to", async (req: Request, res: Response) => {
   try {

@@ -24,6 +24,7 @@ export default function ConversationView() {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
+  const [justReplied, setJustReplied] = useState(false);
 
   // Fetch conversation history
   useEffect(() => {
@@ -100,6 +101,7 @@ export default function ConversationView() {
         }),
       });
       setReplyText("");
+      setJustReplied(true);
       // Refresh conversations to show the new message
       await refreshConversations();
     } catch (error) {
@@ -109,26 +111,60 @@ export default function ConversationView() {
     }
   };
 
+  const handleMarkResolved = async () => {
+    if (!selectedConversation) return;
+
+    // Optimistic update
+    updateConversationOptimistic(selectedConversation.id, { status: "resolved" });
+    setJustReplied(false);
+
+    try {
+      await fetch(`/api/conversations/${selectedConversation.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "resolved" }),
+      });
+      await refreshConversations();
+    } catch (error) {
+      console.error("Failed to mark as resolved:", error);
+      // Revert on error
+      updateConversationOptimistic(selectedConversation.id, { status: selectedConversation.status });
+    }
+  };
+
   const handleMarkNonSupport = async () => {
     if (!selectedConversation) return;
 
     const currentTags = selectedConversation.tags || [];
     const updatedTags = [...currentTags, "non-customer-support"];
 
-    // Optimistic update - instant UI feedback
-    updateConversationOptimistic(selectedConversation.id, { tags: updatedTags });
+    // Optimistic update - instant UI feedback, also mark as resolved
+    updateConversationOptimistic(selectedConversation.id, {
+      tags: updatedTags,
+      status: "resolved"
+    });
 
     try {
+      // Update tags
       await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: updatedTags }),
       });
+      // Mark as resolved
+      await fetch(`/api/conversations/${selectedConversation.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "resolved" }),
+      });
       await refreshConversations();
     } catch (error) {
       console.error("Failed to mark as non-support:", error);
       // Revert on error
-      updateConversationOptimistic(selectedConversation.id, { tags: currentTags });
+      updateConversationOptimistic(selectedConversation.id, {
+        tags: currentTags,
+        status: selectedConversation.status
+      });
     }
   };
 
@@ -521,6 +557,14 @@ export default function ConversationView() {
             >
               {sending ? "Sending..." : "Send"}
             </button>
+            {justReplied && selectedConversation?.status !== "resolved" && (
+              <button
+                onClick={handleMarkResolved}
+                className="px-4 py-2 bg-success text-white rounded-lg text-sm font-sans font-medium hover:bg-success/90 transition-colors"
+              >
+                ✓ Mark as Resolved
+              </button>
+            )}
           </div>
           <p className="text-xs font-sans text-muted-foreground">
             Replying to {getReplyToEmail()}

@@ -29,6 +29,7 @@ export default function ConversationList() {
     useConversations();
   const [showStarred, setShowStarred] = useState(false);
   const [excludeNonSupport, setExcludeNonSupport] = useState(true);
+  const [showNeedsReply, setShowNeedsReply] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | "needs-reply" | "resolved">("all");
@@ -48,6 +49,9 @@ export default function ConversationList() {
     // Non-support filter
     if (excludeNonSupport && conv.tags?.includes("non-customer-support"))
       return false;
+
+    // Needs Reply quick filter
+    if (showNeedsReply && !isUnreplied(conv)) return false;
 
     // Archive filter
     if (showArchived && !conv.archived) return false;
@@ -245,14 +249,24 @@ export default function ConversationList() {
             ✓ CS Only
           </button>
           <button
-            onClick={() => setShowFilters(!showFilters)}
+            onClick={() => setShowNeedsReply(!showNeedsReply)}
             className={`px-3 py-1.5 rounded-lg text-xs font-sans font-medium transition-colors ${
-              showFilters || selectedTags.length > 0 || statusFilter !== "all" || dateRange !== "all"
-                ? "bg-primary/20 text-primary border border-primary/30"
+              showNeedsReply
+                ? "bg-warning/20 text-warning border border-warning/30"
                 : "bg-secondary text-secondary-foreground border border-border"
             }`}
           >
-            🔍 Filters {(selectedTags.length > 0 || statusFilter !== "all" || dateRange !== "all") && `(${selectedTags.length + (statusFilter !== "all" ? 1 : 0) + (dateRange !== "all" ? 1 : 0)})`}
+            📩 Needs Reply
+          </button>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`px-2 py-1.5 rounded-lg text-xs font-sans font-medium transition-colors ${
+              showFilters || selectedTags.length > 0 || statusFilter !== "all" || dateRange !== "all"
+                ? "bg-foreground text-background border border-foreground"
+                : "bg-background text-foreground border border-border"
+            }`}
+          >
+            ⚙
           </button>
         </div>
 
