@@ -10,6 +10,26 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.get("/", (_req: Request, res: Response) => {
+  res.json({
+    name: "Outlight Customer Support API",
+    version: "1.0.0",
+    endpoints: {
+      health: "GET /health",
+      oauth: "GET /oauth/google",
+      oauthCallback: "GET /oauth/google/callback",
+      pollEmails: "POST /gmail/poll",
+      conversations: "GET /conversations",
+      sendMessage: "POST /messages",
+    },
+    docs: {
+      web: "http://localhost:3000",
+      setupGmail: "Visit /oauth/google to connect Gmail",
+      pollEmails: "POST to /gmail/poll to sync emails",
+    },
+  });
+});
+
 app.get("/health", (_req: Request, res: Response) => res.json({ ok: true }));
 
 app.get("/oauth/google", googleAuthStart);
