@@ -41,7 +41,7 @@ function sanitizeEmailHtml(html: string): string {
 }
 
 export default function ConversationView() {
-  const { conversations, selectedConversation, selectConversation, refreshConversations, updateConversationOptimistic } = useConversations();
+  const { conversations, selectedConversation, selectConversation, refreshConversations, updateConversationOptimistic, pagination, goToPage } = useConversations();
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
@@ -256,7 +256,7 @@ export default function ConversationView() {
     }
   };
 
-  const goToNextUnreplied = () => {
+  const goToNextUnreplied = async () => {
     // Filter to unreplied conversations (last message is inbound)
     const unrepliedConversations = conversations.filter((conv) => {
       // Exclude non-customer-support
@@ -274,6 +274,14 @@ export default function ConversationView() {
     );
 
     if (sortedUnreplied.length === 0) {
+      // No unreplied on current page - check if we should navigate to another page
+      if (pagination && pagination.totalPages > 1) {
+        const nextPage = pagination.page < pagination.totalPages ? pagination.page + 1 : 1;
+        await goToPage(nextPage);
+        // After page loads, recursively call this function to find unreplied on new page
+        setTimeout(() => goToNextUnreplied(), 100);
+        return;
+      }
       alert("No unreplied emails!");
       return;
     }
@@ -283,15 +291,35 @@ export default function ConversationView() {
       ? sortedUnreplied.findIndex(conv => conv.id === selectedConversation.id)
       : -1;
 
-    // Get next conversation (wrap around to start if at end)
-    const nextIndex = currentIndex >= sortedUnreplied.length - 1 ? 0 : currentIndex + 1;
+    // Check if we're at the end of current page's unreplied
+    const isAtEnd = currentIndex >= sortedUnreplied.length - 1;
+
+    if (isAtEnd && pagination && pagination.totalPages > 1) {
+      // Navigate to next page (or wrap to page 1 if on last page)
+      const nextPage = pagination.page < pagination.totalPages ? pagination.page + 1 : 1;
+      await goToPage(nextPage);
+      // After page loads, select first unreplied on new page
+      setTimeout(() => goToNextUnreplied(), 100);
+      return;
+    }
+
+    // Get next conversation (wrap around to start if at end on single page)
+    const nextIndex = isAtEnd ? 0 : currentIndex + 1;
     const nextConv = sortedUnreplied[nextIndex];
 
     // Instant navigation - no API call!
     selectConversation(nextConv.id);
   };
 
-  const goToOldestUnreplied = () => {
+  const goToOldestUnreplied = async () => {
+    // If pagination exists and we're not on the last page, navigate to last page first
+    if (pagination && pagination.totalPages > 1 && pagination.page !== pagination.totalPages) {
+      await goToPage(pagination.totalPages);
+      // After page loads, recursively call this function to select oldest unreplied on that page
+      setTimeout(() => goToOldestUnreplied(), 100);
+      return;
+    }
+
     // Filter to unreplied conversations (last message is inbound)
     const unrepliedConversations = conversations.filter((conv) => {
       // Exclude non-customer-support
@@ -309,6 +337,12 @@ export default function ConversationView() {
     );
 
     if (sortedUnreplied.length === 0) {
+      // No unreplied on this page, try previous pages
+      if (pagination && pagination.page > 1) {
+        await goToPage(pagination.page - 1);
+        setTimeout(() => goToOldestUnreplied(), 100);
+        return;
+      }
       alert("No unreplied emails!");
       return;
     }

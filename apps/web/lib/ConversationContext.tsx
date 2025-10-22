@@ -52,7 +52,7 @@ type ConversationContextType = {
   showSent: boolean;
   setShowSent: (show: boolean) => void;
   pagination: Pagination | null;
-  goToPage: (page: number) => void;
+  goToPage: (page: number) => Promise<void>;
   nextPage: () => void;
   prevPage: () => void;
 };
@@ -231,9 +231,9 @@ export function ConversationProvider({
     await fetchConversations(false, 1, false); // Don't suppress errors for manual refresh
   };
 
-  const goToPage = (page: number) => {
+  const goToPage = async (page: number) => {
     setCurrentPage(page);
-    fetchConversations(false, 0, false, page);
+    await fetchConversations(false, 0, false, page);
   };
 
   const nextPage = () => {
