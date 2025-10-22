@@ -261,30 +261,41 @@ export default function ConversationView() {
     if (navigatingUnreplied) return; // Prevent multiple clicks
 
     try {
-      if (!selectedConversation) {
-        // No conversation selected - just select first unreplied on current page
-        const unrepliedConversations = conversations.filter((conv) => {
-          if (conv.tags?.includes("non-customer-support")) return false;
-          if (conv.messages.length === 0) return false;
-          const lastMessage = conv.messages[conv.messages.length - 1];
-          return lastMessage.direction === "inbound";
-        });
+      // STEP 1: Check current page FIRST (instant, no API call!)
+      const unrepliedOnPage = conversations.filter((conv) => {
+        if (conv.tags?.includes("non-customer-support")) return false;
+        if (conv.messages.length === 0) return false;
+        const lastMessage = conv.messages[conv.messages.length - 1];
+        return lastMessage.direction === "inbound";
+      });
 
-        const sortedUnreplied = unrepliedConversations.sort((a, b) =>
-          new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
-        );
+      const sortedUnreplied = unrepliedOnPage.sort((a, b) =>
+        new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
+      );
 
-        if (sortedUnreplied.length > 0) {
-          selectConversation(sortedUnreplied[0].id);
+      if (selectedConversation) {
+        // Find current conversation in the sorted list
+        const currentIndex = sortedUnreplied.findIndex(conv => conv.id === selectedConversation.id);
+
+        // If there's a next unreplied on this page, select it INSTANTLY
+        if (currentIndex >= 0 && currentIndex < sortedUnreplied.length - 1) {
+          selectConversation(sortedUnreplied[currentIndex + 1].id);
+          return; // ⚡ INSTANT - no API call!
         }
-        return;
+      } else if (sortedUnreplied.length > 0) {
+        // No conversation selected - select first unreplied on page
+        selectConversation(sortedUnreplied[0].id);
+        return; // ⚡ INSTANT
       }
 
-      // Use API to get next unreplied conversation (works across all pages)
-      const response = await fetch(`/api/conversations/next-unreplied/${selectedConversation.id}`);
+      // STEP 2: No next unreplied on current page - search other pages (API call)
+      setNavigatingUnreplied(true);
+
+      const response = await fetch(`/api/conversations/next-unreplied/${selectedConversation?.id || ''}`);
 
       if (!response.ok) {
         console.error("Failed to fetch next unreplied");
+        setNavigatingUnreplied(false);
         return;
       }
 
@@ -292,15 +303,16 @@ export default function ConversationView() {
 
       if (!nextConversation || !nextConversation.id) {
         alert("No more unreplied emails!");
+        setNavigatingUnreplied(false);
         return;
       }
 
-      // Check if the next conversation is on the current page
+      // Double-check if on current page (safety fallback)
       const isOnCurrentPage = conversations.some(conv => conv.id === nextConversation.id);
 
       if (isOnCurrentPage) {
-        // INSTANT NAVIGATION - same page, no loading needed
         selectConversation(nextConversation.id);
+        setNavigatingUnreplied(false);
       } else if (pagination) {
         // Cross-page navigation - NOW show loading
         setNavigatingUnreplied(true);
