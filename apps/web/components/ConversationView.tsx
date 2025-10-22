@@ -101,7 +101,8 @@ export default function ConversationView() {
   const [draftData, setDraftData] = useState<any>(null);
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
-  const [showDraftPanel, setShowDraftPanel] = useState(false);
+  const [showDraftPopup, setShowDraftPopup] = useState(false);
+  const [draftMinimized, setDraftMinimized] = useState(false);
 
   // Fetch conversation history
   useEffect(() => {
@@ -232,6 +233,13 @@ export default function ConversationView() {
         }),
       });
       setReplyText("");
+
+      // Clear draft data when email is sent
+      setDraftData(null);
+      setShowDraftPopup(false);
+      setDraftMinimized(false);
+      setDraftError(null);
+
       // Refresh conversations to show the new message
       await refreshConversations();
     } catch (error) {
@@ -574,7 +582,8 @@ export default function ConversationView() {
 
     setLoadingDraft(true);
     setDraftError(null);
-    setShowDraftPanel(true);
+    setShowDraftPopup(true);
+    setDraftMinimized(false);
     setDraftData(null);
 
     try {
@@ -1128,171 +1137,6 @@ export default function ConversationView() {
           </div>
         </div>
 
-      {/* AI Draft Panel - Collapsible */}
-      {showDraftPanel && (
-        <div className="border-b border-border bg-gradient-to-r from-purple-50 to-pink-50">
-          <div
-            className="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-purple-100/50 transition-colors"
-            onClick={() => setShowDraftPanel(!showDraftPanel)}
-          >
-            <div className="flex items-center gap-3">
-              <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
-              </svg>
-              <h3 className="font-sans font-bold text-purple-900 text-sm uppercase tracking-wide">
-                AI Draft Assistant
-                {draftData?.tags && draftData.tags.length > 0 && (
-                  <span className="ml-3 text-xs normal-case font-normal text-purple-600">
-                    {draftData.tags.join(", ")}
-                  </span>
-                )}
-              </h3>
-            </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowDraftPanel(false);
-                setDraftData(null);
-                setDraftError(null);
-              }}
-              className="text-purple-600 hover:text-purple-800 text-lg font-bold"
-            >
-              ×
-            </button>
-          </div>
-
-          <div className="px-6 pb-6">
-            {loadingDraft && (
-              <div className="flex flex-col items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-10 w-10 border-4 border-purple-500 border-t-transparent mb-3"></div>
-                <p className="text-sm font-sans text-purple-700">Analyzing email and generating draft...</p>
-              </div>
-            )}
-
-            {draftError && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-red-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                  <div>
-                    <p className="text-sm font-sans font-semibold text-red-900">Error Generating Draft</p>
-                    <p className="text-sm font-sans text-red-700 mt-1">{draftError}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {!loadingDraft && !draftError && draftData && (
-              <div className="space-y-4">
-                {/* Category and Tags */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-3 py-1 bg-purple-600 text-white text-xs font-sans font-semibold rounded-full">
-                    {draftData.category}
-                  </span>
-                  {draftData.tags?.map((tag: string) => (
-                    <span key={tag} className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-sans font-semibold rounded-full border border-purple-300">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-
-                {/* AI Reasoning / Steps */}
-                <div className="bg-white border border-purple-200 rounded-lg p-4">
-                  <h4 className="text-xs font-sans font-bold text-purple-900 uppercase tracking-wide mb-2 flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    AI Reasoning
-                  </h4>
-                  <p className="text-sm font-sans text-gray-700 whitespace-pre-wrap">{draftData.reasoning}</p>
-                </div>
-
-                {/* Order Information (if available) */}
-                {draftData.orderInfo && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h4 className="text-xs font-sans font-bold text-blue-900 uppercase tracking-wide mb-2">Order Information</h4>
-                    <div className="grid grid-cols-2 gap-2 text-sm font-sans">
-                      {draftData.orderInfo.orderId && (
-                        <div>
-                          <span className="text-blue-600">Order ID:</span>
-                          <p className="font-semibold text-blue-900">{draftData.orderInfo.orderId}</p>
-                        </div>
-                      )}
-                      {draftData.orderInfo.orderDate && (
-                        <div>
-                          <span className="text-blue-600">Order Date:</span>
-                          <p className="font-semibold text-blue-900">{draftData.orderInfo.orderDate}</p>
-                        </div>
-                      )}
-                      {draftData.orderInfo.deliveryDate && (
-                        <div>
-                          <span className="text-blue-600">Delivery Date:</span>
-                          <p className="font-semibold text-blue-900">{draftData.orderInfo.deliveryDate}</p>
-                        </div>
-                      )}
-                      {draftData.orderInfo.isWithinReturnWindow !== undefined && (
-                        <div>
-                          <span className="text-blue-600">Return Window:</span>
-                          <p className={`font-semibold ${draftData.orderInfo.isWithinReturnWindow ? 'text-green-600' : 'text-red-600'}`}>
-                            {draftData.orderInfo.isWithinReturnWindow ? 'Within 30 days ✓' : 'Expired ✗'}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Draft Email or Action Steps */}
-                {draftData.shouldDraft && draftData.draft ? (
-                  <div className="bg-white border-2 border-purple-300 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-xs font-sans font-bold text-purple-900 uppercase tracking-wide flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19v-8.93a2 2 0 01.89-1.664l7-4.666a2 2 0 012.22 0l7 4.666A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-1.14.76a2 2 0 01-2.22 0l-1.14-.76" />
-                        </svg>
-                        Email Draft
-                      </h4>
-                      <button
-                        onClick={() => navigator.clipboard.writeText(draftData.draft)}
-                        className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-sans font-semibold rounded transition-colors"
-                      >
-                        Copy Draft
-                      </button>
-                    </div>
-                    <div className="bg-gray-50 rounded p-4 font-sans text-sm text-gray-800 whitespace-pre-wrap border border-gray-200">
-                      {draftData.draft}
-                    </div>
-                  </div>
-                ) : draftData.actionSteps && draftData.actionSteps.length > 0 ? (
-                  <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
-                    <h4 className="text-xs font-sans font-bold text-yellow-900 uppercase tracking-wide mb-3 flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                      </svg>
-                      Action Steps for Agent
-                    </h4>
-                    <ol className="space-y-2">
-                      {draftData.actionSteps.map((step: string, index: number) => (
-                        <li key={index} className="flex items-start gap-3">
-                          <span className="flex-shrink-0 w-6 h-6 bg-yellow-600 text-white rounded-full flex items-center justify-center text-xs font-sans font-bold">
-                            {index + 1}
-                          </span>
-                          <p className="text-sm font-sans text-yellow-900 pt-0.5">{step}</p>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                ) : (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <p className="text-sm font-sans text-gray-600 italic">No draft or action steps generated.</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
@@ -1350,148 +1194,6 @@ export default function ConversationView() {
         ))}
       </div>
 
-      {/* AI Actions Block - Minimal Design */}
-      <div className="border-t border-border p-4 shrink-0 bg-purple-500/5">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-0.5 h-5 bg-purple-500 rounded-full"></div>
-          <h3 className="text-sm font-sans font-semibold text-foreground" style={{ fontWeight: 600 }}>AI Assistant</h3>
-        </div>
-
-        <div className="grid grid-cols-4 gap-2">
-          {/* AI Action 1: Generate Summary */}
-          <div className="relative">
-            <button
-              onClick={handleGenerateSummary}
-              disabled={loadingSummary}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md hover:border-purple-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between gap-1"
-            >
-              <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>
-                {loadingSummary ? "..." : "Summary"}
-              </span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveInfoTooltip(activeInfoTooltip === 'summary' ? null : 'summary');
-                }}
-                className="text-purple-500 hover:text-purple-600 hover:scale-110 transition-all cursor-pointer p-1"
-                title="Info"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </span>
-            </button>
-            {activeInfoTooltip === 'summary' && (
-              <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-purple-500 text-white text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
-                Create an intelligent summary highlighting key points, issues, and next steps
-              </div>
-            )}
-          </div>
-
-          {/* AI Action 2: Draft Reply */}
-          <div className="relative">
-            <button
-              disabled
-              className="w-full px-3 py-2 bg-background border border-border rounded-md opacity-40 cursor-not-allowed flex items-center justify-between gap-1"
-            >
-              <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>Draft</span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveInfoTooltip(activeInfoTooltip === 'draft' ? null : 'draft');
-                }}
-                className="text-muted-foreground hover:scale-110 transition-all cursor-pointer p-1"
-                title="Info"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </span>
-            </button>
-            {activeInfoTooltip === 'draft' && (
-              <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-muted text-foreground text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
-                Generate context-aware reply suggestions (Coming Soon)
-              </div>
-            )}
-          </div>
-
-          {/* AI Action 3: Suggest Tags */}
-          <div className="relative">
-            <button
-              disabled
-              className="w-full px-3 py-2 bg-background border border-border rounded-md opacity-40 cursor-not-allowed flex items-center justify-between gap-1"
-            >
-              <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>Tags</span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveInfoTooltip(activeInfoTooltip === 'tags' ? null : 'tags');
-                }}
-                className="text-muted-foreground hover:scale-110 transition-all cursor-pointer p-1"
-                title="Info"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </span>
-            </button>
-            {activeInfoTooltip === 'tags' && (
-              <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-muted text-foreground text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
-                Automatically categorize with intelligent tag recommendations (Coming Soon)
-              </div>
-            )}
-          </div>
-
-          {/* AI Action 4: Find Similar */}
-          <div className="relative">
-            <button
-              disabled
-              className="w-full px-3 py-2 bg-background border border-border rounded-md opacity-40 cursor-not-allowed flex items-center justify-between gap-1"
-            >
-              <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>Similar</span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveInfoTooltip(activeInfoTooltip === 'similar' ? null : 'similar');
-                }}
-                className="text-muted-foreground hover:scale-110 transition-all cursor-pointer p-1"
-                title="Info"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </span>
-            </button>
-            {activeInfoTooltip === 'similar' && (
-              <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-muted text-foreground text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
-                Discover similar conversations and past solutions (Coming Soon)
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* AI Summary Display */}
-        {aiSummary && (
-          <div className="mt-5 p-5 bg-purple-500/5 border border-purple-500/20 rounded-lg">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                <h4 className="text-sm font-sans font-bold text-purple-600">AI-Generated Summary</h4>
-              </div>
-              <button
-                onClick={() => setSummaryMinimized(!summaryMinimized)}
-                className="text-xs font-sans font-medium text-purple-500 hover:text-purple-600 transition-colors px-2 py-1"
-                title={summaryMinimized ? "Expand summary" : "Minimize summary"}
-              >
-                {summaryMinimized ? "Expand ▼" : "Minimize ▲"}
-              </button>
-            </div>
-            {!summaryMinimized && (
-              <p className="text-sm font-sans text-foreground leading-relaxed whitespace-pre-wrap">{aiSummary}</p>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Reply Section */}
       <div className="border-t border-border p-6 shrink-0">
@@ -1916,8 +1618,8 @@ export default function ConversationView() {
 
       {/* AI Assistant Section */}
       <div className="border-b border-border">
-        <div className="px-6 py-4 bg-gradient-to-r from-purple-100 to-pink-100">
-          <h3 className="font-sans font-bold text-purple-900 text-sm uppercase tracking-wide">AI Assistant</h3>
+        <div className="px-6 py-4 bg-secondary/30">
+          <h3 className="font-sans font-bold text-foreground text-sm uppercase tracking-wide">AI Assistant</h3>
         </div>
 
         <div className="px-4 py-4 space-y-3">
@@ -1925,22 +1627,16 @@ export default function ConversationView() {
           <button
             onClick={() => {/* TODO: Implement summarize */}}
             disabled={!selectedConversation}
-            className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between"
+            className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <div className="flex items-center gap-3">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <span className="text-sm font-sans font-bold">Summarize</span>
-            </div>
-            <span className="text-xs font-sans font-medium opacity-80">📝</span>
+            <span className="text-sm font-sans font-bold">Summarize</span>
           </button>
 
           {/* Draft Button */}
           <button
             onClick={generateDraft}
             disabled={loadingDraft || !selectedConversation}
-            className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between relative"
+            className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed relative"
           >
             {loadingDraft && (
               <div className="absolute inset-0 bg-purple-600/50 rounded-lg flex items-center justify-center">
@@ -1949,13 +1645,7 @@ export default function ConversationView() {
                 </svg>
               </div>
             )}
-            <div className="flex items-center gap-3">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-              <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : 'Draft'}</span>
-            </div>
-            <span className="text-xs font-sans font-medium opacity-80">✨</span>
+            <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : 'Draft'}</span>
           </button>
 
           {/* Placeholder for future buttons */}
@@ -2782,6 +2472,187 @@ export default function ConversationView() {
               </a>
             )}
           </div>
+        </div>
+      </div>
+    )}
+
+    {/* AI Draft Popup Modal */}
+    {showDraftPopup && (
+      <div className={`fixed ${draftMinimized ? 'bottom-4 right-4' : 'inset-0'} z-50 ${draftMinimized ? '' : 'flex items-center justify-center bg-black/50'}`}>
+        <div className={`bg-background border border-border shadow-2xl ${draftMinimized ? 'w-80' : 'w-[800px] max-h-[90vh]'} flex flex-col rounded-lg`}>
+          {/* Header */}
+          <div className="px-6 py-4 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-border flex items-center justify-between rounded-t-lg shrink-0">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+              </svg>
+              <h3 className="font-sans font-bold text-purple-900 text-sm uppercase tracking-wide">
+                AI Draft Assistant
+                {draftData?.tags && draftData.tags.length > 0 && !draftMinimized && (
+                  <span className="ml-3 text-xs normal-case font-normal text-purple-600">
+                    {draftData.tags.join(", ")}
+                  </span>
+                )}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setDraftMinimized(!draftMinimized)}
+                className="text-purple-600 hover:text-purple-800 text-sm font-bold px-2"
+                title={draftMinimized ? "Maximize" : "Minimize"}
+              >
+                {draftMinimized ? '□' : '−'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowDraftPopup(false);
+                  setDraftMinimized(false);
+                }}
+                className="text-purple-600 hover:text-purple-800 text-lg font-bold"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          {/* Content */}
+          {!draftMinimized && (
+            <div className="px-6 py-6 overflow-y-auto flex-1">
+              {loadingDraft && (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent mb-4"></div>
+                  <p className="text-sm font-sans text-purple-700">Analyzing email and generating draft...</p>
+                </div>
+              )}
+
+              {draftError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-red-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-sans font-semibold text-red-900">Error Generating Draft</p>
+                      <p className="text-sm font-sans text-red-700 mt-1">{draftError}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!loadingDraft && !draftError && draftData && (
+                <div className="space-y-4">
+                  {/* Category and Tags */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-3 py-1 bg-purple-600 text-white text-xs font-sans font-semibold rounded-full">
+                      {draftData.category}
+                    </span>
+                    {draftData.tags?.map((tag: string) => (
+                      <span key={tag} className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-sans font-semibold rounded-full border border-purple-300">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* AI Reasoning */}
+                  {draftData.reasoning && (
+                    <div className="bg-white border border-purple-200 rounded-lg p-4">
+                      <h4 className="text-xs font-sans font-bold text-purple-900 uppercase tracking-wide mb-2 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        AI Reasoning
+                      </h4>
+                      <p className="text-sm font-sans text-gray-700 whitespace-pre-wrap">{draftData.reasoning}</p>
+                    </div>
+                  )}
+
+                  {/* Order Information */}
+                  {draftData.orderInfo && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h4 className="text-xs font-sans font-bold text-blue-900 uppercase tracking-wide mb-2">Order Information</h4>
+                      <div className="grid grid-cols-2 gap-2 text-sm font-sans">
+                        {draftData.orderInfo.orderId && (
+                          <div>
+                            <span className="text-blue-600">Order ID:</span>
+                            <p className="font-semibold text-blue-900">{draftData.orderInfo.orderId}</p>
+                          </div>
+                        )}
+                        {draftData.orderInfo.orderDate && (
+                          <div>
+                            <span className="text-blue-600">Order Date:</span>
+                            <p className="font-semibold text-blue-900">{draftData.orderInfo.orderDate}</p>
+                          </div>
+                        )}
+                        {draftData.orderInfo.deliveryDate && (
+                          <div>
+                            <span className="text-blue-600">Delivery Date:</span>
+                            <p className="font-semibold text-blue-900">{draftData.orderInfo.deliveryDate}</p>
+                          </div>
+                        )}
+                        {draftData.orderInfo.isWithinReturnWindow !== undefined && (
+                          <div>
+                            <span className="text-blue-600">Return Window:</span>
+                            <p className={`font-semibold ${draftData.orderInfo.isWithinReturnWindow ? 'text-green-600' : 'text-red-600'}`}>
+                              {draftData.orderInfo.isWithinReturnWindow ? 'Within 30 days ✓' : 'Expired ✗'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Draft Email or Action Steps */}
+                  {draftData.shouldDraft && draftData.draft ? (
+                    <div className="bg-white border-2 border-purple-300 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-sans font-bold text-purple-900 uppercase tracking-wide flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19v-8.93a2 2 0 01.89-1.664l7-4.666a2 2 0 012.22 0l7 4.666A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-1.14.76a2 2 0 01-2.22 0l-1.14-.76" />
+                          </svg>
+                          Email Draft
+                        </h4>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(draftData.draft);
+                            alert('Draft copied to clipboard!');
+                          }}
+                          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-sans font-semibold rounded transition-colors"
+                        >
+                          Copy Draft
+                        </button>
+                      </div>
+                      <div className="bg-gray-50 rounded p-4 font-sans text-sm text-gray-800 whitespace-pre-wrap border border-gray-200">
+                        {draftData.draft}
+                      </div>
+                    </div>
+                  ) : draftData.actionSteps && draftData.actionSteps.length > 0 ? (
+                    <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+                      <h4 className="text-xs font-sans font-bold text-yellow-900 uppercase tracking-wide mb-3 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                        Action Steps for Agent
+                      </h4>
+                      <ol className="space-y-2">
+                        {draftData.actionSteps.map((step: string, index: number) => (
+                          <li key={index} className="flex items-start gap-3">
+                            <span className="flex-shrink-0 w-6 h-6 bg-yellow-600 text-white rounded-full flex items-center justify-center text-xs font-sans font-bold">
+                              {index + 1}
+                            </span>
+                            <p className="text-sm font-sans text-yellow-900 pt-0.5">{step}</p>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                      <p className="text-sm font-sans text-gray-600 italic">No draft or action steps generated.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     )}
