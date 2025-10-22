@@ -1,8 +1,6 @@
 import express, { type Request, type Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import fs from "fs";
-import path from "path";
 // Load from .env.local first, fallback to .env
 dotenv.config({ path: ".env.local" });
 dotenv.config(); // This will load .env if .env.local doesn't exist
@@ -1333,14 +1331,11 @@ app.post("/tracking/batch", async (req: Request, res: Response) => {
  * POST /conversations/:id/draft
  */
 
-// Load knowledge base
-let knowledgeBase = "";
-try {
-  const kbPath = path.join(__dirname, "knowledge-base", "customer-support-policy.md");
-  knowledgeBase = fs.readFileSync(kbPath, "utf-8");
-} catch (error) {
-  console.error("Warning: Could not load knowledge base:", error);
-}
+// Knowledge base - Add your policy content here
+const knowledgeBase = `
+# Outlight Customer Support Knowledge Base
+(Add your policy content here)
+`;
 
 app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
   try {
@@ -1365,7 +1360,7 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
     let shopifyData = null;
     if (conversation.customer?.primaryEmail) {
       try {
-        const customer = await shopify.getCustomerByEmail(conversation.customer.primaryEmail);
+        const customer = await shopify.findCustomerByEmail(conversation.customer.primaryEmail);
         if (customer) {
           const orders = await shopify.getCustomerOrders(customer.id);
           shopifyData = {
