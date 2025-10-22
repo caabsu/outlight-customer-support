@@ -70,22 +70,42 @@ export async function pollOnce(_req: Request, res: Response) {
 
   const existing = await prisma.conversation.findFirst();
   if (!existing) {
-    const t = await gmail.users.threads.list({ userId: "me", q: "in:inbox", maxResults: 50 });
-    const threads = t.data.threads ?? [];
+    // Initial sync: fetch both inbox and sent
+    const [inboxThreads, sentThreads] = await Promise.all([
+      gmail.users.threads.list({ userId: "me", q: "in:inbox", maxResults: 50 }),
+      gmail.users.threads.list({ userId: "me", q: "in:sent", maxResults: 50 })
+    ]);
+
+    const allThreads = [
+      ...(inboxThreads.data.threads ?? []),
+      ...(sentThreads.data.threads ?? [])
+    ];
 
     // Process initial threads in parallel for much faster first-time sync
-    await Promise.all(threads.map(th => ingestThread(gmail, th.id!)));
+    // Use Set to avoid processing same thread twice (if it's both inbox and sent)
+    const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
+    await Promise.all(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
 
-    return res.json({ ingestedThreads: threads.length });
+    return res.json({ ingestedThreads: uniqueThreadIds.size });
   }
 
-  const t = await gmail.users.threads.list({ userId: "me", q: "in:inbox newer_than:2d", maxResults: 20 });
-  const threads = t.data.threads ?? [];
+  // Regular poll: fetch both inbox and sent from last 2 days
+  const [inboxThreads, sentThreads] = await Promise.all([
+    gmail.users.threads.list({ userId: "me", q: "in:inbox newer_than:2d", maxResults: 20 }),
+    gmail.users.threads.list({ userId: "me", q: "in:sent newer_than:2d", maxResults: 20 })
+  ]);
 
-  // Process threads in parallel for much faster performance (was sequential, now parallel)
-  await Promise.all(threads.map(th => ingestThread(gmail, th.id!)));
+  const allThreads = [
+    ...(inboxThreads.data.threads ?? []),
+    ...(sentThreads.data.threads ?? [])
+  ];
 
-  res.json({ updatedThreads: threads.length });
+  // Process threads in parallel for much faster performance
+  // Use Set to avoid processing same thread twice
+  const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
+  await Promise.all(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
+
+  res.json({ updatedThreads: uniqueThreadIds.size });
 }
 
 async function ingestThread(gmail: any, threadId: string) {

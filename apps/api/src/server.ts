@@ -46,7 +46,7 @@ app.post("/gmail/poll", pollOnce);
 // Get all conversations with messages (with filters)
 app.get("/conversations", async (req: Request, res: Response) => {
   try {
-    const { starred, archived, excludeNonSupport, unreadOnly } = req.query;
+    const { starred, archived, excludeNonSupport, unreadOnly, page, limit } = req.query;
 
     const where: any = {};
 
@@ -73,6 +73,14 @@ app.get("/conversations", async (req: Request, res: Response) => {
       where.unreadAgent = true;
     }
 
+    // Pagination
+    const pageNum = parseInt(page as string) || 1;
+    const limitNum = parseInt(limit as string) || 50;
+    const skip = (pageNum - 1) * limitNum;
+
+    // Get total count for pagination
+    const totalCount = await prisma.conversation.count({ where });
+
     const conversations = await prisma.conversation.findMany({
       where,
       include: {
@@ -82,8 +90,19 @@ app.get("/conversations", async (req: Request, res: Response) => {
         },
       },
       orderBy: { lastMessageAt: "desc" },
+      skip,
+      take: limitNum,
     });
-    res.json(conversations);
+
+    res.json({
+      conversations,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limitNum),
+      }
+    });
   } catch (error) {
     console.error("Error fetching conversations:", error);
     res.status(500).json({ error: "Failed to fetch conversations" });

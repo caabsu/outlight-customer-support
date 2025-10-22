@@ -30,6 +30,13 @@ type Conversation = {
   messages: Message[];
 };
 
+type Pagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
 type ConversationContextType = {
   conversations: Conversation[];
   selectedConversation: Conversation | null;
@@ -44,6 +51,10 @@ type ConversationContextType = {
   setShowArchived: (show: boolean) => void;
   showSent: boolean;
   setShowSent: (show: boolean) => void;
+  pagination: Pagination | null;
+  goToPage: (page: number) => void;
+  nextPage: () => void;
+  prevPage: () => void;
 };
 
 const ConversationContext = createContext<ConversationContextType | undefined>(
@@ -62,11 +73,13 @@ export function ConversationProvider({
   const [refreshProgress, setRefreshProgress] = useState(0);
   const [showArchived, setShowArchived] = useState(false);
   const [showSent, setShowSent] = useState(false);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const fetchConversations = async (silent = false, retryCount = 0, suppressErrors = false) => {
+  const fetchConversations = async (silent = false, retryCount = 0, suppressErrors = false, page = currentPage) => {
     try {
       if (!silent) setLoading(true);
-      const res = await fetch("/api/conversations");
+      const res = await fetch(`/api/conversations?page=${page}&limit=50`);
       if (!res.ok) {
         // Don't log errors if suppressed (during auto-refresh)
         if (!suppressErrors && (retryCount === 0 || res.status !== 500)) {
@@ -95,9 +108,15 @@ export function ConversationProvider({
         return;
       }
 
-      setConversations(data);
-      if (data.length > 0 && !selectedId) {
-        setSelectedId(data[0].id);
+      // Handle new pagination response format
+      const conversationsList = data.conversations || data;
+      const paginationData = data.pagination || null;
+
+      setConversations(conversationsList);
+      setPagination(paginationData);
+
+      if (conversationsList.length > 0 && !selectedId) {
+        setSelectedId(conversationsList[0].id);
       }
     } catch (error) {
       // Only log if not suppressed
@@ -212,6 +231,23 @@ export function ConversationProvider({
     await fetchConversations(false, 1, false); // Don't suppress errors for manual refresh
   };
 
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    fetchConversations(false, 0, false, page);
+  };
+
+  const nextPage = () => {
+    if (pagination && currentPage < pagination.totalPages) {
+      goToPage(currentPage + 1);
+    }
+  };
+
+  const prevPage = () => {
+    if (currentPage > 1) {
+      goToPage(currentPage - 1);
+    }
+  };
+
   return (
     <ConversationContext.Provider
       value={{
@@ -228,6 +264,10 @@ export function ConversationProvider({
         setShowArchived,
         showSent,
         setShowSent,
+        pagination,
+        goToPage,
+        nextPage,
+        prevPage,
       }}
     >
       {children}
