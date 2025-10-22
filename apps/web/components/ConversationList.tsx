@@ -27,6 +27,7 @@ type Conversation = {
 export default function ConversationList() {
   const { conversations, selectedConversation, selectConversation, loading, refreshing, refreshProgress, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived, showSent } =
     useConversations();
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [showStarred, setShowStarred] = useState(false);
   const [excludeNonSupport, setExcludeNonSupport] = useState(true);
   const [showNeedsReply, setShowNeedsReply] = useState(true);
@@ -206,14 +207,14 @@ export default function ConversationList() {
 
   if (loading) {
     return (
-      <div className="w-96 border-r border-border bg-background flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading...</p>
+      <div className={`${isCollapsed ? 'w-12' : 'w-96'} border-r border-border bg-background flex items-center justify-center transition-all duration-300`}>
+        <p className="text-muted-foreground text-sm">{isCollapsed ? '...' : 'Loading...'}</p>
       </div>
     );
   }
 
   return (
-    <div className="w-96 border-r border-border bg-background flex flex-col relative" style={{ fontFamily: "Roboto, sans-serif" }}>
+    <div className={`${isCollapsed ? 'w-12' : 'w-96'} border-r border-border bg-background flex flex-col relative transition-all duration-300`} style={{ fontFamily: "Roboto, sans-serif" }}>
       {/* Refresh Progress Indicator */}
       {refreshing && (
         <div className="absolute top-0 left-0 right-0 z-50">
@@ -231,14 +232,48 @@ export default function ConversationList() {
         </div>
       )}
 
+      {/* Collapsed View */}
+      {isCollapsed ? (
+        <div className="flex flex-col h-full items-center py-4">
+          <button
+            onClick={() => setIsCollapsed(false)}
+            className="p-2 hover:bg-accent rounded-md transition-colors mb-4"
+            title="Expand conversations"
+          >
+            <svg className="w-5 h-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+          <button
+            onClick={() => pollAndRefresh()}
+            className="p-2 hover:bg-accent rounded-md transition-colors"
+            title="Refresh"
+            disabled={loading}
+          >
+            <span className="text-lg">↻</span>
+          </button>
+        </div>
+      ) : (
+        <>
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-3">
-          <div>
-            <h2 className="text-lg font-sans font-semibold text-foreground">Conversations</h2>
-            <p className="text-sm font-sans text-muted-foreground mt-1">
-              {sortedConversations.length} threads
-            </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsCollapsed(true)}
+              className="p-1 hover:bg-accent rounded transition-colors"
+              title="Collapse sidebar"
+            >
+              <svg className="w-4 h-4 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div>
+              <h2 className="text-lg font-sans font-semibold text-foreground">Conversations</h2>
+              <p className="text-sm font-sans text-muted-foreground mt-1">
+                {sortedConversations.length} threads
+              </p>
+            </div>
           </div>
           <button
             onClick={() => pollAndRefresh()}
@@ -447,6 +482,8 @@ export default function ConversationList() {
           ))
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

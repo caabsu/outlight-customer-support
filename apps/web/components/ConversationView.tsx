@@ -54,6 +54,7 @@ export default function ConversationView() {
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [summaryMinimized, setSummaryMinimized] = useState(false);
+  const [activeInfoTooltip, setActiveInfoTooltip] = useState<string | null>(null);
 
   // Fetch conversation history
   useEffect(() => {
@@ -435,95 +436,124 @@ export default function ConversationView() {
         ))}
       </div>
 
-      {/* AI Actions Block */}
-      <div className="border-t border-border p-6 shrink-0 bg-gradient-to-b from-purple-500/5 to-transparent">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-8 bg-purple-500 rounded-full"></div>
-          <div>
-            <h3 className="text-xl font-sans font-bold text-foreground">AI Assistant</h3>
-            <p className="text-xs font-sans text-muted-foreground mt-0.5">
-              Intelligent tools powered by GPT to enhance your workflow
-            </p>
-          </div>
+      {/* AI Actions Block - Minimal Design */}
+      <div className="border-t border-border p-4 shrink-0 bg-purple-500/5">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-0.5 h-5 bg-purple-500 rounded-full"></div>
+          <h3 className="text-sm font-sans font-semibold text-foreground" style={{ fontWeight: 600 }}>AI Assistant</h3>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-4 gap-2">
           {/* AI Action 1: Generate Summary */}
-          <button
-            onClick={handleGenerateSummary}
-            disabled={loadingSummary}
-            className="group flex flex-col items-start p-5 bg-background border border-border rounded-lg hover:border-purple-500 hover:shadow-sm hover:shadow-purple-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <div className="flex items-center justify-between w-full mb-3">
-              <div className="w-2 h-2 rounded-full bg-purple-500 group-hover:scale-125 transition-transform"></div>
-              <span className="text-xs font-sans font-medium text-purple-500/70 uppercase tracking-wider">
-                {loadingSummary ? "Processing" : "Active"}
+          <div className="relative">
+            <button
+              onClick={handleGenerateSummary}
+              disabled={loadingSummary}
+              className="w-full px-3 py-2 bg-background border border-border rounded-md hover:border-purple-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between gap-1"
+            >
+              <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>
+                {loadingSummary ? "..." : "Summary"}
               </span>
-            </div>
-            <div className="text-left">
-              <p className="text-base font-sans font-semibold text-foreground mb-1">Generate Summary</p>
-              <p className="text-xs font-sans text-muted-foreground leading-relaxed">
-                {loadingSummary ? "Analyzing conversation and generating concise summary..." : "Create an intelligent summary of the conversation highlighting key points, issues, and next steps"}
-              </p>
-            </div>
-          </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveInfoTooltip(activeInfoTooltip === 'summary' ? null : 'summary');
+                }}
+                className="text-purple-500 hover:text-purple-600 transition-colors"
+                title="Info"
+              >
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </button>
+            {activeInfoTooltip === 'summary' && (
+              <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-purple-500 text-white text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
+                Create an intelligent summary highlighting key points, issues, and next steps
+              </div>
+            )}
+          </div>
 
-          {/* AI Action 2: Placeholder */}
-          <button
-            disabled
-            className="flex flex-col items-start p-5 bg-background border border-border rounded-lg opacity-40 cursor-not-allowed"
-          >
-            <div className="flex items-center justify-between w-full mb-3">
-              <div className="w-2 h-2 rounded-full bg-muted-foreground"></div>
-              <span className="text-xs font-sans font-medium text-muted-foreground uppercase tracking-wider">
-                Coming Soon
-              </span>
-            </div>
-            <div className="text-left">
-              <p className="text-base font-sans font-semibold text-foreground mb-1">Draft Reply</p>
-              <p className="text-xs font-sans text-muted-foreground leading-relaxed">
-                Generate context-aware reply suggestions based on conversation history and customer needs
-              </p>
-            </div>
-          </button>
+          {/* AI Action 2: Draft Reply */}
+          <div className="relative">
+            <button
+              disabled
+              className="w-full px-3 py-2 bg-background border border-border rounded-md opacity-40 cursor-not-allowed flex items-center justify-between gap-1"
+            >
+              <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>Draft</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveInfoTooltip(activeInfoTooltip === 'draft' ? null : 'draft');
+                }}
+                className="text-muted-foreground"
+                title="Info"
+              >
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </button>
+            {activeInfoTooltip === 'draft' && (
+              <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-muted text-foreground text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
+                Generate context-aware reply suggestions (Coming Soon)
+              </div>
+            )}
+          </div>
 
-          {/* AI Action 3: Placeholder */}
-          <button
-            disabled
-            className="flex flex-col items-start p-5 bg-background border border-border rounded-lg opacity-40 cursor-not-allowed"
-          >
-            <div className="flex items-center justify-between w-full mb-3">
-              <div className="w-2 h-2 rounded-full bg-muted-foreground"></div>
-              <span className="text-xs font-sans font-medium text-muted-foreground uppercase tracking-wider">
-                Coming Soon
-              </span>
-            </div>
-            <div className="text-left">
-              <p className="text-base font-sans font-semibold text-foreground mb-1">Suggest Tags</p>
-              <p className="text-xs font-sans text-muted-foreground leading-relaxed">
-                Automatically categorize conversations with intelligent tag recommendations
-              </p>
-            </div>
-          </button>
+          {/* AI Action 3: Suggest Tags */}
+          <div className="relative">
+            <button
+              disabled
+              className="w-full px-3 py-2 bg-background border border-border rounded-md opacity-40 cursor-not-allowed flex items-center justify-between gap-1"
+            >
+              <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>Tags</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveInfoTooltip(activeInfoTooltip === 'tags' ? null : 'tags');
+                }}
+                className="text-muted-foreground"
+                title="Info"
+              >
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </button>
+            {activeInfoTooltip === 'tags' && (
+              <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-muted text-foreground text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
+                Automatically categorize with intelligent tag recommendations (Coming Soon)
+              </div>
+            )}
+          </div>
 
-          {/* AI Action 4: Placeholder */}
-          <button
-            disabled
-            className="flex flex-col items-start p-5 bg-background border border-border rounded-lg opacity-40 cursor-not-allowed"
-          >
-            <div className="flex items-center justify-between w-full mb-3">
-              <div className="w-2 h-2 rounded-full bg-muted-foreground"></div>
-              <span className="text-xs font-sans font-medium text-muted-foreground uppercase tracking-wider">
-                Coming Soon
-              </span>
-            </div>
-            <div className="text-left">
-              <p className="text-base font-sans font-semibold text-foreground mb-1">Find Similar</p>
-              <p className="text-xs font-sans text-muted-foreground leading-relaxed">
-                Discover similar conversations and past solutions to resolve issues faster
-              </p>
-            </div>
-          </button>
+          {/* AI Action 4: Find Similar */}
+          <div className="relative">
+            <button
+              disabled
+              className="w-full px-3 py-2 bg-background border border-border rounded-md opacity-40 cursor-not-allowed flex items-center justify-between gap-1"
+            >
+              <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>Similar</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveInfoTooltip(activeInfoTooltip === 'similar' ? null : 'similar');
+                }}
+                className="text-muted-foreground"
+                title="Info"
+              >
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </button>
+            {activeInfoTooltip === 'similar' && (
+              <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-muted text-foreground text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
+                Discover similar conversations and past solutions (Coming Soon)
+              </div>
+            )}
+          </div>
         </div>
 
         {/* AI Summary Display */}
