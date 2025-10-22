@@ -1317,24 +1317,31 @@ export default function ConversationView() {
     {/* Right Sidebar */}
     <div className="w-80 border-l border-border bg-background flex flex-col shrink-0 overflow-hidden">
       {/* Past Conversations Section */}
-      <div className="border-b border-slate-200">
-        <div className="px-4 py-3 bg-slate-50 flex items-center justify-between">
-          <h3 className="font-sans font-semibold text-slate-700 text-xs uppercase tracking-wider">Past Conversations</h3>
-          <button
-            onClick={() => setShowAllHistory(true)}
-            className="text-xs font-sans font-medium text-slate-600 hover:text-slate-800 transition-colors"
-          >
-            View All →
-          </button>
+      <div className="border-b border-gray-200">
+        <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h3 className="font-sans font-semibold text-blue-900 text-sm">Past Conversations</h3>
+            </div>
+            <button
+              onClick={() => setShowAllHistory(true)}
+              className="text-xs font-sans font-medium text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              View All →
+            </button>
+          </div>
         </div>
 
-        <div className="h-[160px] overflow-y-auto px-4 py-3 space-y-1.5">
+        <div className="h-[160px] overflow-y-auto px-4 py-3 bg-white space-y-1.5">
           {loadingHistory ? (
             <>
               {[1, 2].map((i) => (
-                <div key={i} className="w-full p-2.5 bg-slate-50 animate-pulse rounded">
-                  <div className="h-3 bg-slate-200 rounded w-3/4 mb-1.5"></div>
-                  <div className="h-2 bg-slate-200 rounded w-1/2"></div>
+                <div key={i} className="w-full p-2.5 bg-gray-50 animate-pulse rounded">
+                  <div className="h-3 bg-gray-200 rounded w-3/4 mb-1.5"></div>
+                  <div className="h-2 bg-gray-200 rounded w-1/2"></div>
                 </div>
               ))}
             </>
@@ -1343,36 +1350,41 @@ export default function ConversationView() {
               <button
                 key={conv.id}
                 onClick={() => selectConversation(conv.id)}
-                className="w-full text-left p-2.5 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 transition-all cursor-pointer rounded"
+                className="w-full text-left p-2.5 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-all cursor-pointer rounded"
               >
-                <p className="text-xs font-sans font-medium text-slate-700 mb-0.5 truncate">
+                <p className="text-xs font-sans font-medium text-gray-900 mb-0.5 truncate">
                   {conv.subject}
                 </p>
-                <p className="text-[10px] font-sans text-slate-500 truncate">
+                <p className="text-[10px] font-sans text-gray-600 truncate">
                   {new Date(conv.lastMessageAt).toLocaleDateString()} • {conv.messages.length} messages
                 </p>
               </button>
             ))
           ) : (
             <div className="p-6 text-center">
-              <p className="text-xs font-sans text-slate-500">No past conversations</p>
+              <p className="text-xs font-sans text-gray-500">No past conversations</p>
             </div>
           )}
         </div>
       </div>
 
       {/* Quick Actions Section */}
-      <div className="border-b border-slate-200">
-        <div className="px-4 py-3 bg-slate-50">
-          <h3 className="font-sans font-semibold text-slate-700 text-xs uppercase tracking-wider">Quick Actions</h3>
+      <div className="border-b border-gray-200">
+        <div className="px-4 py-3 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <h3 className="font-sans font-semibold text-emerald-900 text-sm">Quick Actions</h3>
+          </div>
         </div>
 
-        <div className="px-4 py-3 space-y-2">
+        <div className="px-4 py-3 bg-white space-y-2">
           {/* Next Unreplied Button */}
           <button
             onClick={goToNextUnreplied}
             disabled={navigatingUnreplied}
-            className="w-full px-3 py-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-md transition-colors text-sm font-sans font-medium disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between"
+            className="w-full px-3 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors text-sm font-sans font-medium disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between shadow-sm"
           >
             <div className="flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
@@ -1385,7 +1397,7 @@ export default function ConversationView() {
           {/* Oldest Unreplied Button */}
           <button
             onClick={goToOldestUnreplied}
-            className="w-full px-3 py-2.5 bg-slate-600 hover:bg-slate-700 text-white rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-between"
+            className="w-full px-3 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-between shadow-sm"
           >
             <div className="flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
@@ -1399,7 +1411,7 @@ export default function ConversationView() {
           {!selectedConversation.tags?.includes("non-customer-support") && (
             <button
               onClick={handleMarkNonSupport}
-              className="w-full px-3 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 hover:border-slate-400 text-slate-700 rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-between"
+              className="w-full px-3 py-2.5 bg-white border-2 border-orange-300 hover:bg-orange-50 text-orange-700 rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-between"
             >
               <div className="flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
@@ -1413,7 +1425,7 @@ export default function ConversationView() {
           {/* Mark as Resolved Button */}
           <button
             onClick={handleMarkResolved}
-            className="w-full px-3 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 hover:border-slate-400 text-slate-700 rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-between"
+            className="w-full px-3 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-between shadow-sm"
           >
             <div className="flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
@@ -1426,15 +1438,20 @@ export default function ConversationView() {
       </div>
 
       {/* Shopify Section */}
-      <div className="border-b border-slate-200">
-        <div className="px-4 py-3 bg-slate-50">
+      <div className="border-b border-gray-200">
+        <div className="px-4 py-3 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="font-sans font-semibold text-slate-700 text-xs uppercase tracking-wider">Shopify Customer</h3>
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+              <h3 className="font-sans font-semibold text-purple-900 text-sm">Shopify Customer</h3>
+            </div>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handleAIDetectEmail}
                 disabled={detectingEmail || !selectedConversation}
-                className="px-2 py-1 bg-slate-700 hover:bg-slate-800 text-white rounded text-[10px] font-sans font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                className="px-2 py-1 bg-purple-500 hover:bg-purple-600 text-white rounded text-[10px] font-sans font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap shadow-sm"
                 title="Use AI to detect customer email from message"
               >
                 {detectingEmail ? "Detecting..." : "AI Detect"}
@@ -1453,39 +1470,39 @@ export default function ConversationView() {
               onChange={(e) => setShopifySearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleShopifySearch()}
               placeholder="Search by email or name..."
-              className="flex-1 px-2 py-1.5 text-xs font-sans bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-400 focus:border-slate-400"
+              className="flex-1 px-2 py-1.5 text-xs font-sans bg-white border border-purple-200 rounded focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-300"
             />
             <button
               onClick={handleShopifySearch}
               disabled={searchingShopify || !shopifySearchQuery.trim()}
-              className="px-2 py-1.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-xs font-sans font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-2 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded text-xs font-sans font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
             >
               {searchingShopify ? "..." : "Search"}
             </button>
           </div>
         </div>
 
-        <div className="px-4 py-3 space-y-2 max-h-[400px] overflow-y-auto">
+        <div className="px-4 py-3 bg-white space-y-2 max-h-[400px] overflow-y-auto">
           {loadingShopify ? (
             <div className="p-4 text-center">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-slate-600 mx-auto mb-2"></div>
-              <p className="text-xs font-sans text-slate-500">Loading...</p>
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500 mx-auto mb-2"></div>
+              <p className="text-xs font-sans text-gray-600">Loading...</p>
             </div>
           ) : shopifyError ? (
-            <div className="p-3 bg-slate-50 rounded text-center">
-              <p className="text-xs font-sans text-slate-600">{shopifyError}</p>
+            <div className="p-3 bg-gray-50 rounded text-center">
+              <p className="text-xs font-sans text-gray-700">{shopifyError}</p>
             </div>
           ) : shopifyCustomer ? (
             <>
               {/* Customer Info */}
-              <div className="bg-white border border-slate-200 rounded p-3">
-                <p className="text-sm font-sans font-semibold text-slate-800 mb-2">
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded p-3">
+                <p className="text-sm font-sans font-semibold text-purple-900 mb-2">
                   {shopifyCustomer.first_name} {shopifyCustomer.last_name}
                 </p>
-                <div className="space-y-1 text-xs font-sans text-slate-600">
-                  <p>Orders: <span className="font-medium text-slate-800">{shopifyCustomer.orders_count}</span></p>
-                  <p>Total Spent: <span className="font-medium text-slate-800">${parseFloat(shopifyCustomer.total_spent).toFixed(2)}</span></p>
-                  <p className={shopifyCustomer.verified_email ? "text-green-700" : "text-red-700"}>
+                <div className="space-y-1 text-xs font-sans text-gray-700">
+                  <p>Orders: <span className="font-semibold text-purple-900">{shopifyCustomer.orders_count}</span></p>
+                  <p>Total Spent: <span className="font-semibold text-purple-900">${parseFloat(shopifyCustomer.total_spent).toFixed(2)}</span></p>
+                  <p className={shopifyCustomer.verified_email ? "text-green-700 font-medium" : "text-red-700 font-medium"}>
                     {shopifyCustomer.verified_email ? "✓ Email Verified" : "✗ Email Not Verified"}
                   </p>
                 </div>
@@ -1494,7 +1511,7 @@ export default function ConversationView() {
               {/* Order List */}
               {shopifyOrders.length > 0 ? (
                 <div className="space-y-2">
-                  <p className="text-xs font-sans font-semibold text-slate-700 px-1">Recent Orders</p>
+                  <p className="text-xs font-sans font-semibold text-gray-800 px-1">Recent Orders</p>
                   {shopifyOrders.slice(0, 5).map((order) => {
                     const trackingInfo = getTrackingInfo(order);
                     const { days, weeks } = getDaysSincePurchase(order.created_at);
@@ -1503,13 +1520,13 @@ export default function ConversationView() {
                       <div
                         key={order.id}
                         onClick={() => setSelectedOrder(order.id === selectedOrder?.id ? null : order)}
-                        className="w-full text-left p-3 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 rounded transition-all cursor-pointer"
+                        className="w-full text-left p-3 bg-gray-50 border border-gray-200 hover:border-purple-300 hover:bg-purple-50 rounded transition-all cursor-pointer"
                       >
                         <div className="flex items-center justify-between mb-1.5">
-                          <p className="text-sm font-sans font-semibold text-slate-800">
+                          <p className="text-sm font-sans font-semibold text-gray-900">
                             {order.name}
                           </p>
-                          <span className={`text-[10px] font-sans font-medium px-1.5 py-0.5 rounded ${
+                          <span className={`text-[10px] font-sans font-semibold px-1.5 py-0.5 rounded ${
                             order.financial_status === "paid"
                               ? "bg-green-100 text-green-800"
                               : order.financial_status === "refunded"
@@ -1520,23 +1537,23 @@ export default function ConversationView() {
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between text-xs font-sans text-slate-600 mb-1">
+                        <div className="flex items-center justify-between text-xs font-sans text-gray-700 mb-1">
                           <span>{new Date(order.created_at).toLocaleDateString()}</span>
-                          <span className="font-semibold text-slate-800">${parseFloat(order.total_price).toFixed(2)}</span>
+                          <span className="font-bold text-gray-900">${parseFloat(order.total_price).toFixed(2)}</span>
                         </div>
 
                         <div className="flex items-center justify-between">
-                          <div className="text-[10px] font-sans text-slate-500">
+                          <div className="text-[10px] font-sans text-gray-600">
                             {days} days ago ({weeks}w)
                           </div>
 
                           {/* Fulfillment Status Badge */}
-                          <span className={`text-[10px] font-sans font-medium px-1.5 py-0.5 rounded ${
+                          <span className={`text-[10px] font-sans font-semibold px-1.5 py-0.5 rounded ${
                             order.fulfillment_status === "fulfilled"
-                              ? "bg-slate-100 text-slate-700"
+                              ? "bg-blue-100 text-blue-800"
                               : order.fulfillment_status === "partial"
                               ? "bg-amber-100 text-amber-800"
-                              : "bg-slate-100 text-slate-600"
+                              : "bg-gray-200 text-gray-700"
                           }`}>
                             {order.fulfillment_status === "fulfilled"
                               ? "Shipped"
@@ -1659,26 +1676,31 @@ export default function ConversationView() {
                   })}
                 </div>
               ) : (
-                <div className="p-3 bg-slate-50 rounded text-center">
-                  <p className="text-xs font-sans text-slate-500">No orders found</p>
+                <div className="p-3 bg-gray-50 rounded text-center">
+                  <p className="text-xs font-sans text-gray-600">No orders found</p>
                 </div>
               )}
             </>
           ) : (
-            <div className="p-3 bg-slate-50 rounded text-center">
-              <p className="text-xs font-sans text-slate-500">No Shopify customer found</p>
+            <div className="p-3 bg-gray-50 rounded text-center">
+              <p className="text-xs font-sans text-gray-600">No Shopify customer found</p>
             </div>
           )}
         </div>
       </div>
 
       {/* AI Assistant Section */}
-      <div className="border-b border-slate-200">
-        <div className="px-4 py-3 bg-slate-50">
-          <h3 className="font-sans font-semibold text-slate-700 text-xs uppercase tracking-wider">AI Assistant</h3>
+      <div className="border-b border-gray-200">
+        <div className="px-4 py-3 bg-gradient-to-r from-violet-50 to-fuchsia-50 border-b border-violet-100">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            <h3 className="font-sans font-semibold text-violet-900 text-sm">AI Assistant</h3>
+          </div>
         </div>
 
-        <div className="px-4 py-3 space-y-2">
+        <div className="px-4 py-3 bg-white space-y-2">
           {/* Draft Button with KB Info */}
           <div className="relative">
             <button
@@ -1699,10 +1721,10 @@ export default function ConversationView() {
                 }
               }}
               disabled={!selectedConversation}
-              className="w-full px-3 py-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-md transition-colors text-sm font-sans font-medium disabled:opacity-60 disabled:cursor-not-allowed relative flex items-center justify-between"
+              className="w-full px-3 py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-md transition-colors text-sm font-sans font-medium disabled:opacity-60 disabled:cursor-not-allowed relative flex items-center justify-between shadow-sm"
             >
               {loadingDraft && (
-                <div className="absolute inset-0 bg-slate-800/80 rounded-md flex items-center justify-center">
+                <div className="absolute inset-0 bg-violet-600/90 rounded-md flex items-center justify-center">
                   <svg className="w-4 h-4 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
@@ -1830,7 +1852,7 @@ export default function ConversationView() {
             <button
               onClick={() => {/* TODO: Implement summarize */}}
               disabled={!selectedConversation}
-              className="w-full px-3 py-2.5 bg-slate-600 hover:bg-slate-700 text-white rounded-md transition-colors text-sm font-sans font-medium disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between"
+              className="w-full px-3 py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-md transition-colors text-sm font-sans font-medium disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between shadow-sm"
             >
               <span>Summarize</span>
               {/* Info Icon */}
@@ -1932,10 +1954,10 @@ export default function ConversationView() {
       <div className="flex-1 min-h-[60px]"></div>
 
       {/* Compose Email Button */}
-      <div className="border-t border-slate-200 p-4">
+      <div className="border-t border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100 p-4">
         <button
           onClick={() => openEmailComposer()}
-          className="w-full px-3 py-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-center gap-2"
+          className="w-full px-3 py-2.5 bg-teal-500 hover:bg-teal-600 text-white rounded-md transition-colors text-sm font-sans font-semibold flex items-center justify-center gap-2 shadow-sm"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
