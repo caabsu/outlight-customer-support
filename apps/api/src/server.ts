@@ -131,8 +131,32 @@ app.get("/conversations/next-unreplied/:currentId", async (req: Request, res: Re
 
     // Find the next one after current
     const currentIndex = unreplied.findIndex(c => c.id === currentId);
-    const next = unreplied[currentIndex + 1] || unreplied[0];
-    res.json(next || null);
+
+    if (currentIndex >= 0) {
+      // Current conversation is in unreplied list - get next one
+      const next = unreplied[currentIndex + 1] || unreplied[0];
+      res.json(next || null);
+    } else {
+      // Current conversation not in unreplied list (e.g., just marked as non-support)
+      // Fetch the current conversation to get its timestamp
+      const current = await prisma.conversation.findUnique({
+        where: { id: currentId }
+      });
+
+      if (!current) {
+        // Current conversation doesn't exist, return oldest unreplied
+        res.json(unreplied[0] || null);
+        return;
+      }
+
+      // Find next unreplied chronologically after current conversation
+      const next = unreplied.find(c =>
+        new Date(c.lastMessageAt).getTime() > new Date(current.lastMessageAt).getTime()
+      );
+
+      // If found, return it; otherwise wrap to oldest
+      res.json(next || unreplied[0] || null);
+    }
   } catch (error) {
     console.error("Error fetching next unreplied:", error);
     res.status(500).json({ error: "Failed to fetch next unreplied" });
