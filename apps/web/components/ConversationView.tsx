@@ -454,18 +454,18 @@ export default function ConversationView() {
               <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>
                 {loadingSummary ? "..." : "Summary"}
               </span>
-              <button
+              <span
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveInfoTooltip(activeInfoTooltip === 'summary' ? null : 'summary');
                 }}
-                className="text-purple-500 hover:text-purple-600 transition-colors"
+                className="text-purple-500 hover:text-purple-600 transition-colors cursor-pointer"
                 title="Info"
               >
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                 </svg>
-              </button>
+              </span>
             </button>
             {activeInfoTooltip === 'summary' && (
               <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-purple-500 text-white text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
@@ -481,18 +481,18 @@ export default function ConversationView() {
               className="w-full px-3 py-2 bg-background border border-border rounded-md opacity-40 cursor-not-allowed flex items-center justify-between gap-1"
             >
               <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>Draft</span>
-              <button
+              <span
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveInfoTooltip(activeInfoTooltip === 'draft' ? null : 'draft');
                 }}
-                className="text-muted-foreground"
+                className="text-muted-foreground cursor-pointer"
                 title="Info"
               >
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                 </svg>
-              </button>
+              </span>
             </button>
             {activeInfoTooltip === 'draft' && (
               <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-muted text-foreground text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
@@ -508,18 +508,18 @@ export default function ConversationView() {
               className="w-full px-3 py-2 bg-background border border-border rounded-md opacity-40 cursor-not-allowed flex items-center justify-between gap-1"
             >
               <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>Tags</span>
-              <button
+              <span
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveInfoTooltip(activeInfoTooltip === 'tags' ? null : 'tags');
                 }}
-                className="text-muted-foreground"
+                className="text-muted-foreground cursor-pointer"
                 title="Info"
               >
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                 </svg>
-              </button>
+              </span>
             </button>
             {activeInfoTooltip === 'tags' && (
               <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-muted text-foreground text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
@@ -535,18 +535,18 @@ export default function ConversationView() {
               className="w-full px-3 py-2 bg-background border border-border rounded-md opacity-40 cursor-not-allowed flex items-center justify-between gap-1"
             >
               <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>Similar</span>
-              <button
+              <span
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveInfoTooltip(activeInfoTooltip === 'similar' ? null : 'similar');
                 }}
-                className="text-muted-foreground"
+                className="text-muted-foreground cursor-pointer"
                 title="Info"
               >
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                 </svg>
-              </button>
+              </span>
             </button>
             {activeInfoTooltip === 'similar' && (
               <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-muted text-foreground text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
