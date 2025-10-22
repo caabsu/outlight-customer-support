@@ -138,27 +138,27 @@ export function ConversationProvider({
     }
   };
 
-  // Initial fetch with minimal delay and retry
+  // Initial fetch with delay and retry to allow API server startup
   useEffect(() => {
     let retryTimer: NodeJS.Timeout;
     let mounted = true;
 
-    // Immediate fetch with minimal delay
+    // Wait for API server to start (it can be slow on first load)
     const timer = setTimeout(async () => {
       if (!mounted) return;
-      await fetchConversations(false, 0, false); // Don't suppress initial errors
+      await fetchConversations(false, 0, true); // Suppress errors on first attempt
 
-      // If still no data after 1 second, retry once
+      // If still no data after 3 seconds, retry
       retryTimer = setTimeout(async () => {
         if (!mounted) return;
-        await fetchConversations(false, 1, false); // Don't suppress retry errors
+        await fetchConversations(false, 1, false); // Show errors on retry
 
         // Force loading to false after final retry
         setTimeout(() => {
           if (mounted) setLoading(false);
-        }, 500);
-      }, 1000);
-    }, 100);
+        }, 1000);
+      }, 3000);
+    }, 1000);
 
     return () => {
       mounted = false;
