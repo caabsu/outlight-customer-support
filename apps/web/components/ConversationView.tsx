@@ -395,44 +395,135 @@ export default function ConversationView() {
   };
 
   const goToOldestUnreplied = async () => {
-    // If pagination exists and we're not on the last page, navigate to last page first
-    if (pagination && pagination.totalPages > 1 && pagination.page !== pagination.totalPages) {
-      await goToPage(pagination.totalPages);
-      // After page loads, recursively call this function to select oldest unreplied on that page
-      setTimeout(() => goToOldestUnreplied(), 100);
-      return;
-    }
+    if (navigatingUnreplied) return; // Prevent multiple clicks
 
-    // Filter to unreplied conversations (last message is inbound)
-    const unrepliedConversations = conversations.filter((conv) => {
-      // Exclude non-customer-support
-      if (conv.tags?.includes("non-customer-support")) return false;
+    try {
+      // STEP 1: Check current page FIRST for oldest unreplied (instant!)
+      const unrepliedOnPage = conversations.filter((conv) => {
+        if (conv.tags?.includes("non-customer-support")) return false;
+        if (conv.messages.length === 0) return false;
+        const lastMessage = conv.messages[conv.messages.length - 1];
+        return lastMessage.direction === "inbound";
+      });
 
-      // Check if last message is inbound (needs reply)
-      if (conv.messages.length === 0) return false;
-      const lastMessage = conv.messages[conv.messages.length - 1];
-      return lastMessage.direction === "inbound";
-    });
+      const sortedUnreplied = unrepliedOnPage.sort((a, b) =>
+        new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
+      );
 
-    // Sort by lastMessageAt (oldest first)
-    const sortedUnreplied = unrepliedConversations.sort((a, b) =>
-      new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
-    );
+      // If oldest is on current page, select it INSTANTLY
+      if (sortedUnreplied.length > 0) {
+        const oldestOnPage = sortedUnreplied[0];
 
-    if (sortedUnreplied.length === 0) {
-      // No unreplied on this page, try previous pages
-      if (pagination && pagination.page > 1) {
-        await goToPage(pagination.page - 1);
-        setTimeout(() => goToOldestUnreplied(), 100);
+        // Check if this is the globally oldest by calling API
+        const response = await fetch(`/api/conversations/next-unreplied`);
+        if (response.ok) {
+          const globallyOldest = await response.json();
+
+          // If the oldest on this page IS the globally oldest, select it instantly
+          if (globallyOldest && globallyOldest.id === oldestOnPage.id) {
+            selectConversation(oldestOnPage.id);
+            return; // ⚡ INSTANT
+          }
+        }
+      }
+
+      // STEP 2: Need to find oldest across all pages - use API
+      setNavigatingUnreplied(true);
+
+      const response = await fetch(`/api/conversations/next-unreplied`);
+
+      if (!response.ok) {
+        console.error("Failed to fetch oldest unreplied");
+        setNavigatingUnreplied(false);
         return;
       }
-      alert("No unreplied emails!");
-      return;
-    }
 
-    // Jump directly to the oldest unreplied email
-    const oldestConv = sortedUnreplied[0];
-    selectConversation(oldestConv.id);
+      const oldestConversation = await response.json();
+
+      if (!oldestConversation || !oldestConversation.id) {
+        alert("No unreplied emails!");
+        setNavigatingUnreplied(false);
+        return;
+      }
+
+      // Check if it's on current page
+      const isOnCurrentPage = conversations.some(conv => conv.id === oldestConversation.id);
+
+      if (isOnCurrentPage) {
+        selectConversation(oldestConversation.id);
+        setNavigatingUnreplied(false);
+      } else if (pagination) {
+        // Need to find which page has this conversation
+        const oldestDate = new Date(oldestConversation.lastMessageAt).getTime();
+        const currentPageOldest = new Date(conversations[conversations.length - 1]?.lastMessageAt || 0).getTime();
+        const currentPageNewest = new Date(conversations[0]?.lastMessageAt || 0).getTime();
+
+        let foundPage = 0;
+
+        // Search strategy: oldest emails are usually on later pages
+        if (oldestDate < currentPageOldest) {
+          // Search forward through later pages (most likely)
+          for (let page = pagination.page + 1; page <= pagination.totalPages; page++) {
+            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            if (res.ok) {
+              const data = await res.json();
+              const convs = data.conversations || data;
+              if (convs.some((c: any) => c.id === oldestConversation.id)) {
+                foundPage = page;
+                break;
+              }
+            }
+          }
+        } else if (oldestDate > currentPageNewest) {
+          // Search backward through earlier pages
+          for (let page = pagination.page - 1; page >= 1; page--) {
+            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            if (res.ok) {
+              const data = await res.json();
+              const convs = data.conversations || data;
+              if (convs.some((c: any) => c.id === oldestConversation.id)) {
+                foundPage = page;
+                break;
+              }
+            }
+          }
+        }
+
+        // Full search fallback
+        if (foundPage === 0) {
+          for (let page = 1; page <= pagination.totalPages; page++) {
+            if (page === pagination.page) continue;
+            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            if (res.ok) {
+              const data = await res.json();
+              const convs = data.conversations || data;
+              if (convs.some((c: any) => c.id === oldestConversation.id)) {
+                foundPage = page;
+                break;
+              }
+            }
+          }
+        }
+
+        if (foundPage > 0 && foundPage !== pagination.page) {
+          // Navigate to the page with the conversation
+          await goToPage(foundPage);
+          setTimeout(() => {
+            selectConversation(oldestConversation.id);
+            setNavigatingUnreplied(false);
+          }, 200);
+        } else {
+          selectConversation(oldestConversation.id);
+          setNavigatingUnreplied(false);
+        }
+      } else {
+        selectConversation(oldestConversation.id);
+        setNavigatingUnreplied(false);
+      }
+    } catch (error) {
+      console.error("Error navigating to oldest unreplied:", error);
+      setNavigatingUnreplied(false);
+    }
   };
 
   // Helper: Calculate days and weeks since purchase
