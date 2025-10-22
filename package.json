@@ -5,7 +5,7 @@
     "scripts": {
         "dev": "ts-node apps/api/src/server.ts",
         "dev:web": "cd apps/web && npm run dev",
-        "dev:all": "npm run dev & npm run dev:web",
+        "dev:all": "concurrently \"npm run dev\" \"npm run dev:web\" --names \"API,WEB\" --prefix-colors \"cyan,magenta\"",
         "build": "tsc && cd apps/web && npm run build",
         "start": "node dist/apps/api/src/server.js",
         "start:web": "cd apps/web && npm start",
@@ -27,6 +27,7 @@
         "@types/cors": "^2.8.19",
         "@types/express": "^5.0.3",
         "@types/node": "^24.9.1",
+        "concurrently": "^9.2.1",
         "prisma": "^6.17.1",
         "ts-node": "^10.9.2",
         "typescript": "^5.9.3"
@@ -38,6 +39,7 @@
         "dotenv": "^17.2.3",
         "express": "^5.1.0",
         "googleapis": "^164.1.0",
+        "openai": "^6.6.0",
         "pg": "^8.16.3",
         "zod": "^4.1.12"
     }

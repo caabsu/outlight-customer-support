@@ -27,20 +27,25 @@ model Customer {
 }
 
 model Conversation {
-  id             String    @id @default(uuid())
-  gmailThreadId  String    @unique
-  subject        String?
-  customer       Customer  @relation(fields: [customerId], references: [id])
-  customerId     String
-  status         String    @default("open")
-  assignedUser   User?     @relation("UserConversations", fields: [assignedUserId], references: [id])
-  assignedUserId String?
-  firstMessageAt DateTime?
-  lastMessageAt  DateTime?
-  lastHistoryId  BigInt?
-  unreadAgent    Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  messages       Message[]
+  id                    String    @id @default(uuid())
+  gmailThreadId         String    @unique
+  subject               String?
+  customer              Customer  @relation(fields: [customerId], references: [id])
+  customerId            String
+  status                String    @default("open")
+  assignedUser          User?     @relation("UserConversations", fields: [assignedUserId], references: [id])
+  assignedUserId        String?
+  firstMessageAt        DateTime?
+  lastMessageAt         DateTime?
+  lastHistoryId         BigInt?
+  unreadAgent           Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  starred               Boolean   @default(false)
+  archived              Boolean   @default(false)
+  tags                  String[]  @default([])
+  aiSummary             String?
+  aiSummaryGeneratedAt  DateTime?
+  messages              Message[]
 }
 
 model Message {
@@ -56,6 +61,8 @@ model Message {
   bodyHtml       String?
   bodyText       String?
   attachments    Json         @default("[]")
+  replyToEmail   String?
+  isRead         Boolean      @default(true)
 }
 
 model OAuthToken {
@@ -65,4 +72,15 @@ model OAuthToken {
   accessToken  String
   refreshToken String
   expiry       DateTime
+}
+
+model KnowledgeBase {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  category  String?
+  tags      String[] @default([])
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

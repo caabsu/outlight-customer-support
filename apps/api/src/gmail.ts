@@ -11,10 +11,6 @@ function oauth2() {
   return oAuth2Client;
 }
 
-// Cache the authenticated client to avoid refreshing tokens on every request
-let cachedGmailClient: any = null;
-let cacheExpiry: number = 0;
-
 export async function googleAuthStart(_req: Request, res: Response) {
   const oAuth2Client = oauth2();
   const scopes = [
@@ -52,12 +48,6 @@ export async function googleAuthCallback(req: Request, res: Response) {
 }
 
 async function getAuthedClient() {
-  // Return cached client if still valid (expires in 5 minutes)
-  const now = Date.now();
-  if (cachedGmailClient && now < cacheExpiry) {
-    return cachedGmailClient;
-  }
-
   const row = await prisma.oAuthToken.findFirst({ where: { accountEmail: process.env.GMAIL_ACCOUNT_EMAIL! } });
   if (!row) throw new Error("No OAuth tokens saved. Hit /oauth/google first.");
 
@@ -67,105 +57,55 @@ async function getAuthedClient() {
     refresh_token: row.refreshToken,
   });
 
-  // Only refresh if token is expired or about to expire
-  const tokenExpiry = row.expiry.getTime();
-  if (now >= tokenExpiry - 60000) { // Refresh if expires in < 1 minute
-    const { credentials } = await oAuth2Client.refreshAccessToken();
-    await prisma.oAuthToken.update({
-      where: { accountEmail: process.env.GMAIL_ACCOUNT_EMAIL! },
-      data: { accessToken: credentials.access_token!, expiry: new Date(credentials.expiry_date!) },
-    });
-  }
-
-  cachedGmailClient = google.gmail({ version: "v1", auth: oAuth2Client });
-  cacheExpiry = now + 5 * 60 * 1000; // Cache for 5 minutes
-  return cachedGmailClient;
+  const { credentials } = await oAuth2Client.refreshAccessToken();
+  await prisma.oAuthToken.update({
+    where: { accountEmail: process.env.GMAIL_ACCOUNT_EMAIL! },
+    data: { accessToken: credentials.access_token!, expiry: new Date(credentials.expiry_date!) },
+  });
+  return google.gmail({ version: "v1", auth: oAuth2Client });
 }
 
 export async function pollOnce(_req: Request, res: Response) {
-  // Set up Server-Sent Events for progress tracking
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.flushHeaders();
+  const gmail = await getAuthedClient();
 
-  const sendProgress = (stage: string, percent: number, message: string) => {
-    const data = JSON.stringify({ stage, percent, message });
-    res.write(`data: ${data}\n\n`);
-  };
-
-  // Send immediate feedback
-  sendProgress('syncing', 40, 'Syncing...');
-
-  try {
-    // Start all async operations in parallel
-    const [gmail, existing] = await Promise.all([
-      getAuthedClient(),
-      prisma.conversation.findFirst()
+  const existing = await prisma.conversation.findFirst();
+  if (!existing) {
+    // Initial sync: fetch both inbox and sent
+    const [inboxThreads, sentThreads] = await Promise.all([
+      gmail.users.threads.list({ userId: "me", q: "in:inbox", maxResults: 50 }),
+      gmail.users.threads.list({ userId: "me", q: "in:sent", maxResults: 50 })
     ]);
 
-    const isInitialSync = !existing;
-    const query = isInitialSync ? "" : "newer_than:2d";
-    const maxResults = isInitialSync ? 50 : 20;
+    const allThreads = [
+      ...(inboxThreads.data.threads ?? []),
+      ...(sentThreads.data.threads ?? [])
+    ];
 
-    // Fetch both inbox and sent in parallel
-    const [inboxResponse, sentResponse] = await Promise.all([
-      gmail.users.threads.list({
-        userId: "me",
-        q: query ? `in:inbox ${query}` : "in:inbox",
-        maxResults
-      }),
-      gmail.users.threads.list({
-        userId: "me",
-        q: query ? `in:sent ${query}` : "in:sent",
-        maxResults
-      })
-    ]);
+    // Process initial threads in parallel for much faster first-time sync
+    // Use Set to avoid processing same thread twice (if it's both inbox and sent)
+    const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
+    await Promise.all(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
 
-    const allThreadIds = new Set([
-      ...(inboxResponse.data.threads || []).map(t => t.id!),
-      ...(sentResponse.data.threads || []).map(t => t.id!)
-    ]);
-
-    const threadIds = Array.from(allThreadIds);
-    const totalThreads = threadIds.length;
-
-    if (totalThreads === 0) {
-      sendProgress('complete', 100, 'Up to date');
-      res.write(`data: ${JSON.stringify({ done: true, totalThreads: 0 })}\n\n`);
-      res.end();
-      return;
-    }
-
-    sendProgress('syncing', 60, `${totalThreads} threads`);
-
-    // Process in larger batches for speed
-    const BATCH_SIZE = 15;
-    let processed = 0;
-
-    for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
-      const batch = threadIds.slice(i, i + BATCH_SIZE);
-      await Promise.all(
-        batch.map(threadId => ingestThread(gmail, threadId).catch(err => {
-          console.error(`Failed to ingest ${threadId}:`, err);
-          return null;
-        }))
-      );
-
-      processed += batch.length;
-      const percent = 60 + Math.floor((processed / totalThreads) * 35);
-      sendProgress('syncing', percent, `${processed}/${totalThreads}`);
-    }
-
-    sendProgress('complete', 100, 'Done');
-    res.write(`data: ${JSON.stringify({ done: true, totalThreads })}\n\n`);
-    res.end();
-  } catch (error) {
-    console.error('Poll error:', error);
-    sendProgress('error', 0, error instanceof Error ? error.message : 'Sync failed');
-    res.end();
+    return res.json({ ingestedThreads: uniqueThreadIds.size });
   }
+
+  // Regular poll: fetch both inbox and sent from last 2 days
+  const [inboxThreads, sentThreads] = await Promise.all([
+    gmail.users.threads.list({ userId: "me", q: "in:inbox newer_than:2d", maxResults: 20 }),
+    gmail.users.threads.list({ userId: "me", q: "in:sent newer_than:2d", maxResults: 20 })
+  ]);
+
+  const allThreads = [
+    ...(inboxThreads.data.threads ?? []),
+    ...(sentThreads.data.threads ?? [])
+  ];
+
+  // Process threads in parallel for much faster performance
+  // Use Set to avoid processing same thread twice
+  const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
+  await Promise.all(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
+
+  res.json({ updatedThreads: uniqueThreadIds.size });
 }
 
 async function ingestThread(gmail: any, threadId: string) {
@@ -197,14 +137,19 @@ async function ingestThread(gmail: any, threadId: string) {
     },
   });
 
-  for (const m of messages) {
+  // Process all messages in parallel for better performance
+  await Promise.all(messages.map(async (m: any) => {
     const dir = (getHeader(m, "from") || "").includes(process.env.GMAIL_ACCOUNT_EMAIL!) ? "outbound" : "inbound";
     const sentAt = new Date(Number(m.internalDate!));
     const { html, text } = flattenParts(m.payload);
+    const replyTo = getHeader(m, "reply-to");
 
     await prisma.message.upsert({
       where: { gmailMessageId: m.id! },
-      update: {},
+      update: {
+        // Update replyToEmail for existing messages on re-poll
+        replyToEmail: replyTo ? parseEmail(replyTo) : null,
+      },
       create: {
         conversationId: convo.id,
         gmailMessageId: m.id!,
@@ -216,9 +161,10 @@ async function ingestThread(gmail: any, threadId: string) {
         bodyHtml: html?.join("\n") || null,
         bodyText: text?.join("\n") || null,
         attachments: [] as any,
+        replyToEmail: replyTo ? parseEmail(replyTo) : null,
       },
     });
-  }
+  }));
 }
 
 function getHeader(msg: any, name: string): string | undefined {
@@ -244,17 +190,25 @@ export async function sendReply(conversationId: string, to: string, body: string
   // Get the conversation to find the thread ID
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
-    include: { messages: { orderBy: { sentAt: "asc" } } }
+    include: {
+      messages: { orderBy: { sentAt: "desc" } },
+      customer: true
+    }
   });
 
   if (!conversation) {
     throw new Error("Conversation not found");
   }
 
+  // CRITICAL: Always use the explicitly provided 'to' address
+  // Only fall back to Reply-To if no explicit address is provided
+  const lastInboundMessage = conversation.messages.find(m => m.direction === "inbound");
+  const recipientEmail = to || lastInboundMessage?.replyToEmail || conversation.customer?.primaryEmail;
+
   // Create email in RFC 2822 format
   const subject = conversation.subject;
   const emailLines = [
-    `To: ${to}`,
+    `To: ${recipientEmail}`,
     `Subject: Re: ${subject}`,
     ``,
     body,
@@ -283,7 +237,7 @@ export async function sendReply(conversationId: string, to: string, body: string
       gmailMessageId: result.data.id!,
       direction: "outbound",
       fromEmail: process.env.GMAIL_ACCOUNT_EMAIL!,
-      toEmails: [to] as any,
+      toEmails: [recipientEmail] as any,
       ccEmails: [] as any,
       sentAt: now,
       bodyHtml: null,
@@ -297,6 +251,38 @@ export async function sendReply(conversationId: string, to: string, body: string
     where: { id: conversationId },
     data: { lastMessageAt: now },
   });
+
+  return result.data;
+}
+
+export async function sendNewEmail(to: string, subject: string, body: string) {
+  const gmail = await getAuthedClient();
+
+  // Create email in RFC 2822 format (not as a reply, so no threadId)
+  const emailLines = [
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    ``,
+    body,
+  ];
+  const email = emailLines.join("\r\n");
+  const encodedMessage = Buffer.from(email)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+  // Send the email as a new thread (no threadId)
+  const result = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: {
+      raw: encodedMessage,
+      // No threadId - this creates a new email thread
+    },
+  });
+
+  // Note: We don't store this in the database as it's not part of any conversation
+  // It will be picked up on the next poll if the recipient replies
 
   return result.data;
 }

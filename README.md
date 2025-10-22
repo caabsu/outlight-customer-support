@@ -7,18 +7,40 @@
 
 ## Dev quick start
 
-### Backend Setup
+### Initial Setup
 1. Create `.env.local` (see `.env.example`)
-2. Run `npm run dev` (API on http://localhost:3001)
-3. Connect Gmail: http://localhost:3001/oauth/google
-4. Seed emails: `curl -X POST http://localhost:3001/gmail/poll`
+2. Install root dependencies: `npm install`
+3. Install web dependencies: `cd apps/web && npm install && cd ../..`
+4. Connect Gmail: Start API and visit http://localhost:3001/oauth/google
+5. Seed emails:
+   - PowerShell: `Invoke-RestMethod -Method Post -Uri http://localhost:3001/gmail/poll`
+   - Bash/Linux: `curl -X POST http://localhost:3001/gmail/poll`
 
-### Frontend Setup
-1. Install web dependencies: `cd apps/web && npm install`
-2. Run web UI: `npm run dev:web` (Web on http://localhost:3000)
+### Running the Application
 
-### Run Both Together
-- Run: `npm run dev:all` (API on :3001, Web on :3000)
+**Option 1: Run both together (Recommended)**
+```bash
+npm run dev:all
+```
+- API runs on http://localhost:3001
+- Web UI runs on http://localhost:3000
+- Both processes run concurrently with colored output
+
+**Option 2: Run separately (Two terminals)**
+
+Terminal 1 - API:
+```bash
+npm run dev
+```
+
+Terminal 2 - Web UI:
+```bash
+npm run dev:web
+```
+
+### Access the App
+- **Web UI**: http://localhost:3000
+- **API**: http://localhost:3001
 
 ## Features
 
