@@ -115,6 +115,12 @@ export function ConversationProvider({
       setConversations(conversationsList);
       setPagination(paginationData);
 
+      // CRITICAL: Always sync currentPage with API response to prevent navigation bugs
+      // This ensures the local state matches what the server returned
+      if (paginationData) {
+        setCurrentPage(paginationData.page);
+      }
+
       // Only auto-select first conversation on initial load (when no selection exists)
       // Don't auto-select when navigating between pages
       if (conversationsList.length > 0 && !selectedId && conversations.length === 0) {

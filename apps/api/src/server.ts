@@ -1,7 +1,9 @@
 import express, { type Request, type Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+// Load from .env.local first, fallback to .env
 dotenv.config({ path: ".env.local" });
+dotenv.config(); // This will load .env if .env.local doesn't exist
 import OpenAI from "openai";
 
 import { googleAuthStart, googleAuthCallback, pollOnce, sendReply, sendNewEmail } from "./gmail";
@@ -1102,4 +1104,29 @@ app.get("/shopify/order/:orderId/refunds", async (req: Request, res: Response) =
 });
 
 const port = process.env.PORT || 3001;
-app.listen(port, () => console.log("API listening on", port));
+
+// Verify database connection before starting server
+async function startServer() {
+  try {
+    // Test database connection
+    await prisma.$connect();
+    console.log("✓ Database connected successfully");
+
+    app.listen(port, () => {
+      console.log(`✓ API server listening on http://localhost:${port}`);
+      console.log(`✓ Ready to accept requests`);
+    });
+  } catch (error) {
+    console.error("✗ Failed to start API server:");
+    if (error instanceof Error) {
+      console.error(`  Error: ${error.message}`);
+    }
+    console.error("\nPlease check:");
+    console.error("  1. .env or .env.local file exists with DATABASE_URL");
+    console.error("  2. Database is accessible");
+    console.error("  3. Run 'npx prisma generate' and 'npx prisma db push'\n");
+    process.exit(1);
+  }
+}
+
+startServer();
