@@ -153,34 +153,34 @@ export function ConversationProvider({
     }
   };
 
-  // Initial fetch with delay and retry to allow API server startup
+  // Initial fetch - optimized for instant load
   useEffect(() => {
     let retryTimer: NodeJS.Timeout;
     let mounted = true;
 
-    // Wait for API server to start (it can be slow on first load)
-    const timer = setTimeout(async () => {
+    // Fetch immediately (API server now starts instantly)
+    const initialFetch = async () => {
       if (!mounted) return;
+
+      // Try fetching immediately
       await fetchConversations(false, 0, true); // Suppress errors on first attempt
 
-      // If still no data after 3 seconds, retry
-      retryTimer = setTimeout(async () => {
-        if (!mounted) return;
-        await fetchConversations(false, 1, false); // Show errors on retry
+      // Only retry if we have no conversations (API might still be starting)
+      if (mounted && conversations.length === 0) {
+        retryTimer = setTimeout(async () => {
+          if (!mounted) return;
+          await fetchConversations(false, 1, false); // Show errors on retry
+        }, 500); // Quick retry instead of 3 seconds
+      }
+    };
 
-        // Force loading to false after final retry
-        setTimeout(() => {
-          if (mounted) setLoading(false);
-        }, 1000);
-      }, 3000);
-    }, 1000);
+    initialFetch();
 
     return () => {
       mounted = false;
-      clearTimeout(timer);
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, []);
+  }, []); // Empty dependency array - only run once on mount
 
 
   const selectedConversation =

@@ -205,14 +205,6 @@ export default function ConversationList() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className={`${isCollapsed ? 'w-12' : 'w-96'} border-r border-border bg-background flex items-center justify-center transition-all duration-300 shrink-0`}>
-        <p className="text-muted-foreground text-sm">{isCollapsed ? '...' : 'Loading...'}</p>
-      </div>
-    );
-  }
-
   return (
     <div className={`${isCollapsed ? 'w-12' : 'w-96'} border-r border-border bg-background flex flex-col relative transition-all duration-300 shrink-0`} style={{ fontFamily: "Roboto, sans-serif" }}>
       {/* Refresh Progress Indicator */}
