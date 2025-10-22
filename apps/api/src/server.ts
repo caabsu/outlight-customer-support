@@ -1533,33 +1533,47 @@ Follow the workflow: Search customer → Read email → Analyze → Draft/Steps`
 
     // Tool calling loop
     while (toolCallCount < MAX_TOOL_CALLS) {
-      const completion = await openai.chat.completions.create({
+      console.log(`[Draft] Tool call iteration ${toolCallCount + 1}/${MAX_TOOL_CALLS}`);
+
+      // Use tools parameter for function calling phase
+      const completionParams: any = {
         model: "gpt-5",
         messages,
-        tools: tools as any,
-        tool_choice: toolCallCount === 0 ? "auto" : "auto",
-        response_format: { type: "json_object" }
-        // Note: GPT-5 only supports default temperature (1), custom values not allowed
-      });
+        // Note: GPT-5 only supports default temperature (1)
+      };
 
+      // Only add tools if we haven't finished calling them
+      if (toolCallCount < MAX_TOOL_CALLS) {
+        completionParams.tools = tools;
+        completionParams.tool_choice = "auto";
+      } else {
+        // Force JSON output on final response
+        completionParams.response_format = { type: "json_object" };
+      }
+
+      const completion = await openai.chat.completions.create(completionParams);
       const assistantMessage = completion.choices[0].message;
       messages.push(assistantMessage);
 
       // Check if AI wants to call a tool
       if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
         toolCallCount++;
+        console.log(`[Draft] Executing ${assistantMessage.tool_calls.length} tool call(s)`);
 
         // Execute each tool call
         for (const toolCall of assistantMessage.tool_calls) {
           const functionName = (toolCall as any).function.name;
           const functionArgs = JSON.parse((toolCall as any).function.arguments);
+          console.log(`[Draft] Calling function: ${functionName}`, functionArgs);
 
           let toolResult: any = null;
 
           if (functionName === "search_customer_and_orders") {
             try {
               toolResult = await shopify.searchCustomerAndOrders(functionArgs.query);
+              console.log(`[Draft] Shopify search result:`, toolResult.searchType);
             } catch (error) {
+              console.error(`[Draft] Shopify search error:`, error);
               toolResult = { error: "Failed to search Shopify", details: String(error) };
             }
           } else if (functionName === "get_tracking_info") {
@@ -1587,7 +1601,9 @@ Follow the workflow: Search customer → Read email → Analyze → Draft/Steps`
               });
 
               toolResult = await trackResponse.json();
+              console.log(`[Draft] 17track result received`);
             } catch (error) {
+              console.error(`[Draft] 17track error:`, error);
               toolResult = { error: "Failed to fetch tracking", details: String(error) };
             }
           }
@@ -1599,11 +1615,18 @@ Follow the workflow: Search customer → Read email → Analyze → Draft/Steps`
             content: JSON.stringify(toolResult)
           });
         }
+
+        // Continue loop to get next response
+        continue;
       } else {
-        // No more tool calls - AI is done
+        // No more tool calls - AI is done, parse the final response
+        console.log(`[Draft] AI finished, parsing final response`);
         try {
           finalResult = JSON.parse(assistantMessage.content || "{}");
+          console.log(`[Draft] Successfully parsed JSON result`);
         } catch (error) {
+          console.error(`[Draft] JSON parse error:`, error);
+          console.error(`[Draft] Raw content:`, assistantMessage.content);
           // If not JSON, wrap it
           finalResult = {
             reasoning: assistantMessage.content,
@@ -1611,6 +1634,31 @@ Follow the workflow: Search customer → Read email → Analyze → Draft/Steps`
           };
         }
         break;
+      }
+    }
+
+    // If we hit max iterations without getting a final result, make one more call with JSON mode
+    if (!finalResult && toolCallCount >= MAX_TOOL_CALLS) {
+      console.log(`[Draft] Max tool calls reached, requesting final JSON response`);
+      messages.push({
+        role: "user",
+        content: "Please provide the final response in the required JSON format."
+      });
+
+      const finalCompletion = await openai.chat.completions.create({
+        model: "gpt-5",
+        messages,
+        response_format: { type: "json_object" }
+      });
+
+      try {
+        finalResult = JSON.parse(finalCompletion.choices[0].message.content || "{}");
+      } catch (error) {
+        console.error(`[Draft] Final JSON parse error:`, error);
+        finalResult = {
+          reasoning: "Failed to generate proper response",
+          error: "Maximum iterations reached without valid JSON"
+        };
       }
     }
 
