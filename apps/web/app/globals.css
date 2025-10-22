@@ -171,19 +171,26 @@ html, body, div, span, p, a, h1, h2, h3, h4, h5, h6, ul, li, table, tr, td, th, 
   color: #000000 !important;
   font-family: var(--font-roboto), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
   font-weight: 400 !important;
+  font-size: 14px !important;
 }
 
-/* Override every possible element with maximum specificity */
+/* Override every possible element with maximum specificity - NUCLEAR OPTION */
 .email-html-container *,
 .email-html-container *[style],
+.email-html-container *[class],
+.email-html-container *[class][style],
 .email-html-container p,
 .email-html-container p[style],
+.email-html-container p[class],
 .email-html-container span,
 .email-html-container span[style],
+.email-html-container span[class],
 .email-html-container td,
 .email-html-container td[style],
+.email-html-container td[class],
 .email-html-container div,
 .email-html-container div[style],
+.email-html-container div[class],
 .email-html-container h1,
 .email-html-container h2,
 .email-html-container h3,
@@ -198,7 +205,13 @@ html, body, div, span, p, a, h1, h2, h3, h4, h5, h6, ul, li, table, tr, td, th, 
 .email-html-container i,
 .email-html-container em,
 .email-html-container font,
-.email-html-container font[style] {
+.email-html-container font[style],
+.email-html-container font[class],
+.email-html-container a,
+.email-html-container ul,
+.email-html-container ol,
+.email-html-container pre,
+.email-html-container code {
   color: #000000 !important;
   background-color: transparent !important;
   font-family: var(--font-roboto), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
@@ -207,22 +220,57 @@ html, body, div, span, p, a, h1, h2, h3, h4, h5, h6, ul, li, table, tr, td, th, 
   line-height: 1.6 !important;
 }
 
-/* Special handling for links - keep them blue for visibility */
-.email-html-container a,
-.email-html-container a[style] {
-  color: #2563eb !important;
-  text-decoration: underline !important;
+/* Extra nuclear option for deeply nested elements */
+.email-html-container * * {
+  color: #000000 !important;
+  font-family: var(--font-roboto) !important;
+  font-weight: 400 !important;
+  font-size: 14px !important;
 }
 
-/* Force black text for headers and footers */
+.email-html-container * * * {
+  color: #000000 !important;
+  font-family: var(--font-roboto) !important;
+  font-weight: 400 !important;
+  font-size: 14px !important;
+}
+
+/* Special handling for links - keep them blue for visibility and override general rules */
+.email-html-container a,
+.email-html-container a[style],
+.email-html-container a[class],
+.email-html-container * a,
+.email-html-container * a[style] {
+  color: #2563eb !important;
+  text-decoration: underline !important;
+  font-family: var(--font-roboto) !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+}
+
+/* Force black text for headers with stronger weight */
+.email-html-container h1,
 .email-html-container h1[style],
+.email-html-container h1[class],
+.email-html-container h2,
 .email-html-container h2[style],
+.email-html-container h2[class],
+.email-html-container h3,
 .email-html-container h3[style],
+.email-html-container h3[class],
+.email-html-container h4,
 .email-html-container h4[style],
+.email-html-container h4[class],
+.email-html-container h5,
 .email-html-container h5[style],
-.email-html-container h6[style] {
+.email-html-container h5[class],
+.email-html-container h6,
+.email-html-container h6[style],
+.email-html-container h6[class] {
   color: #000000 !important;
   font-weight: 600 !important;
+  font-family: var(--font-roboto) !important;
+  line-height: 1.4 !important;
 }
 
 /* Force white background on all containers */

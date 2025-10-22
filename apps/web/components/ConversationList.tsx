@@ -380,7 +380,7 @@ export default function ConversationList() {
       <div className="flex-1 overflow-y-auto">
         {sortedConversations.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-muted-foreground font-sans text-sm">No conversations match filters</p>
+            <p className="text-foreground font-sans text-sm">No conversations match filters</p>
           </div>
         ) : (
           sortedConversations.map((conv: Conversation) => (
@@ -406,14 +406,14 @@ export default function ConversationList() {
                     {conv.customer.name || conv.customer.primaryEmail}
                   </p>
                 </div>
-                <span className="text-xs font-sans text-muted-foreground shrink-0">
+                <span className="text-xs font-sans text-foreground shrink-0">
                   {formatDate(conv.lastMessageAt)}
                 </span>
               </div>
               <p className="text-sm font-sans font-medium text-foreground truncate mb-1 ml-7">
                 {conv.subject}
               </p>
-              <p className="text-sm font-sans text-muted-foreground line-clamp-2 ml-7">
+              <p className="text-sm font-sans text-foreground line-clamp-2 ml-7">
                 {getPreview(conv)}
               </p>
               {/* Status Badge */}

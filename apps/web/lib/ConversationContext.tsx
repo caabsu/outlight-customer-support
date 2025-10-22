@@ -146,45 +146,6 @@ export function ConversationProvider({
     };
   }, []);
 
-  // Auto-refresh every 30 seconds (silent - polls Gmail and refreshes)
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        setRefreshing(true);
-        setRefreshProgress(10);
-
-        // Poll Gmail for new emails with timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-        try {
-          const pollRes = await fetch("/api/gmail/poll", {
-            method: "POST",
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-          // Silently ignore errors during auto-refresh
-        } catch (err) {
-          clearTimeout(timeoutId);
-          // Silently ignore abort and fetch errors
-        }
-
-        setRefreshProgress(60);
-        // Then refresh conversations silently with error suppression
-        await fetchConversations(true, 1, true); // suppressErrors = true
-        setRefreshProgress(100);
-      } catch (error) {
-        // Silently ignore all errors during auto-refresh
-      } finally {
-        setTimeout(() => {
-          setRefreshing(false);
-          setRefreshProgress(0);
-        }, 300);
-      }
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(interval);
-  }, [selectedId]);
 
   const selectedConversation =
     conversations.find((c) => c.id === selectedId) || null;
