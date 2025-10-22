@@ -1362,10 +1362,22 @@ Apply ALL relevant tags (emails can have multiple):
 **Refund Timeline**: 5-7 business days after warehouse receives return
 **If approved <7 days ago**: Still in transit, ask for patience
 
+## Order Processing & Shipping
+**Processing Time**: Orders typically ship within 1-3 business days
+**Delivery Time**: 5-7 business days after shipping (domestic US)
+**For unshipped orders**: Explain that processing is underway, provide expected ship date range
+**For delayed orders (>5 days)**: Apologize and escalate to check warehouse status
+
 ## Draft Decision Rules
 ### DRAFT FULL EMAIL (shouldDraft = true):
 - **return**: Check 30-day policy, draft approval/denial with returns portal link
-- **order-status**: Draft with tracking link
+- **order-status**: CRITICAL - Answer the SPECIFIC question asked:
+  * If customer asks "when will it be delivered?" → Provide delivery date/estimate
+  * If order has tracking → Call get_tracking_info and provide current status + estimated delivery
+  * If order NOT shipped yet → Explain processing time + when it should ship + expected delivery timeframe
+  * If order delivered → Confirm delivery date from tracking
+  * ALWAYS answer the delivery date question directly - don't just say "not shipped yet"
+  * Include 17track link if tracking exists
 - **damaged-product**: Draft apology + replacement/refund offer
 - **missing-items**: Draft apology + send items
 - **cancellation**: Draft confirmation or return guide
@@ -1505,6 +1517,10 @@ Step 4: DECIDE: DRAFT or ACTION STEPS
 
 Step 5: GENERATE RESPONSE
 - For drafts: Write complete, ready-to-send email using customer's first name
+  * CRITICAL: ANSWER THE CUSTOMER'S SPECIFIC QUESTION
+  * If they ask "when will it be delivered?", provide delivery date or estimate
+  * If they ask about tracking, provide tracking status and link
+  * Don't give generic responses - address their exact question directly
 - For action steps: Provide clear numbered steps for the support agent
 - Include ALL relevant order info (order ID, dates, return window status)
 
@@ -1732,7 +1748,8 @@ Remember:
       ...finalResult,
       conversationId,
       processingTime: new Date().toISOString(),
-      toolCallsMade: toolCallCount
+      toolCallsMade: toolCallCount,
+      knowledgeBase: knowledgeBase // Include knowledge base for transparency
     });
   } catch (error) {
     console.error("Error generating draft:", error);
