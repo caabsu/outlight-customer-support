@@ -87,6 +87,7 @@ export function ConversationProvider({
         if (!suppressErrors && (retryCount === 0 || res.status !== 500)) {
           console.error(`API returned ${res.status}: ${res.statusText}`);
         }
+        setPageTransitioning(false); // Clear transitioning on error
         return;
       }
 
@@ -96,6 +97,7 @@ export function ConversationProvider({
         if (!suppressErrors) {
           console.error("Empty response from API");
         }
+        setPageTransitioning(false); // Clear transitioning on error
         return;
       }
 
@@ -107,6 +109,7 @@ export function ConversationProvider({
           console.error("Failed to parse JSON response:", parseError);
           console.error("Response text:", text.substring(0, 200));
         }
+        setPageTransitioning(false); // Clear transitioning on error
         return;
       }
 
@@ -128,6 +131,9 @@ export function ConversationProvider({
       if (conversationsList.length > 0 && !selectedId && conversations.length === 0) {
         setSelectedId(conversationsList[0].id);
       }
+
+      // Clear transitioning state on success
+      setPageTransitioning(false);
     } catch (error) {
       // Only log if not suppressed
       if (!suppressErrors) {
@@ -141,6 +147,7 @@ export function ConversationProvider({
           console.error("Failed to fetch conversations:", error);
         }
       }
+      setPageTransitioning(false); // Clear transitioning on error
     } finally {
       if (!silent) setLoading(false);
     }
@@ -245,17 +252,16 @@ export function ConversationProvider({
     if (page === currentPage) return; // Already on this page
 
     setPageTransitioning(true);
-    setCurrentPage(page);
 
     try {
       // Use silent mode to prevent full loading screen during page transitions
+      // DON'T set currentPage here - let the API response sync it to avoid flickering
       await fetchConversations(true, 0, false, page);
-    } finally {
-      // Small delay to ensure smooth transition
-      setTimeout(() => {
-        setPageTransitioning(false);
-      }, 100);
+    } catch (error) {
+      console.error("Error navigating to page:", error);
+      setPageTransitioning(false);
     }
+    // Note: pageTransitioning is cleared in fetchConversations (on success or error)
   };
 
   const nextPage = () => {
