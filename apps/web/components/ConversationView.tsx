@@ -37,7 +37,15 @@ function sanitizeEmailHtml(html: string): string {
   sanitized = sanitized.replace(/<font[^>]*>/gi, '');
   sanitized = sanitized.replace(/<\/font>/gi, '');
 
-  return sanitized;
+  // Wrap in a div with CSS to handle overflow properly
+  return `<div style="max-width: 100%; overflow-x: auto;">
+    <style>
+      .email-html-container table { max-width: 100%; table-layout: auto; }
+      .email-html-container img { max-width: 100%; height: auto; }
+      .email-html-container * { max-width: 100%; word-wrap: break-word; }
+    </style>
+    ${sanitized}
+  </div>`;
 }
 
 export default function ConversationView() {
@@ -144,6 +152,45 @@ export default function ConversationView() {
     setShowKBTab(false);
     setShowSummarizeKBTab(false);
     setDraftError(null);
+  }, [selectedConversation?.id]);
+
+  // Auto-load existing draft from database when conversation is selected
+  useEffect(() => {
+    if (!selectedConversation?.id) return;
+
+    // Check if we already have the draft in state
+    if (draftsByConversationId[selectedConversation.id]) return;
+
+    // Don't auto-load if draft is currently being generated
+    if (loadingDraftByConversationId[selectedConversation.id]) return;
+
+    // Fetch draft from database
+    const apiUrl = process.env.NODE_ENV === 'development'
+      ? `http://localhost:3001/conversations/${selectedConversation.id}/draft`
+      : `/api/conversations/${selectedConversation.id}/draft`;
+
+    fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ forceRegenerate: false })
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch draft");
+        return res.json();
+      })
+      .then((data) => {
+        // Only save to state if this is a cached draft from database
+        if (data.fromDatabase) {
+          setDraftsByConversationId(prev => ({
+            ...prev,
+            [selectedConversation.id]: data
+          }));
+        }
+      })
+      .catch((err) => {
+        // Silently fail - draft might not exist yet, which is fine
+        console.log(`No existing draft for conversation ${selectedConversation.id}`);
+      });
   }, [selectedConversation?.id]);
 
   // Fetch Shopify customer data
@@ -1233,7 +1280,7 @@ export default function ConversationView() {
 
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
+      <div className="flex-1 overflow-y-auto overflow-x-auto p-6 space-y-6">
         {selectedConversation.messages.map((message) => (
           <div
             key={message.id}
@@ -1265,7 +1312,7 @@ export default function ConversationView() {
             <div className="email-content">
               {message.bodyHtml ? (
                 <div
-                  className="email-html-container font-sans p-4 rounded border overflow-y-auto overflow-x-hidden"
+                  className="email-html-container font-sans p-4 rounded border overflow-auto"
                   style={{
                     fontWeight: 400,
                     fontSize: '14px',
@@ -1274,12 +1321,14 @@ export default function ConversationView() {
                     width: '100%',
                     backgroundColor: '#ffffff',
                     color: '#000000',
-                    borderColor: '#e5e7eb'
+                    borderColor: '#e5e7eb',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word'
                   }}
                   dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(message.bodyHtml) }}
                 />
               ) : (
-                <p className="text-sm font-sans whitespace-pre-wrap" style={{ fontWeight: 400, color: '#000000' }}>
+                <p className="text-sm font-sans whitespace-pre-wrap break-words" style={{ fontWeight: 400, color: '#000000' }}>
                   {message.bodyText}
                 </p>
               )}
