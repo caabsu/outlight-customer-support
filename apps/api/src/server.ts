@@ -1179,9 +1179,19 @@ app.get("/tracking/:trackingNumber", async (req: Request, res: Response) => {
     // Check if registration was rejected (API returns 200 but with rejection in data)
     if (registerData.data?.rejected && registerData.data.rejected.length > 0) {
       const rejection = registerData.data.rejected[0];
-      console.error("Tracking number rejected:", rejection);
+      console.log("Tracking number rejected:", rejection);
+
+      // Provide user-friendly error message
+      let userMessage = "Invalid tracking number";
+      if (rejection.error?.message?.toLowerCase().includes("carrier")) {
+        userMessage = "Invalid tracking number - carrier not recognized";
+      } else if (rejection.error?.message) {
+        userMessage = `Invalid tracking number - ${rejection.error.message.toLowerCase()}`;
+      }
+
       return res.status(400).json({
-        error: "Failed to register tracking number",
+        error: userMessage,
+        isInvalidTracking: true,
         details: rejection.error?.message || "Registration rejected",
         errorCode: rejection.error?.code
       });
