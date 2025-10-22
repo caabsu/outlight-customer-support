@@ -254,3 +254,35 @@ export async function sendReply(conversationId: string, to: string, body: string
 
   return result.data;
 }
+
+export async function sendNewEmail(to: string, subject: string, body: string) {
+  const gmail = await getAuthedClient();
+
+  // Create email in RFC 2822 format (not as a reply, so no threadId)
+  const emailLines = [
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    ``,
+    body,
+  ];
+  const email = emailLines.join("\r\n");
+  const encodedMessage = Buffer.from(email)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+  // Send the email as a new thread (no threadId)
+  const result = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: {
+      raw: encodedMessage,
+      // No threadId - this creates a new email thread
+    },
+  });
+
+  // Note: We don't store this in the database as it's not part of any conversation
+  // It will be picked up on the next poll if the recipient replies
+
+  return result.data;
+}

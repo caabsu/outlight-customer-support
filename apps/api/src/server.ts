@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 import OpenAI from "openai";
 
-import { googleAuthStart, googleAuthCallback, pollOnce, sendReply } from "./gmail";
+import { googleAuthStart, googleAuthCallback, pollOnce, sendReply, sendNewEmail } from "./gmail";
 import { prisma } from "./db";
 import * as shopify from "./shopify";
 
@@ -414,16 +414,24 @@ app.get("/debug/reply-to", async (req: Request, res: Response) => {
   }
 });
 
-// Send a reply to a conversation
+// Send a reply to a conversation or send a new email
 app.post("/messages", async (req: Request, res: Response) => {
   try {
-    const { conversationId, to, body } = req.body;
+    const { conversationId, to, body, subject } = req.body;
 
-    if (!conversationId || !to || !body) {
-      return res.status(400).json({ error: "Missing required fields" });
+    if (!to || !body) {
+      return res.status(400).json({ error: "Missing required fields: to and body" });
     }
 
-    const result = await sendReply(conversationId, to, body);
+    let result;
+    if (conversationId) {
+      // Send as reply in existing thread
+      result = await sendReply(conversationId, to, body);
+    } else {
+      // Send as new standalone email (not part of a thread)
+      result = await sendNewEmail(to, subject || "No Subject", body);
+    }
+
     res.json({ success: true, messageId: result.id });
   } catch (error) {
     console.error("Error sending message:", error);

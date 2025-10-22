@@ -464,8 +464,9 @@ export default function ConversationView() {
 
   // Open email composer
   const openEmailComposer = (to?: string, subject?: string) => {
-    setComposerTo(to || selectedConversation?.customer?.primaryEmail || "");
-    setComposerSubject(subject || (selectedConversation?.subject ? `Re: ${selectedConversation.subject}` : ""));
+    // Start with empty fields unless explicitly provided
+    setComposerTo(to || "");
+    setComposerSubject(subject || "");
     setComposerBody("");
     setComposerAttachments([]);
     setShowEmailComposer(true);
@@ -493,13 +494,14 @@ export default function ConversationView() {
 
     setSendingEmail(true);
     try {
-      // For now, use the same endpoint as reply
-      // In the future, we can enhance this to support attachments
+      // Only associate with current conversation if sending to the same customer
+      const isReplyToCurrentConversation = selectedConversation?.customer?.primaryEmail === composerTo.trim();
+
       const response = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          conversationId: selectedConversation?.id,
+          conversationId: isReplyToCurrentConversation ? selectedConversation?.id : undefined,
           to: composerTo,
           subject: composerSubject,
           body: composerBody,
