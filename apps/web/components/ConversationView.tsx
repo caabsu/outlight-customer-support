@@ -104,7 +104,8 @@ export default function ConversationView() {
   const [showDraftPopup, setShowDraftPopup] = useState(false);
   const [draftMinimized, setDraftMinimized] = useState(false);
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
-  const [showKBTab, setShowKBTab] = useState(false); // For expandable tab on button
+  const [showKBTab, setShowKBTab] = useState(false); // For Draft KB tab
+  const [showSummarizeKBTab, setShowSummarizeKBTab] = useState(false); // For Summarize KB tab
   const [expandedKBSections, setExpandedKBSections] = useState<Record<string, boolean>>({
     general: true,
     toolSpecific: true
@@ -141,6 +142,7 @@ export default function ConversationView() {
     setShowDraftPopup(false);
     setDraftMinimized(false);
     setShowKBTab(false);
+    setShowSummarizeKBTab(false);
     setDraftError(null);
   }, [selectedConversation?.id]);
 
@@ -619,8 +621,7 @@ export default function ConversationView() {
       [conversationId]: true
     }));
     setDraftError(null);
-    setShowDraftPopup(true);
-    setDraftMinimized(false);
+    // Don't auto-open popup - let user click to view when ready
 
     // Clear current conversation's draft while loading
     setDraftsByConversationId(prev => ({
@@ -1696,23 +1697,27 @@ export default function ConversationView() {
           <div className="relative">
             <button
               onClick={() => {
+                if (loadingDraft) {
+                  // Do nothing while generating
+                  return;
+                }
+
                 if (draftMinimized && showDraftPopup) {
                   // If draft is minimized, maximize it
                   setDraftMinimized(false);
                 } else if (draftData && showDraftPopup && !draftMinimized) {
                   // If draft is already shown, minimize it
                   setDraftMinimized(true);
-                } else {
-                  // Generate new draft (or show existing if available)
-                  if (draftData) {
-                    setShowDraftPopup(true);
-                    setDraftMinimized(false);
-                  } else {
-                    generateDraft();
-                  }
+                } else if (draftData && !showDraftPopup) {
+                  // Draft is ready but popup is closed - open it
+                  setShowDraftPopup(true);
+                  setDraftMinimized(false);
+                } else if (!draftData && !loadingDraft) {
+                  // No draft exists - generate new one
+                  generateDraft();
                 }
               }}
-              disabled={loadingDraft || !selectedConversation}
+              disabled={!selectedConversation}
               className="w-full h-12 px-4 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed relative"
             >
               {loadingDraft && (
@@ -1868,8 +1873,7 @@ export default function ConversationView() {
                 <div
                   onClick={(e) => {
                     e.stopPropagation();
-                    // TODO: Implement summarize KB tab
-                    alert('Summarize knowledge base coming soon!');
+                    setShowSummarizeKBTab(!showSummarizeKBTab);
                   }}
                   className="p-1 hover:bg-white/20 rounded-full transition-colors cursor-pointer"
                   title="View Knowledge Base"
@@ -1879,7 +1883,7 @@ export default function ConversationView() {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       e.stopPropagation();
-                      alert('Summarize knowledge base coming soon!');
+                      setShowSummarizeKBTab(!showSummarizeKBTab);
                     }
                   }}
                 >
@@ -1889,6 +1893,84 @@ export default function ConversationView() {
                 </div>
               </div>
             </button>
+
+            {/* Expandable Knowledge Base Tab for Summarize */}
+            {showSummarizeKBTab && (
+              <div className="absolute left-0 right-0 top-full mt-2 z-10 bg-white border-2 border-blue-300 rounded-lg shadow-xl overflow-hidden animate-in slide-in-from-top-2 duration-200">
+                {/* Header */}
+                <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-cyan-50 border-b border-blue-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    <span className="text-sm font-sans font-bold text-blue-900">Summarize Knowledge Base</span>
+                  </div>
+                  <button
+                    onClick={() => setShowSummarizeKBTab(false)}
+                    className="p-1 hover:bg-white/50 rounded transition-colors"
+                    title="Close"
+                  >
+                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="max-h-96 overflow-y-auto p-3 space-y-2">
+                  {/* General Guidelines */}
+                  <div className="border border-blue-200 rounded overflow-hidden">
+                    <button
+                      onClick={() => setExpandedKBSections(prev => ({ ...prev, general: !prev.general }))}
+                      className="w-full px-3 py-2 bg-blue-50 hover:bg-blue-100 transition-colors flex items-center justify-between text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                        </svg>
+                        <span className="text-xs font-sans font-bold text-blue-900">General Guidelines</span>
+                      </div>
+                      <svg className={`w-4 h-4 text-blue-600 transition-transform ${expandedKBSections.general ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedKBSections.general && (
+                      <div className="px-3 py-2 bg-white text-[10px] font-sans text-slate-700 space-y-1">
+                        <div>• Email Classification Tags</div>
+                        <div>• Link Policy</div>
+                        <div>• Summary Requirements</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Summarize Tool Specific */}
+                  <div className="border border-cyan-200 rounded overflow-hidden">
+                    <button
+                      onClick={() => setExpandedKBSections(prev => ({ ...prev, toolSpecific: !prev.toolSpecific }))}
+                      className="w-full px-3 py-2 bg-cyan-50 hover:bg-cyan-100 transition-colors flex items-center justify-between text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span className="text-xs font-sans font-bold text-cyan-900">Summarize Specific</span>
+                      </div>
+                      <svg className={`w-4 h-4 text-cyan-600 transition-transform ${expandedKBSections.toolSpecific ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedKBSections.toolSpecific && (
+                      <div className="px-3 py-2 bg-white text-[10px] font-sans text-slate-700 space-y-1">
+                        <div>• Conversation Context Analysis</div>
+                        <div>• Key Points Extraction</div>
+                        <div>• Action Items Identification</div>
+                        <div>• Customer Sentiment</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Placeholder for future AI tools - consistent height */}
