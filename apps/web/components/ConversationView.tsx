@@ -1681,15 +1681,6 @@ export default function ConversationView() {
         </div>
 
         <div className="px-4 py-4 space-y-3">
-          {/* Summarize Button */}
-          <button
-            onClick={() => {/* TODO: Implement summarize */}}
-            disabled={!selectedConversation}
-            className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed text-left"
-          >
-            <span className="text-sm font-sans font-bold">Summarize</span>
-          </button>
-
           {/* Draft Button with KB Info */}
           <div className="relative">
             <button
@@ -1711,7 +1702,7 @@ export default function ConversationView() {
                 }
               }}
               disabled={loadingDraft || !selectedConversation}
-              className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed relative text-left"
+              className="w-full h-12 px-4 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed relative"
             >
               {loadingDraft && (
                 <div className="absolute inset-0 bg-purple-600/50 rounded-lg flex items-center justify-center">
@@ -1720,25 +1711,18 @@ export default function ConversationView() {
                   </svg>
                 </div>
               )}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex flex-col gap-1 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : (draftData ? 'AI Draft' : 'Draft')}</span>
-                    {/* Minimized indicator */}
-                    {showDraftPopup && draftMinimized && !loadingDraft && (
-                      <div className="w-2 h-2 bg-white rounded-full animate-pulse" title="Draft ready - click to view"></div>
-                    )}
-                    {/* Draft ready indicator */}
-                    {draftData && !showDraftPopup && !loadingDraft && (
-                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                    )}
-                  </div>
-                  {!loadingDraft && (
-                    <span className="text-[10px] font-sans text-white/80">
-                      {draftData ? 'Ready • Click to view' : 'General + Order policies'}
-                    </span>
+              <div className="flex items-center justify-between gap-2 h-full">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : (draftData ? 'AI Draft' : 'Draft')}</span>
+                  {/* Minimized indicator */}
+                  {showDraftPopup && draftMinimized && !loadingDraft && (
+                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" title="Draft ready - click to view"></div>
+                  )}
+                  {/* Draft ready indicator */}
+                  {draftData && !showDraftPopup && !loadingDraft && (
+                    <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
                   )}
                 </div>
                 {/* Info Icon - separate clickable area */}
@@ -1766,7 +1750,7 @@ export default function ConversationView() {
               </div>
             </button>
 
-            {/* Expandable Knowledge Base Tab */}
+            {/* Expandable Knowledge Base Tab for Draft */}
             {showKBTab && (
               <div className="absolute left-0 right-0 top-full mt-2 z-10 bg-white border-2 border-purple-300 rounded-lg shadow-xl overflow-hidden animate-in slide-in-from-top-2 duration-200">
                 {/* Header */}
@@ -1775,7 +1759,7 @@ export default function ConversationView() {
                     <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                     </svg>
-                    <span className="text-sm font-sans font-bold text-purple-900">Knowledge Base</span>
+                    <span className="text-sm font-sans font-bold text-purple-900">Draft Knowledge Base</span>
                   </div>
                   <button
                     onClick={() => setShowKBTab(false)}
@@ -1860,7 +1844,43 @@ export default function ConversationView() {
             )}
           </div>
 
-          {/* Placeholder for future buttons */}
+          {/* Summarize Button with KB Info */}
+          <div className="relative">
+            <button
+              onClick={() => {/* TODO: Implement summarize */}}
+              disabled={!selectedConversation}
+              className="w-full h-12 px-4 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <div className="flex items-center justify-between gap-2 h-full">
+                <span className="text-sm font-sans font-bold">Summarize</span>
+                {/* Info Icon */}
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // TODO: Implement summarize KB tab
+                    alert('Summarize knowledge base coming soon!');
+                  }}
+                  className="p-1 hover:bg-white/20 rounded-full transition-colors cursor-pointer"
+                  title="View Knowledge Base"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      alert('Summarize knowledge base coming soon!');
+                    }
+                  }}
+                >
+                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {/* Placeholder for future AI tools - consistent height */}
           <div className="h-12 border-2 border-dashed border-muted-foreground/20 rounded-lg flex items-center justify-center">
             <span className="text-xs font-sans text-muted-foreground italic">More AI tools coming soon</span>
           </div>
