@@ -62,6 +62,7 @@ export default function ConversationView() {
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [loadingShopify, setLoadingShopify] = useState(false);
   const [shopifyError, setShopifyError] = useState<string | null>(null);
+  const [copiedTrackingNumber, setCopiedTrackingNumber] = useState<string | null>(null);
 
   // Fetch conversation history
   useEffect(() => {
@@ -289,6 +290,41 @@ export default function ConversationView() {
     // Jump directly to the oldest unreplied email
     const oldestConv = sortedUnreplied[0];
     selectConversation(oldestConv.id);
+  };
+
+  // Helper: Calculate days and weeks since purchase
+  const getDaysSincePurchase = (createdAt: string) => {
+    const now = new Date();
+    const orderDate = new Date(createdAt);
+    const diffMs = now.getTime() - orderDate.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffWeeks = Math.floor(diffDays / 7);
+    return { days: diffDays, weeks: diffWeeks };
+  };
+
+  // Helper: Copy tracking number
+  const copyTrackingNumber = async (trackingNumber: string) => {
+    try {
+      await navigator.clipboard.writeText(trackingNumber);
+      setCopiedTrackingNumber(trackingNumber);
+      setTimeout(() => setCopiedTrackingNumber(null), 2000);
+    } catch (err) {
+      console.error("Failed to copy tracking number:", err);
+    }
+  };
+
+  // Helper: Get tracking info from order fulfillments
+  const getTrackingInfo = (order: any) => {
+    if (order.fulfillments && order.fulfillments.length > 0) {
+      const fulfillment = order.fulfillments[0];
+      return {
+        status: fulfillment.status,
+        trackingNumber: fulfillment.tracking_number,
+        trackingUrl: fulfillment.tracking_url,
+        trackingCompany: fulfillment.tracking_company,
+      };
+    }
+    return null;
   };
 
   const handleAddTag = async () => {
@@ -853,24 +889,24 @@ export default function ConversationView() {
           </div>
         </div>
 
-        <div className="px-4 py-4 space-y-3 max-h-[400px] overflow-y-auto">
+        <div className="px-4 py-4 space-y-3 max-h-[500px] overflow-y-auto">
           {loadingShopify ? (
             <div className="p-6 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-              <p className="text-xs font-sans text-muted-foreground">Loading Shopify data...</p>
+              <p className="text-sm font-sans text-muted-foreground">Loading Shopify data...</p>
             </div>
           ) : shopifyError ? (
             <div className="p-4 bg-muted rounded-lg text-center">
-              <p className="text-xs font-sans text-muted-foreground">{shopifyError}</p>
+              <p className="text-sm font-sans text-muted-foreground">{shopifyError}</p>
             </div>
           ) : shopifyCustomer ? (
             <>
               {/* Customer Info */}
-              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3">
-                <p className="text-xs font-sans font-bold text-purple-900 mb-2">
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
+                <p className="text-sm font-sans font-bold text-purple-900 mb-3">
                   {shopifyCustomer.first_name} {shopifyCustomer.last_name}
                 </p>
-                <div className="space-y-1 text-[10px] font-sans text-purple-700">
+                <div className="space-y-1.5 text-xs font-sans text-purple-700">
                   <p>Orders: {shopifyCustomer.orders_count}</p>
                   <p>Total Spent: ${parseFloat(shopifyCustomer.total_spent).toFixed(2)}</p>
                   <p className={shopifyCustomer.verified_email ? "text-green-600" : "text-red-600"}>
@@ -881,88 +917,177 @@ export default function ConversationView() {
 
               {/* Order List */}
               {shopifyOrders.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-sans font-semibold text-foreground">Recent Orders</p>
-                  {shopifyOrders.slice(0, 5).map((order) => (
-                    <button
-                      key={order.id}
-                      onClick={() => setSelectedOrder(order.id === selectedOrder?.id ? null : order)}
-                      className="w-full text-left p-3 bg-background border border-border hover:border-primary rounded-lg transition-all"
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-xs font-sans font-bold text-foreground">
-                          {order.name}
-                        </p>
-                        <span className={`text-[10px] font-sans px-2 py-0.5 rounded ${
-                          order.financial_status === "paid"
-                            ? "bg-green-100 text-green-700"
-                            : order.financial_status === "refunded"
-                            ? "bg-red-100 text-red-700"
-                            : "bg-yellow-100 text-yellow-700"
-                        }`}>
-                          {order.financial_status}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-sans text-muted-foreground">
-                        <span>{new Date(order.created_at).toLocaleDateString()}</span>
-                        <span className="font-bold text-foreground">${parseFloat(order.total_price).toFixed(2)}</span>
-                      </div>
+                <div className="space-y-3">
+                  <p className="text-sm font-sans font-semibold text-foreground">Recent Orders</p>
+                  {shopifyOrders.slice(0, 5).map((order) => {
+                    const trackingInfo = getTrackingInfo(order);
+                    const { days, weeks } = getDaysSincePurchase(order.created_at);
 
-                      {/* Order Details (Expanded) */}
-                      {selectedOrder?.id === order.id && (
-                        <div className="mt-3 pt-3 border-t border-border space-y-2">
-                          <div className="text-[10px] font-sans space-y-1">
-                            <p className="flex justify-between">
-                              <span className="text-muted-foreground">Subtotal:</span>
-                              <span className="text-foreground">${parseFloat(order.subtotal_price).toFixed(2)}</span>
-                            </p>
-                            <p className="flex justify-between">
-                              <span className="text-muted-foreground">Tax:</span>
-                              <span className="text-foreground">${parseFloat(order.total_tax).toFixed(2)}</span>
-                            </p>
-                            <p className="flex justify-between font-bold">
-                              <span className="text-foreground">Total:</span>
-                              <span className="text-foreground">${parseFloat(order.total_price).toFixed(2)}</span>
-                            </p>
+                    return (
+                      <div
+                        key={order.id}
+                        onClick={() => setSelectedOrder(order.id === selectedOrder?.id ? null : order)}
+                        className="w-full text-left p-4 bg-background border border-border hover:border-primary rounded-lg transition-all cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-sans font-bold text-foreground">
+                            {order.name}
+                          </p>
+                          <span className={`text-xs font-sans px-2 py-1 rounded ${
+                            order.financial_status === "paid"
+                              ? "bg-green-100 text-green-700"
+                              : order.financial_status === "refunded"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-yellow-100 text-yellow-700"
+                          }`}>
+                            {order.financial_status}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs font-sans text-muted-foreground mb-1">
+                          <span>{new Date(order.created_at).toLocaleDateString()}</span>
+                          <span className="font-bold text-foreground">${parseFloat(order.total_price).toFixed(2)}</span>
+                        </div>
+
+                        {/* Days/Weeks Since Purchase */}
+                        <div className="text-xs font-sans text-muted-foreground">
+                          {days} days ago ({weeks} {weeks === 1 ? 'week' : 'weeks'})
+                        </div>
+
+                        {/* Fulfillment Status Badge */}
+                        {order.fulfillment_status && (
+                          <div className="mt-2">
+                            <span className={`text-xs font-sans px-2 py-1 rounded ${
+                              order.fulfillment_status === "fulfilled"
+                                ? "bg-blue-100 text-blue-700"
+                                : order.fulfillment_status === "partial"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-gray-100 text-gray-700"
+                            }`}>
+                              {order.fulfillment_status === "fulfilled" ? "Shipped" : order.fulfillment_status || "Not Shipped"}
+                            </span>
                           </div>
+                        )}
 
-                          <div className="text-[10px] font-sans">
-                            <p className="text-muted-foreground mb-1">Items:</p>
-                            <div className="space-y-1">
-                              {order.line_items.map((item: any) => (
-                                <div key={item.id} className="flex justify-between text-foreground">
-                                  <span>{item.quantity}x {item.name}</span>
-                                  <span>${parseFloat(item.price).toFixed(2)}</span>
+                        {/* Order Details (Expanded) */}
+                        {selectedOrder?.id === order.id && (
+                          <div className="mt-3 pt-3 border-t border-border space-y-3" onClick={(e) => e.stopPropagation()}>
+                            {/* Tracking Information */}
+                            {trackingInfo && trackingInfo.trackingNumber && (
+                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                <p className="text-xs font-sans font-bold text-blue-900 mb-2">Tracking Information</p>
+                                <div className="space-y-1.5 text-xs font-sans text-blue-800">
+                                  <p className="flex items-center justify-between">
+                                    <span>Status:</span>
+                                    <span className="font-semibold">{trackingInfo.status || 'Unknown'}</span>
+                                  </p>
+                                  {trackingInfo.trackingCompany && (
+                                    <p className="flex items-center justify-between">
+                                      <span>Carrier:</span>
+                                      <span className="font-semibold">{trackingInfo.trackingCompany}</span>
+                                    </p>
+                                  )}
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>Tracking #:</span>
+                                    <div className="flex items-center gap-1">
+                                      <span className="font-mono text-xs">{trackingInfo.trackingNumber}</span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          copyTrackingNumber(trackingInfo.trackingNumber);
+                                        }}
+                                        className="p-1 hover:bg-blue-100 rounded transition-colors"
+                                        title="Copy tracking number"
+                                      >
+                                        {copiedTrackingNumber === trackingInfo.trackingNumber ? (
+                                          <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                          </svg>
+                                        ) : (
+                                          <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                          </svg>
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
+                                  {trackingInfo.trackingUrl && (
+                                    <a
+                                      href={trackingInfo.trackingUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="text-blue-600 hover:text-blue-800 underline text-xs block mt-2"
+                                    >
+                                      Track Package →
+                                    </a>
+                                  )}
                                 </div>
-                              ))}
+                              </div>
+                            )}
+
+                            <div className="text-xs font-sans space-y-1.5">
+                              <p className="flex justify-between">
+                                <span className="text-muted-foreground">Subtotal:</span>
+                                <span className="text-foreground">${parseFloat(order.subtotal_price).toFixed(2)}</span>
+                              </p>
+                              <p className="flex justify-between">
+                                <span className="text-muted-foreground">Tax:</span>
+                                <span className="text-foreground">${parseFloat(order.total_tax).toFixed(2)}</span>
+                              </p>
+                              <p className="flex justify-between font-bold">
+                                <span className="text-foreground">Total:</span>
+                                <span className="text-foreground">${parseFloat(order.total_price).toFixed(2)}</span>
+                              </p>
+                            </div>
+
+                            <div className="text-xs font-sans">
+                              <p className="text-muted-foreground mb-2 font-semibold">Items:</p>
+                              <div className="space-y-1.5">
+                                {order.line_items.map((item: any) => (
+                                  <div key={item.id} className="flex justify-between text-foreground">
+                                    <span>{item.quantity}x {item.name}</span>
+                                    <span>${parseFloat(item.price).toFixed(2)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col gap-2 pt-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  alert('Refund functionality coming soon!');
+                                }}
+                                className="w-full px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-sans font-bold rounded transition-colors"
+                              >
+                                Process Refund
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(`https://${process.env.NEXT_PUBLIC_SHOPIFY_STORE || 'put1rp-iq.myshopify.com'}/admin/orders/${order.id}`, '_blank');
+                                }}
+                                className="w-full px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white text-xs font-sans font-bold rounded transition-colors"
+                              >
+                                View in Shopify
+                              </button>
                             </div>
                           </div>
-
-                          <div className="flex gap-2 pt-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(`https://${process.env.NEXT_PUBLIC_SHOPIFY_STORE || 'put1rp-iq.myshopify.com'}/admin/orders/${order.id}`, '_blank');
-                              }}
-                              className="flex-1 px-2 py-1.5 bg-purple-500 hover:bg-purple-600 text-white text-[10px] font-sans font-bold rounded transition-colors"
-                            >
-                              View in Shopify
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </button>
-                  ))}
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="p-4 bg-muted rounded-lg text-center">
-                  <p className="text-xs font-sans text-muted-foreground">No orders found</p>
+                  <p className="text-sm font-sans text-muted-foreground">No orders found</p>
                 </div>
               )}
             </>
           ) : (
             <div className="p-4 bg-muted rounded-lg text-center">
-              <p className="text-xs font-sans text-muted-foreground">No Shopify customer found</p>
+              <p className="text-sm font-sans text-muted-foreground">No Shopify customer found</p>
             </div>
           )}
         </div>

@@ -207,10 +207,33 @@ export async function getCustomer(customerId: string): Promise<ShopifyCustomer> 
  */
 export async function getCustomerOrders(customerId: string, limit: number = 50): Promise<ShopifyOrder[]> {
   try {
+    // First get the customer's orders
     const response = await shopifyRequest<{ orders: ShopifyOrder[] }>(
       `/customers/${customerId}/orders.json?limit=${limit}&status=any`
     );
-    return response.orders || [];
+
+    const orders = response.orders || [];
+
+    // Then fetch fulfillments for each order to get tracking information
+    const ordersWithFulfillments = await Promise.all(
+      orders.map(async (order) => {
+        try {
+          const fulfillmentsResponse = await shopifyRequest<{ fulfillments: any[] }>(
+            `/orders/${order.id}/fulfillments.json`
+          );
+          return {
+            ...order,
+            fulfillments: fulfillmentsResponse.fulfillments || []
+          };
+        } catch (err) {
+          // If fulfillments fail, return order without them
+          console.error(`Failed to fetch fulfillments for order ${order.id}:`, err);
+          return { ...order, fulfillments: [] };
+        }
+      })
+    );
+
+    return ordersWithFulfillments;
   } catch (error) {
     console.error('Error getting customer orders:', error);
     throw error;
