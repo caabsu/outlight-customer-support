@@ -104,6 +104,10 @@ export default function ConversationView() {
   const [showDraftPopup, setShowDraftPopup] = useState(false);
   const [draftMinimized, setDraftMinimized] = useState(false);
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
+  const [expandedKBSections, setExpandedKBSections] = useState<Record<string, boolean>>({
+    general: true,
+    toolSpecific: true
+  });
 
   // Get current conversation's draft
   const draftData = selectedConversation?.id ? draftsByConversationId[selectedConversation.id] : null;
@@ -999,12 +1003,18 @@ export default function ConversationView() {
     setEditingTags(false);
 
     try {
-      await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: updatedTags }),
       });
-      await refreshConversations();
+
+      if (!response.ok) {
+        throw new Error('Failed to update tags');
+      }
+
+      // Don't refresh conversations - optimistic update is enough
+      // This prevents race condition where server data overwrites our update
     } catch (error) {
       console.error("Failed to add tag:", error);
       // Revert on error
@@ -1022,12 +1032,18 @@ export default function ConversationView() {
     updateConversationOptimistic(selectedConversation.id, { tags: newTags });
 
     try {
-      await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: newTags }),
       });
-      await refreshConversations();
+
+      if (!response.ok) {
+        throw new Error('Failed to update tags');
+      }
+
+      // Don't refresh conversations - optimistic update is enough
+      // This prevents race condition where server data overwrites our update
     } catch (error) {
       console.error("Failed to remove tag:", error);
       // Revert on error
@@ -1670,9 +1686,17 @@ export default function ConversationView() {
               if (draftMinimized && showDraftPopup) {
                 // If draft is minimized, maximize it
                 setDraftMinimized(false);
+              } else if (draftData && showDraftPopup && !draftMinimized) {
+                // If draft is already shown, minimize it
+                setDraftMinimized(true);
               } else {
-                // Otherwise generate new draft
-                generateDraft();
+                // Generate new draft (or show existing if available)
+                if (draftData) {
+                  setShowDraftPopup(true);
+                  setDraftMinimized(false);
+                } else {
+                  generateDraft();
+                }
               }
             }}
             disabled={loadingDraft || !selectedConversation}
@@ -1685,11 +1709,24 @@ export default function ConversationView() {
                 </svg>
               </div>
             )}
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : 'Draft'}</span>
-              {/* Minimized indicator */}
-              {showDraftPopup && draftMinimized && !loadingDraft && (
-                <div className="w-2 h-2 bg-white rounded-full animate-pulse" title="Draft minimized - click to view"></div>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : (draftData ? 'AI Draft' : 'Draft')}</span>
+                {/* Minimized indicator */}
+                {showDraftPopup && draftMinimized && !loadingDraft && (
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse" title="Draft ready - click to view"></div>
+                )}
+                {/* Draft ready indicator */}
+                {draftData && !showDraftPopup && !loadingDraft && (
+                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </div>
+              {!loadingDraft && (
+                <span className="text-[10px] font-sans text-white/80">
+                  {draftData ? 'Ready • Click to view' : 'KB: General + Order policies'}
+                </span>
               )}
             </div>
           </button>
@@ -2712,9 +2749,20 @@ export default function ConversationView() {
             </div>
           )}
 
-          {/* Footer with Delete button */}
+          {/* Footer with Regenerate and Delete buttons */}
           {!loadingDraft && draftData && (
-            <div className="px-8 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end shrink-0">
+            <div className="px-8 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+              <button
+                onClick={() => {
+                  generateDraft();
+                }}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all font-sans text-sm font-medium flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Regenerate Draft
+              </button>
               <button
                 onClick={() => {
                   if (confirm('Are you sure you want to delete this draft? This cannot be undone.')) {
@@ -2773,12 +2821,74 @@ export default function ConversationView() {
           </div>
 
           {/* Content */}
-          <div className="px-6 py-6 overflow-y-auto flex-1">
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <pre className="text-xs font-mono text-slate-800 whitespace-pre-wrap break-words">
-                {draftData.knowledgeBase}
-              </pre>
-            </div>
+          <div className="px-6 py-6 overflow-y-auto flex-1 space-y-4">
+            {/* Check if knowledge base is structured or plain text */}
+            {typeof draftData.knowledgeBase === 'object' && draftData.knowledgeBase.general ? (
+              <>
+                {/* General Knowledge Base */}
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedKBSections(prev => ({ ...prev, general: !prev.general }))}
+                    className="w-full px-4 py-3 bg-gradient-to-r from-blue-50 to-cyan-50 hover:from-blue-100 hover:to-cyan-100 transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                      </svg>
+                      <span className="font-sans font-bold text-blue-900">{draftData.knowledgeBase.general.title}</span>
+                    </div>
+                    <svg className={`w-5 h-5 text-blue-600 transition-transform ${expandedKBSections.general ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {expandedKBSections.general && (
+                    <div className="p-4 bg-white space-y-3">
+                      {draftData.knowledgeBase.general.sections.map((section: any, idx: number) => (
+                        <div key={idx} className="border-l-4 border-blue-400 pl-3">
+                          <h4 className="text-sm font-sans font-bold text-slate-900 mb-1">{section.title}</h4>
+                          <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap break-words">{section.content}</pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Tool-Specific Knowledge Base */}
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedKBSections(prev => ({ ...prev, toolSpecific: !prev.toolSpecific }))}
+                    className="w-full px-4 py-3 bg-gradient-to-r from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      <span className="font-sans font-bold text-purple-900">{draftData.knowledgeBase.toolSpecific.title}</span>
+                    </div>
+                    <svg className={`w-5 h-5 text-purple-600 transition-transform ${expandedKBSections.toolSpecific ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {expandedKBSections.toolSpecific && (
+                    <div className="p-4 bg-white space-y-3">
+                      {draftData.knowledgeBase.toolSpecific.sections.map((section: any, idx: number) => (
+                        <div key={idx} className="border-l-4 border-purple-400 pl-3">
+                          <h4 className="text-sm font-sans font-bold text-slate-900 mb-1">{section.title}</h4>
+                          <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap break-words">{section.content}</pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* Fallback for plain text knowledge base */
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                <pre className="text-xs font-mono text-slate-800 whitespace-pre-wrap break-words">
+                  {typeof draftData.knowledgeBase === 'string' ? draftData.knowledgeBase : JSON.stringify(draftData.knowledgeBase, null, 2)}
+                </pre>
+              </div>
+            )}
           </div>
 
           {/* Footer */}

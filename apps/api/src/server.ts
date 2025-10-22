@@ -1341,8 +1341,8 @@ app.post("/tracking/batch", async (req: Request, res: Response) => {
  * POST /conversations/:id/draft
  */
 
-// Enhanced Knowledge base
-const knowledgeBase = `# Outlight Customer Support - AI Draft Tool Knowledge Base
+// Enhanced Knowledge base with structured categories
+const knowledgeBaseText = `# Outlight Customer Support - AI Draft Tool Knowledge Base
 
 ## CRITICAL: Email Classification Tags
 Apply ALL relevant tags (emails can have multiple):
@@ -1401,6 +1401,84 @@ NO other external links allowed.
 - Include dates (order date, delivery date)
 - Check delivery date vs 30-day window for returns
 - Be professional, empathetic, concise`;
+
+// Structured knowledge base for transparency
+const knowledgeBase = {
+  general: {
+    title: "General Support Guidelines",
+    sections: [
+      {
+        title: "Email Classification Tags",
+        content: `Apply ALL relevant tags (emails can have multiple):
+- non-support: Marketing, partnerships, spam, sales
+- chargeback: Bank dispute - DO NOT RESPOND TO CUSTOMER
+- return: Customer wants to return product
+- refund: Asking about refund status
+- product-inquiry: Product questions/specs
+- order-status: Tracking/shipping questions
+- damaged-product: Defective/damaged item
+- missing-items: Missing from order
+- cancellation: Cancel order request`
+      },
+      {
+        title: "Link Policy",
+        content: `ONLY include these links in drafts:
+- 17track tracking: https://t.17track.net/en#nums=TRACKING_NUMBER
+- Returns portal: https://outlight.us/apps/returns-portal
+- Product pages: https://outlight.us/products/PRODUCT_NAME
+NO other external links allowed.`
+      },
+      {
+        title: "Draft Requirements",
+        content: `- Use customer's first name
+- Include order numbers (#1234 format)
+- Include dates (order date, delivery date)
+- Check delivery date vs 30-day window for returns
+- Be professional, empathetic, concise`
+      }
+    ]
+  },
+  toolSpecific: {
+    title: "AI Draft Tool Specific",
+    sections: [
+      {
+        title: "Return & Refund Policy",
+        content: `**Return Eligibility**: 30 days from DELIVERY date (not order date)
+**Returns Portal**: https://outlight.us/apps/returns-portal
+**Refund Timeline**: 5-7 business days after warehouse receives return
+**If approved <7 days ago**: Still in transit, ask for patience`
+      },
+      {
+        title: "Order Processing & Shipping",
+        content: `**Processing Time**: Orders typically ship within 1-3 business days
+**Delivery Time**: 5-7 business days after shipping (domestic US)
+**For unshipped orders**: Explain that processing is underway, provide expected ship date range
+**For delayed orders (>5 days)**: Apologize and escalate to check warehouse status`
+      },
+      {
+        title: "Draft Decision Rules",
+        content: `### DRAFT FULL EMAIL (shouldDraft = true):
+- return: Check 30-day policy, draft approval/denial with returns portal link
+- order-status: CRITICAL - Answer the SPECIFIC question asked:
+  * If customer asks "when will it be delivered?" → Provide delivery date/estimate
+  * If order has tracking → Call get_tracking_info and provide current status + estimated delivery
+  * If order NOT shipped yet → Explain processing time + when it should ship + expected delivery timeframe
+  * If order delivered → Confirm delivery date from tracking
+  * ALWAYS answer the delivery date question directly - don't just say "not shipped yet"
+  * Include 17track link if tracking exists
+- damaged-product: Draft apology + replacement/refund offer
+- missing-items: Draft apology + send items
+- cancellation: Draft confirmation or return guide
+
+### ACTION STEPS ONLY (shouldDraft = false):
+- non-support: Tag and archive (no response)
+- chargeback: Tag and escalate to admin immediately (DO NOT RESPOND)
+- refund (already returned): Steps: 1) Confirm approved in Shopify 2) Check arrival 3) Process refund
+- product-inquiry: Steps: Check product page, answer question, consult admin`
+      }
+    ]
+  }
+};
 
 app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
   // Increase timeout to 5 minutes for AI processing
@@ -1483,7 +1561,7 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
 📚 KNOWLEDGE BASE - READ AND MEMORIZE ALL POLICIES
 ═══════════════════════════════════════════════════════════
 
-${knowledgeBase}
+${knowledgeBaseText}
 
 ═══════════════════════════════════════════════════════════
 🛠️ AVAILABLE TOOLS
