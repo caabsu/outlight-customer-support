@@ -786,6 +786,70 @@ app.delete("/knowledge-base/:id", async (req: Request, res: Response) => {
 });
 
 // ============================================================================
+// AI ENDPOINTS
+// ============================================================================
+
+/**
+ * Extract customer email from email content using AI
+ * POST /ai/extract-email
+ * Body: { fromEmail: string, subject: string, emailBody: string }
+ */
+app.post("/ai/extract-email", async (req: Request, res: Response) => {
+  try {
+    const { fromEmail, subject, emailBody } = req.body;
+
+    if (!fromEmail || !emailBody) {
+      return res.status(400).json({ error: "fromEmail and emailBody are required" });
+    }
+
+    // System prompt for email extraction
+    const systemPrompt = `You are an email extraction specialist. Your ONLY job is to extract a customer email address from the provided email content.
+
+CRITICAL RULES:
+1. Return ONLY the email address - no other text, no explanation, no quotes
+2. Return exactly one email address
+3. Do not return system emails (mailer@shopify.com, noreply@, support@, etc.)
+4. If multiple customer emails exist, return the first one found
+5. If NO customer email is found, return: NONE
+
+SPECIAL CASES:
+- For emails FROM mailer@shopify.com: Look for customer email in the body text
+- For order confirmations: Find the customer's email in "Customer email:" or similar fields
+
+OUTPUT FORMAT: customer@example.com (Just the email, nothing else)`;
+
+    // Prepare user message
+    const userMessage = `Extract the customer email from this email:
+
+From: ${fromEmail}
+Subject: ${subject}
+
+Body:
+${emailBody}`;
+
+    // Call OpenAI API
+    const response = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage }
+      ],
+      temperature: 0,
+      max_tokens: 50
+    });
+
+    const extractedEmail = response.choices[0].message.content?.trim() || 'NONE';
+
+    res.json({ email: extractedEmail });
+  } catch (error) {
+    console.error("Error extracting email with AI:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to extract email"
+    });
+  }
+});
+
+// ============================================================================
 // SHOPIFY API ENDPOINTS
 // ============================================================================
 

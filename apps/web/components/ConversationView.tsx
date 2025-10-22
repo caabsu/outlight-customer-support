@@ -65,6 +65,7 @@ export default function ConversationView() {
   const [copiedTrackingNumber, setCopiedTrackingNumber] = useState<string | null>(null);
   const [shopifySearchQuery, setShopifySearchQuery] = useState("");
   const [searchingShopify, setSearchingShopify] = useState(false);
+  const [detectingEmail, setDetectingEmail] = useState(false);
 
   // Email composer state
   const [showEmailComposer, setShowEmailComposer] = useState(false);
@@ -382,6 +383,80 @@ export default function ConversationView() {
       setShopifyError("Failed to search for customer");
     } finally {
       setSearchingShopify(false);
+    }
+  };
+
+  // AI-powered email detection from email content
+  const handleAIDetectEmail = async () => {
+    if (!selectedConversation) return;
+
+    setDetectingEmail(true);
+    setShopifyError(null);
+
+    try {
+      // Get the most recent message
+      const latestMessage = selectedConversation.messages[selectedConversation.messages.length - 1];
+
+      // Prepare email content for AI
+      const fromEmail = latestMessage.fromEmail;
+      const subject = selectedConversation.subject;
+      const emailBody = latestMessage.bodyText || latestMessage.bodyHtml || '';
+
+      // Call backend AI endpoint to extract email
+      const response = await fetch('/api/ai/extract-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromEmail,
+          subject,
+          emailBody,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to detect email');
+      }
+
+      const { email } = await response.json();
+
+      if (email === 'NONE' || !email) {
+        setShopifyError('No customer email found in the message');
+        return;
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setShopifyError('Invalid email format detected');
+        return;
+      }
+
+      // Set the detected email in search query and trigger search
+      setShopifySearchQuery(email);
+
+      // Auto-search with detected email
+      setSearchingShopify(true);
+      const emailResponse = await fetch(`/api/shopify/customer?email=${encodeURIComponent(email)}`);
+
+      if (emailResponse.ok) {
+        const customer = await emailResponse.json();
+        setShopifyCustomer(customer);
+
+        // Fetch customer orders
+        const ordersResponse = await fetch(`/api/shopify/customer/${customer.id}/orders`);
+        if (ordersResponse.ok) {
+          const orders = await ordersResponse.json();
+          setShopifyOrders(orders);
+        }
+      } else {
+        setShopifyError(`Customer not found in Shopify: ${email}`);
+      }
+      setSearchingShopify(false);
+    } catch (err) {
+      console.error('Failed to detect email:', err);
+      setShopifyError('Failed to detect customer email');
+    } finally {
+      setDetectingEmail(false);
     }
   };
 
@@ -1114,6 +1189,17 @@ export default function ConversationView() {
 
           {/* Search for Customer */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleAIDetectEmail}
+              disabled={detectingEmail || !selectedConversation}
+              className="px-3 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-md text-xs font-sans font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
+              title="Use AI to detect customer email from message"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              {detectingEmail ? "Detecting..." : "AI Detect"}
+            </button>
             <input
               type="text"
               value={shopifySearchQuery}
@@ -1198,19 +1284,21 @@ export default function ConversationView() {
                         </div>
 
                         {/* Fulfillment Status Badge */}
-                        {order.fulfillment_status && (
-                          <div className="mt-2">
-                            <span className={`text-xs font-sans px-2 py-1 rounded ${
-                              order.fulfillment_status === "fulfilled"
-                                ? "bg-blue-100 text-blue-700"
-                                : order.fulfillment_status === "partial"
-                                ? "bg-yellow-100 text-yellow-700"
-                                : "bg-gray-100 text-gray-700"
-                            }`}>
-                              {order.fulfillment_status === "fulfilled" ? "Shipped" : order.fulfillment_status || "Not Shipped"}
-                            </span>
-                          </div>
-                        )}
+                        <div className="mt-2">
+                          <span className={`text-xs font-sans px-2 py-1 rounded ${
+                            order.fulfillment_status === "fulfilled"
+                              ? "bg-blue-100 text-blue-700"
+                              : order.fulfillment_status === "partial"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-red-100 text-red-700"
+                          }`}>
+                            {order.fulfillment_status === "fulfilled"
+                              ? "Shipped"
+                              : order.fulfillment_status === "partial"
+                              ? "Partially Shipped"
+                              : "Unfulfilled"}
+                          </span>
+                        </div>
 
                         {/* Order Details (Expanded) */}
                         {selectedOrder?.id === order.id && (
@@ -1542,7 +1630,7 @@ export default function ConversationView() {
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-background border border-border rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
           {/* Header */}
-          <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-gradient-to-r from-red-500 to-red-600">
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-gradient-to-r from-slate-700 to-slate-800">
             <h2 className="text-lg font-sans font-bold text-white flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
@@ -1551,7 +1639,7 @@ export default function ConversationView() {
             </h2>
             <button
               onClick={() => setShowRefundModal(false)}
-              className="text-white hover:text-gray-200 transition-colors text-xl"
+              className="text-white hover:text-gray-300 transition-colors text-xl"
             >
               ✕
             </button>
@@ -1583,11 +1671,11 @@ export default function ConversationView() {
               <h3 className="text-sm font-sans font-bold text-foreground mb-3">Select Refund Amount</h3>
 
               {/* Preset Options */}
-              <div className="space-y-3 mb-4">
-                <label className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
+              <div className="space-y-2 mb-4">
+                <label className={`flex items-center justify-between p-3 border-2 rounded-lg cursor-pointer transition-all ${
                   refundType === 'preset' && refundPreset === 20
-                    ? 'border-red-500 bg-red-50'
-                    : 'border-border hover:border-red-300'
+                    ? 'border-blue-500 bg-blue-50 shadow-sm'
+                    : 'border-border hover:border-blue-300 hover:bg-slate-50'
                 }`}>
                   <div className="flex items-center gap-3">
                     <input
@@ -1598,22 +1686,22 @@ export default function ConversationView() {
                         setRefundType('preset');
                         setRefundPreset(20);
                       }}
-                      className="w-4 h-4 text-red-600"
+                      className="w-4 h-4 text-blue-600"
                     />
                     <div>
                       <p className="text-sm font-sans font-semibold text-foreground">20% Refund</p>
-                      <p className="text-xs font-sans text-muted-foreground">Partial refund - 20% of order value</p>
+                      <p className="text-xs font-sans text-muted-foreground">Partial refund</p>
                     </div>
                   </div>
-                  <span className="text-lg font-sans font-bold text-red-600">
+                  <span className="text-base font-sans font-bold text-slate-700">
                     ${(parseFloat(refundOrder.total_price) * 0.20).toFixed(2)}
                   </span>
                 </label>
 
-                <label className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                <label className={`flex items-center justify-between p-3 border-2 rounded-lg cursor-pointer transition-all ${
                   refundType === 'preset' && refundPreset === 50
-                    ? 'border-red-500 bg-red-50'
-                    : 'border-border hover:border-red-300'
+                    ? 'border-blue-500 bg-blue-50 shadow-sm'
+                    : 'border-border hover:border-blue-300 hover:bg-slate-50'
                 }`}>
                   <div className="flex items-center gap-3">
                     <input
@@ -1624,22 +1712,22 @@ export default function ConversationView() {
                         setRefundType('preset');
                         setRefundPreset(50);
                       }}
-                      className="w-4 h-4 text-red-600"
+                      className="w-4 h-4 text-blue-600"
                     />
                     <div>
                       <p className="text-sm font-sans font-semibold text-foreground">50% Refund</p>
-                      <p className="text-xs font-sans text-muted-foreground">Half refund - 50% of order value</p>
+                      <p className="text-xs font-sans text-muted-foreground">Half refund</p>
                     </div>
                   </div>
-                  <span className="text-lg font-sans font-bold text-red-600">
+                  <span className="text-base font-sans font-bold text-slate-700">
                     ${(parseFloat(refundOrder.total_price) * 0.50).toFixed(2)}
                   </span>
                 </label>
 
-                <label className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                <label className={`flex items-center justify-between p-3 border-2 rounded-lg cursor-pointer transition-all ${
                   refundType === 'full'
-                    ? 'border-red-500 bg-red-50'
-                    : 'border-border hover:border-red-300'
+                    ? 'border-blue-500 bg-blue-50 shadow-sm'
+                    : 'border-border hover:border-blue-300 hover:bg-slate-50'
                 }`}>
                   <div className="flex items-center gap-3">
                     <input
@@ -1647,28 +1735,28 @@ export default function ConversationView() {
                       name="refundType"
                       checked={refundType === 'full'}
                       onChange={() => setRefundType('full')}
-                      className="w-4 h-4 text-red-600"
+                      className="w-4 h-4 text-blue-600"
                     />
                     <div>
                       <p className="text-sm font-sans font-semibold text-foreground">Full Refund</p>
-                      <p className="text-xs font-sans text-muted-foreground">Complete refund - 100% of order value</p>
+                      <p className="text-xs font-sans text-muted-foreground">Complete refund</p>
                     </div>
                   </div>
-                  <span className="text-lg font-sans font-bold text-red-600">
+                  <span className="text-base font-sans font-bold text-slate-700">
                     ${parseFloat(refundOrder.total_price).toFixed(2)}
                   </span>
                 </label>
               </div>
 
               {/* Custom Percentage */}
-              <div className="border-t border-border pt-4 mb-3">
+              <div className="border-t border-border pt-3 mb-3">
                 <label className={`flex items-center gap-3 mb-2`}>
                   <input
                     type="radio"
                     name="refundType"
                     checked={refundType === 'percentage'}
                     onChange={() => setRefundType('percentage')}
-                    className="w-4 h-4 text-red-600"
+                    className="w-4 h-4 text-blue-600"
                   />
                   <span className="text-sm font-sans font-semibold text-foreground">Custom Percentage</span>
                 </label>
@@ -1684,24 +1772,24 @@ export default function ConversationView() {
                     placeholder="0"
                     min="0"
                     max="100"
-                    className="w-24 px-3 py-2 text-sm font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-foreground"
+                    className="w-20 px-3 py-2 text-sm font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-foreground"
                   />
                   <span className="text-sm font-sans text-foreground">%</span>
-                  <span className="text-sm font-sans text-muted-foreground">
+                  <span className="text-sm font-sans text-slate-600">
                     = ${(parseFloat(refundOrder.total_price) * (parseFloat(refundCustomPercentage) || 0) / 100).toFixed(2)}
                   </span>
                 </div>
               </div>
 
               {/* Custom Dollar Amount */}
-              <div className="border-t border-border pt-4">
+              <div className="border-t border-border pt-3">
                 <label className={`flex items-center gap-3 mb-2`}>
                   <input
                     type="radio"
                     name="refundType"
                     checked={refundType === 'dollar'}
                     onChange={() => setRefundType('dollar')}
-                    className="w-4 h-4 text-red-600"
+                    className="w-4 h-4 text-blue-600"
                   />
                   <span className="text-sm font-sans font-semibold text-foreground">Custom Dollar Amount</span>
                 </label>
@@ -1719,7 +1807,7 @@ export default function ConversationView() {
                     min="0"
                     max={parseFloat(refundOrder.total_price)}
                     step="0.01"
-                    className="w-32 px-3 py-2 text-sm font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-foreground"
+                    className="w-28 px-3 py-2 text-sm font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-foreground"
                   />
                   <span className="text-xs font-sans text-muted-foreground">
                     (Max: ${parseFloat(refundOrder.total_price).toFixed(2)})
@@ -1729,10 +1817,10 @@ export default function ConversationView() {
             </div>
 
             {/* Refund Calculation Display */}
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-sans font-semibold text-green-900">Total Refund Amount:</span>
-                <span className="text-2xl font-sans font-bold text-green-600">
+                <span className="text-sm font-sans font-semibold text-slate-700">Total Refund Amount:</span>
+                <span className="text-2xl font-sans font-bold text-slate-900">
                   ${calculateRefundAmount().toFixed(2)}
                 </span>
               </div>
@@ -1748,7 +1836,7 @@ export default function ConversationView() {
                 onChange={(e) => setRefundReason(e.target.value)}
                 placeholder="Enter reason for refund..."
                 rows={3}
-                className="w-full px-4 py-3 font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-foreground resize-none"
+                className="w-full px-4 py-3 font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-foreground resize-none"
               />
             </div>
 
@@ -1759,7 +1847,7 @@ export default function ConversationView() {
                   type="checkbox"
                   checked={refundNotifyCustomer}
                   onChange={(e) => setRefundNotifyCustomer(e.target.checked)}
-                  className="w-4 h-4 text-red-600 rounded"
+                  className="w-4 h-4 text-blue-600 rounded"
                 />
                 <div>
                   <p className="text-sm font-sans font-semibold text-foreground">Notify Customer</p>
@@ -1772,7 +1860,7 @@ export default function ConversationView() {
                   type="checkbox"
                   checked={refundRestock}
                   onChange={(e) => setRefundRestock(e.target.checked)}
-                  className="w-4 h-4 text-red-600 rounded"
+                  className="w-4 h-4 text-blue-600 rounded"
                 />
                 <div>
                   <p className="text-sm font-sans font-semibold text-foreground">Restock Items</p>
@@ -1783,18 +1871,18 @@ export default function ConversationView() {
 
             {/* Confirmation Warning */}
             {refundConfirmation && (
-              <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4">
+              <div className="bg-slate-50 border-2 border-slate-300 rounded-lg p-4">
                 <div className="flex items-start gap-3">
-                  <svg className="w-6 h-6 text-yellow-600 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-6 h-6 text-slate-600 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
                   <div>
-                    <h4 className="text-sm font-sans font-bold text-yellow-900 mb-1">Confirm Refund</h4>
-                    <p className="text-xs font-sans text-yellow-800 mb-2">
+                    <h4 className="text-sm font-sans font-bold text-slate-800 mb-1">Confirm Refund</h4>
+                    <p className="text-xs font-sans text-slate-700 mb-2">
                       You are about to refund <strong>${calculateRefundAmount().toFixed(2)}</strong> to the customer.
                       This action cannot be undone.
                     </p>
-                    <p className="text-xs font-sans text-yellow-800">
+                    <p className="text-xs font-sans text-slate-700">
                       Click "Process Refund" again to confirm.
                     </p>
                   </div>
@@ -1815,7 +1903,7 @@ export default function ConversationView() {
             <button
               onClick={handleProcessRefund}
               disabled={processingRefund || calculateRefundAmount() <= 0}
-              className="px-6 py-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg text-sm font-sans font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-6 py-2 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 text-white rounded-lg text-sm font-sans font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {processingRefund ? (
                 <>
