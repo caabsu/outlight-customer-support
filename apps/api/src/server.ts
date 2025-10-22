@@ -1472,21 +1472,35 @@ CRITICAL RULES:
 - Be specific with order numbers, dates, and tracking numbers
 - Use customer's first name when available
 
-OUTPUT FORMAT (JSON):
+CRITICAL: You MUST respond with ONLY valid JSON. No explanations, no markdown, no code blocks - ONLY the JSON object.
+
+OUTPUT FORMAT (REQUIRED JSON STRUCTURE):
 {
-  "internalReasoning": "Your step-by-step analysis of the situation",
-  "tags": ["array", "of", "tags"],
+  "internalReasoning": "Your step-by-step internal analysis of the situation",
+  "tags": ["tag1", "tag2"],
   "category": "primary-category",
-  "reasoning": "Reasoning shown to agent",
-  "shouldDraft": true/false,
-  "draft": "email text" or null,
-  "actionSteps": ["step1", "step2"] or null,
+  "reasoning": "Brief reasoning shown to the agent (1-2 sentences)",
+  "shouldDraft": true,
+  "draft": "Full email text ready to send to customer",
+  "actionSteps": null,
   "orderInfo": {
-    "orderId": "order id",
-    "orderDate": "date",
-    "deliveryDate": "date",
-    "isWithinReturnWindow": true/false
-  } or null
+    "orderId": "#1234",
+    "orderDate": "YYYY-MM-DD",
+    "deliveryDate": "YYYY-MM-DD",
+    "isWithinReturnWindow": false
+  }
+}
+
+OR if action steps instead of draft:
+{
+  "internalReasoning": "Your step-by-step internal analysis",
+  "tags": ["tag1"],
+  "category": "category-name",
+  "reasoning": "Brief explanation for the agent",
+  "shouldDraft": false,
+  "draft": null,
+  "actionSteps": ["Step 1: Do this", "Step 2: Do that"],
+  "orderInfo": {...}
 }`
       },
       {
@@ -1510,11 +1524,12 @@ Follow the workflow: Search customer → Read email → Analyze → Draft/Steps`
     // Tool calling loop
     while (toolCallCount < MAX_TOOL_CALLS) {
       const completion = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-5",
         messages,
         tools: tools as any,
         tool_choice: toolCallCount === 0 ? "auto" : "auto",
         temperature: 0.3,
+        response_format: { type: "json_object" }
       });
 
       const assistantMessage = completion.choices[0].message;
