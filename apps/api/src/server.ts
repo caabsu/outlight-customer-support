@@ -1152,7 +1152,25 @@ app.get("/tracking/:trackingNumber", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Tracking number is required" });
     }
 
-    // Call 17track API to get tracking info
+    // Step 1: Register the tracking number (in case it's not already registered)
+    // This is idempotent - registering an already-registered number is safe
+    try {
+      await fetch("https://api.17track.net/track/v2.2/register", {
+        method: "POST",
+        headers: {
+          "17token": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify([{
+          number: trackingNumber
+        }]),
+      });
+      // We don't care if registration fails - the number might already be registered
+    } catch (registerError) {
+      console.log("Registration attempt (may already be registered):", registerError);
+    }
+
+    // Step 2: Fetch tracking info
     const response = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
       method: "POST",
       headers: {
@@ -1174,6 +1192,10 @@ app.get("/tracking/:trackingNumber", async (req: Request, res: Response) => {
     }
 
     const data = await response.json();
+
+    // Log the response for debugging
+    console.log("17track API response:", JSON.stringify(data, null, 2));
+
     res.json(data);
   } catch (error) {
     console.error("Error fetching tracking info:", error);
