@@ -1636,41 +1636,6 @@ export default function ConversationView() {
             </div>
           </button>
 
-          {/* AI Draft Button */}
-          <button
-            onClick={generateDraft}
-            disabled={loadingDraft || !selectedConversation}
-            className="w-full px-4 py-3.5 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md group disabled:opacity-60 disabled:cursor-not-allowed relative"
-          >
-            {loadingDraft && (
-              <div className="absolute inset-0 bg-purple-600/50 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </div>
-            )}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"
-                  />
-                </svg>
-                <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : 'AI Draft'}</span>
-              </div>
-              <span className="text-xs font-sans font-medium opacity-80">✨</span>
-            </div>
-          </button>
-
           {/* Mark as Non-Support Button */}
           {!selectedConversation.tags?.includes("non-customer-support") && (
             <button
@@ -1946,6 +1911,60 @@ export default function ConversationView() {
               <p className="text-sm font-sans text-muted-foreground">No Shopify customer found</p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* AI Assistant Section */}
+      <div className="border-b border-border">
+        <div className="px-6 py-4 bg-gradient-to-r from-purple-100 to-pink-100">
+          <h3 className="font-sans font-bold text-purple-900 text-sm uppercase tracking-wide">AI Assistant</h3>
+        </div>
+
+        <div className="px-4 py-4 space-y-3">
+          {/* Summarize Button */}
+          <button
+            onClick={() => {/* TODO: Implement summarize */}}
+            disabled={!selectedConversation}
+            className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span className="text-sm font-sans font-bold">Summarize</span>
+            </div>
+            <span className="text-xs font-sans font-medium opacity-80">📝</span>
+          </button>
+
+          {/* Draft Button */}
+          <button
+            onClick={generateDraft}
+            disabled={loadingDraft || !selectedConversation}
+            className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between relative"
+          >
+            {loadingDraft && (
+              <div className="absolute inset-0 bg-purple-600/50 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+            )}
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : 'Draft'}</span>
+            </div>
+            <span className="text-xs font-sans font-medium opacity-80">✨</span>
+          </button>
+
+          {/* Placeholder for future buttons */}
+          <div className="h-12 border-2 border-dashed border-muted-foreground/20 rounded-lg flex items-center justify-center">
+            <span className="text-xs font-sans text-muted-foreground italic">More AI tools coming soon</span>
+          </div>
+          <div className="h-12 border-2 border-dashed border-muted-foreground/20 rounded-lg flex items-center justify-center">
+            <span className="text-xs font-sans text-muted-foreground italic">More AI tools coming soon</span>
+          </div>
         </div>
       </div>
 
