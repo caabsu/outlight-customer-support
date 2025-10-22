@@ -11,19 +11,32 @@ type ConversationHistory = {
   messages: { direction: string }[];
 };
 
-// Sanitize email HTML by stripping font-related inline styles
+// Aggressively sanitize email HTML to enforce consistent styling
 function sanitizeEmailHtml(html: string): string {
   if (!html) return html;
 
-  // Remove font-weight, font-size, font-family from inline styles
-  // This regex finds style="..." and removes font-related properties
-  return html
-    .replace(/font-weight\s*:\s*[^;}"']+;?/gi, '')
-    .replace(/font-size\s*:\s*[^;}"']+;?/gi, '')
-    .replace(/font-family\s*:\s*[^;}"']+;?/gi, '')
-    // Clean up empty style attributes
-    .replace(/style\s*=\s*["'](\s*;?\s*)["']/gi, '')
-    .replace(/style\s*=\s*["']\s*["']/gi, '');
+  let sanitized = html;
+
+  // Remove all <style> tags and their content (embedded CSS)
+  sanitized = sanitized.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+
+  // Remove all class attributes (single and double quotes)
+  sanitized = sanitized.replace(/\sclass\s*=\s*"[^"]*"/gi, '');
+  sanitized = sanitized.replace(/\sclass\s*=\s*'[^']*'/gi, '');
+
+  // Remove all inline style attributes completely (single and double quotes)
+  sanitized = sanitized.replace(/\sstyle\s*=\s*"[^"]*"/gi, '');
+  sanitized = sanitized.replace(/\sstyle\s*=\s*'[^']*'/gi, '');
+
+  // Remove width/height attributes
+  sanitized = sanitized.replace(/\s(width|height)\s*=\s*"[^"]*"/gi, '');
+  sanitized = sanitized.replace(/\s(width|height)\s*=\s*'[^"]*'/gi, '');
+
+  // Remove any <font> tags but keep their content
+  sanitized = sanitized.replace(/<font[^>]*>/gi, '');
+  sanitized = sanitized.replace(/<\/font>/gi, '');
+
+  return sanitized;
 }
 
 export default function ConversationView() {
@@ -387,20 +400,20 @@ export default function ConversationView() {
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-xs font-sans font-medium text-primary">
+                  <span className="text-xs font-sans text-primary" style={{ fontWeight: 400 }}>
                     {message.fromEmail[0].toUpperCase()}
                   </span>
                 </div>
                 <div>
-                  <p className="text-sm font-sans font-medium text-foreground">
+                  <p className="text-sm font-sans text-foreground" style={{ fontWeight: 400 }}>
                     {message.fromEmail}
                   </p>
-                  <p className="text-xs font-sans text-foreground/80">
+                  <p className="text-xs font-sans text-foreground/80" style={{ fontWeight: 400 }}>
                     to: {message.toEmails.join(", ")}
                   </p>
                 </div>
               </div>
-              <span className="text-xs font-sans text-foreground/70">
+              <span className="text-xs font-sans text-foreground/70" style={{ fontWeight: 400 }}>
                 {formatDate(message.sentAt)}
               </span>
             </div>
@@ -408,10 +421,11 @@ export default function ConversationView() {
               {message.bodyHtml ? (
                 <div
                   className="email-html-container font-sans p-4 rounded border border-border overflow-auto bg-background"
+                  style={{ fontWeight: 400, fontSize: '14px', lineHeight: 1.6 }}
                   dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(message.bodyHtml) }}
                 />
               ) : (
-                <p className="text-sm font-sans text-foreground whitespace-pre-wrap">
+                <p className="text-sm font-sans text-foreground whitespace-pre-wrap" style={{ fontWeight: 400 }}>
                   {message.bodyText}
                 </p>
               )}
