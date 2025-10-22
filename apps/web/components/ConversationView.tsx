@@ -78,6 +78,7 @@ export default function ConversationView() {
   // Refund state
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [refundOrder, setRefundOrder] = useState<any>(null);
+  const [refundMode, setRefundMode] = useState<'simple' | 'items'>('simple');
   const [refundType, setRefundType] = useState<'preset' | 'percentage' | 'dollar' | 'full'>('preset');
   const [refundPreset, setRefundPreset] = useState<20 | 50>(20);
   const [refundCustomPercentage, setRefundCustomPercentage] = useState("");
@@ -87,6 +88,7 @@ export default function ConversationView() {
   const [refundRestock, setRefundRestock] = useState(false);
   const [processingRefund, setProcessingRefund] = useState(false);
   const [refundConfirmation, setRefundConfirmation] = useState(false);
+  const [selectedLineItems, setSelectedLineItems] = useState<Map<number, { quantity: number; restock: boolean }>>(new Map());
 
   // Fetch conversation history
   useEffect(() => {
@@ -525,6 +527,7 @@ export default function ConversationView() {
   // Open refund modal
   const openRefundModal = (order: any) => {
     setRefundOrder(order);
+    setRefundMode('simple');
     setRefundType('preset');
     setRefundPreset(20);
     setRefundCustomPercentage("");
@@ -533,6 +536,7 @@ export default function ConversationView() {
     setRefundNotifyCustomer(true);
     setRefundRestock(false);
     setRefundConfirmation(false);
+    setSelectedLineItems(new Map());
     setShowRefundModal(true);
   };
 
@@ -540,6 +544,20 @@ export default function ConversationView() {
   const calculateRefundAmount = (): number => {
     if (!refundOrder) return 0;
 
+    // Items mode: Calculate based on selected line items
+    if (refundMode === 'items') {
+      let total = 0;
+      refundOrder.line_items?.forEach((item: any) => {
+        const selectedItem = selectedLineItems.get(item.id);
+        if (selectedItem && selectedItem.quantity > 0) {
+          const itemPrice = parseFloat(item.price);
+          total += itemPrice * selectedItem.quantity;
+        }
+      });
+      return total;
+    }
+
+    // Simple mode: Use preset/percentage/dollar
     const orderTotal = parseFloat(refundOrder.total_price);
 
     switch (refundType) {
@@ -577,12 +595,32 @@ export default function ConversationView() {
     setProcessingRefund(true);
 
     try {
-      // Create refund line items (full refund of all items for now)
-      const refundLineItems = refundOrder.line_items.map((item: any) => ({
-        line_item_id: item.id,
-        quantity: item.quantity,
-        restock_type: refundRestock ? 'return' : 'no_restock',
-      }));
+      // Create refund line items based on mode
+      let refundLineItems;
+
+      if (refundMode === 'items') {
+        // Items mode: Use only selected items with their quantities
+        refundLineItems = refundOrder.line_items
+          .filter((item: any) => {
+            const selectedItem = selectedLineItems.get(item.id);
+            return selectedItem && selectedItem.quantity > 0;
+          })
+          .map((item: any) => {
+            const selectedItem = selectedLineItems.get(item.id)!;
+            return {
+              line_item_id: item.id,
+              quantity: selectedItem.quantity,
+              restock_type: selectedItem.restock ? 'return' : 'no_restock',
+            };
+          });
+      } else {
+        // Simple mode: Refund all items with full quantity
+        refundLineItems = refundOrder.line_items.map((item: any) => ({
+          line_item_id: item.id,
+          quantity: item.quantity,
+          restock_type: refundRestock ? 'return' : 'no_restock',
+        }));
+      }
 
       const response = await fetch(`/api/shopify/order/${refundOrder.id}/refund`, {
         method: 'POST',
@@ -623,6 +661,35 @@ export default function ConversationView() {
     } finally {
       setProcessingRefund(false);
       setRefundConfirmation(false);
+    }
+  };
+
+  // Line item selection helpers
+  const toggleLineItem = (lineItemId: number, quantity: number) => {
+    const newSelected = new Map(selectedLineItems);
+    if (newSelected.has(lineItemId)) {
+      newSelected.delete(lineItemId);
+    } else {
+      newSelected.set(lineItemId, { quantity, restock: false });
+    }
+    setSelectedLineItems(newSelected);
+  };
+
+  const updateLineItemQuantity = (lineItemId: number, quantity: number) => {
+    const newSelected = new Map(selectedLineItems);
+    const current = newSelected.get(lineItemId);
+    if (current) {
+      newSelected.set(lineItemId, { ...current, quantity });
+      setSelectedLineItems(newSelected);
+    }
+  };
+
+  const toggleLineItemRestock = (lineItemId: number) => {
+    const newSelected = new Map(selectedLineItems);
+    const current = newSelected.get(lineItemId);
+    if (current) {
+      newSelected.set(lineItemId, { ...current, restock: !current.restock });
+      setSelectedLineItems(newSelected);
     }
   };
 
@@ -1666,9 +1733,127 @@ export default function ConversationView() {
               </div>
             </div>
 
-            {/* Refund Amount Selection */}
+            {/* Refund Mode Switcher */}
             <div>
-              <h3 className="text-sm font-sans font-bold text-foreground mb-3">Select Refund Amount</h3>
+              <h3 className="text-sm font-sans font-bold text-foreground mb-3">Refund Type</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setRefundMode('simple');
+                    setSelectedLineItems(new Map());
+                  }}
+                  className={`flex-1 px-4 py-3 rounded-lg text-sm font-sans font-bold transition-all ${
+                    refundMode === 'simple'
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'bg-secondary border border-border text-foreground hover:bg-accent'
+                  }`}
+                >
+                  Simple Refund
+                </button>
+                <button
+                  onClick={() => setRefundMode('items')}
+                  className={`flex-1 px-4 py-3 rounded-lg text-sm font-sans font-bold transition-all ${
+                    refundMode === 'items'
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'bg-secondary border border-border text-foreground hover:bg-accent'
+                  }`}
+                >
+                  Refund by Items
+                </button>
+              </div>
+            </div>
+
+            {/* Line Items Selection (Items Mode) */}
+            {refundMode === 'items' && (
+              <div>
+                <h3 className="text-sm font-sans font-bold text-foreground mb-3">Select Items to Refund</h3>
+                <div className="space-y-2">
+                  {refundOrder.line_items?.map((item: any) => {
+                    const isSelected = selectedLineItems.has(item.id);
+                    const selectedItem = selectedLineItems.get(item.id);
+                    const maxQuantity = item.quantity;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`border-2 rounded-lg p-3 transition-all ${
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-border bg-background hover:border-blue-300'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleLineItem(item.id, maxQuantity)}
+                            className="w-5 h-5 text-blue-600 rounded mt-1"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-sans font-bold text-foreground truncate">
+                                  {item.name}
+                                </p>
+                                <p className="text-xs font-sans text-muted-foreground">
+                                  ${parseFloat(item.price).toFixed(2)} each
+                                </p>
+                              </div>
+                              <span className="text-sm font-sans font-bold text-slate-700 whitespace-nowrap">
+                                ${(parseFloat(item.price) * (selectedItem?.quantity || maxQuantity)).toFixed(2)}
+                              </span>
+                            </div>
+
+                            {isSelected && (
+                              <div className="space-y-2 pt-2 border-t border-blue-200">
+                                <div className="flex items-center gap-3">
+                                  <label className="text-xs font-sans font-semibold text-foreground">
+                                    Quantity:
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max={maxQuantity}
+                                    value={selectedItem?.quantity || maxQuantity}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value);
+                                      if (val >= 1 && val <= maxQuantity) {
+                                        updateLineItemQuantity(item.id, val);
+                                      }
+                                    }}
+                                    className="w-20 px-2 py-1 text-sm font-sans bg-background border border-border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs font-sans text-muted-foreground">
+                                    of {maxQuantity}
+                                  </span>
+                                </div>
+
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedItem?.restock || false}
+                                    onChange={() => toggleLineItemRestock(item.id)}
+                                    className="w-4 h-4 text-blue-600 rounded"
+                                  />
+                                  <span className="text-xs font-sans font-semibold text-foreground">
+                                    Restock this item
+                                  </span>
+                                </label>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Refund Amount Selection (Simple Mode) */}
+            {refundMode === 'simple' && (
+              <div>
+                <h3 className="text-sm font-sans font-bold text-foreground mb-3">Select Refund Amount</h3>
 
               {/* Preset Options */}
               <div className="space-y-2 mb-4">
@@ -1815,6 +2000,7 @@ export default function ConversationView() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Refund Calculation Display */}
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
