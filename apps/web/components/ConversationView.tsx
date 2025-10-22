@@ -134,6 +134,15 @@ export default function ConversationView() {
     }
   }, [selectedConversation?.id]);
 
+  // Reset draft popup state when conversation changes
+  useEffect(() => {
+    // Close popup and KB tab when switching conversations
+    setShowDraftPopup(false);
+    setDraftMinimized(false);
+    setShowKBTab(false);
+    setDraftError(null);
+  }, [selectedConversation?.id]);
+
   // Fetch Shopify customer data
   useEffect(() => {
     if (selectedConversation?.customer?.primaryEmail) {
