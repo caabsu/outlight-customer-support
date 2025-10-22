@@ -735,7 +735,7 @@ export default function ConversationView() {
   }
 
   return (
-    <div className="flex-1 flex bg-background overflow-hidden" style={{ fontFamily: "Roboto, sans-serif" }}>
+    <div className="flex-1 flex bg-background overflow-hidden min-w-0" style={{ fontFamily: "Roboto, sans-serif" }}>
       {/* Main Email View */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header - Fixed Height */}
