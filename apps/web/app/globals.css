@@ -261,7 +261,7 @@ html, body, div, span, p, a, h1, h2, h3, h4, h5, h6, ul, li, table, tr, td, th, 
   font-weight: 400 !important;
 }
 
-/* Force black text for headers with stronger weight */
+/* Force consistent font for headers - same weight as body text for uniformity */
 .email-html-container h1,
 .email-html-container h1[style],
 .email-html-container h1[class],
@@ -281,9 +281,43 @@ html, body, div, span, p, a, h1, h2, h3, h4, h5, h6, ul, li, table, tr, td, th, 
 .email-html-container h6[style],
 .email-html-container h6[class] {
   color: #000000 !important;
-  font-weight: 600 !important;
+  font-weight: 400 !important;
   font-family: var(--font-roboto) !important;
-  line-height: 1.4 !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+}
+
+/* Extra enforcement for bold and strong tags - prevent browser defaults */
+.email-html-container strong,
+.email-html-container strong[style],
+.email-html-container strong[class],
+.email-html-container b,
+.email-html-container b[style],
+.email-html-container b[class],
+.email-html-container * strong,
+.email-html-container * b {
+  font-weight: 400 !important;
+  font-size: 14px !important;
+  color: #000000 !important;
+}
+
+/* Extra enforcement for table elements - Shopify emails use these heavily */
+.email-html-container table,
+.email-html-container table[style],
+.email-html-container table[class],
+.email-html-container td,
+.email-html-container td[style],
+.email-html-container td[class],
+.email-html-container th,
+.email-html-container th[style],
+.email-html-container th[class],
+.email-html-container tr,
+.email-html-container tr[style],
+.email-html-container tr[class] {
+  font-weight: 400 !important;
+  font-size: 14px !important;
+  color: #000000 !important;
+  font-family: var(--font-roboto) !important;
 }
 
 /* Force white background on all containers */
