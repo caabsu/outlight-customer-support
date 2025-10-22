@@ -97,12 +97,23 @@ export default function ConversationView() {
   const [trackingError, setTrackingError] = useState<string | null>(null);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
 
-  // AI Draft state
-  const [draftData, setDraftData] = useState<any>(null);
-  const [loadingDraft, setLoadingDraft] = useState(false);
+  // AI Draft state - stored per conversation ID
+  const [draftsByConversationId, setDraftsByConversationId] = useState<Record<string, any>>({});
+  const [loadingDraftByConversationId, setLoadingDraftByConversationId] = useState<Record<string, boolean>>({});
   const [draftError, setDraftError] = useState<string | null>(null);
   const [showDraftPopup, setShowDraftPopup] = useState(false);
   const [draftMinimized, setDraftMinimized] = useState(false);
+  const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
+  const [showKBTab, setShowKBTab] = useState(false); // For Draft KB tab
+  const [showSummarizeKBTab, setShowSummarizeKBTab] = useState(false); // For Summarize KB tab
+  const [expandedKBSections, setExpandedKBSections] = useState<Record<string, boolean>>({
+    general: true,
+    toolSpecific: true
+  });
+
+  // Get current conversation's draft and loading state
+  const draftData = selectedConversation?.id ? draftsByConversationId[selectedConversation.id] : null;
+  const loadingDraft = selectedConversation?.id ? loadingDraftByConversationId[selectedConversation.id] || false : false;
 
   // Fetch conversation history
   useEffect(() => {
@@ -123,6 +134,16 @@ export default function ConversationView() {
       setHistory([]);
       setLoadingHistory(false);
     }
+  }, [selectedConversation?.id]);
+
+  // Reset draft popup state when conversation changes
+  useEffect(() => {
+    // Close popup and KB tab when switching conversations
+    setShowDraftPopup(false);
+    setDraftMinimized(false);
+    setShowKBTab(false);
+    setShowSummarizeKBTab(false);
+    setDraftError(null);
   }, [selectedConversation?.id]);
 
   // Fetch Shopify customer data
@@ -235,7 +256,13 @@ export default function ConversationView() {
       setReplyText("");
 
       // Clear draft data when email is sent
-      setDraftData(null);
+      if (selectedConversation?.id) {
+        setDraftsByConversationId(prev => {
+          const newDrafts = { ...prev };
+          delete newDrafts[selectedConversation.id];
+          return newDrafts;
+        });
+      }
       setShowDraftPopup(false);
       setDraftMinimized(false);
       setDraftError(null);
@@ -273,6 +300,30 @@ export default function ConversationView() {
       // Revert on error
       updateConversationOptimistic(selectedConversation.id, {
         tags: currentTags
+      });
+    }
+  };
+
+  const handleMarkResolved = async () => {
+    if (!selectedConversation) return;
+
+    // Optimistic update - instant UI feedback
+    updateConversationOptimistic(selectedConversation.id, {
+      archived: true
+    });
+
+    try {
+      await fetch(`/api/conversations/${selectedConversation.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived: true }),
+      });
+      await refreshConversations();
+    } catch (error) {
+      console.error("Failed to mark as resolved:", error);
+      // Revert on error
+      updateConversationOptimistic(selectedConversation.id, {
+        archived: false
       });
     }
   };
@@ -586,18 +637,28 @@ export default function ConversationView() {
   const generateDraft = async () => {
     if (!selectedConversation) return;
 
-    setLoadingDraft(true);
+    const conversationId = selectedConversation.id;
+
+    // Set loading state for this specific conversation
+    setLoadingDraftByConversationId(prev => ({
+      ...prev,
+      [conversationId]: true
+    }));
     setDraftError(null);
-    setShowDraftPopup(true);
-    setDraftMinimized(false);
-    setDraftData(null);
+    // Don't auto-open popup - let user click to view when ready
+
+    // Clear current conversation's draft while loading
+    setDraftsByConversationId(prev => ({
+      ...prev,
+      [conversationId]: null
+    }));
 
     try {
       // Call API server directly to avoid Next.js proxy timeout
       // In production, this would use the same domain, but in dev we bypass the proxy
       const apiUrl = process.env.NODE_ENV === 'development'
-        ? `http://localhost:3001/conversations/${selectedConversation.id}/draft`
-        : `/api/conversations/${selectedConversation.id}/draft`;
+        ? `http://localhost:3001/conversations/${conversationId}/draft`
+        : `/api/conversations/${conversationId}/draft`;
 
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -608,7 +669,12 @@ export default function ConversationView() {
       }
 
       const data = await response.json();
-      setDraftData(data);
+
+      // Store draft by conversation ID
+      setDraftsByConversationId(prev => ({
+        ...prev,
+        [conversationId]: data
+      }));
 
       // Refresh conversation to get updated tags
       await refreshConversations();
@@ -616,7 +682,11 @@ export default function ConversationView() {
       console.error("Error generating draft:", error);
       setDraftError(error instanceof Error ? error.message : "Failed to generate draft");
     } finally {
-      setLoadingDraft(false);
+      // Clear loading state for this specific conversation
+      setLoadingDraftByConversationId(prev => ({
+        ...prev,
+        [conversationId]: false
+      }));
     }
   };
 
@@ -979,12 +1049,18 @@ export default function ConversationView() {
     setEditingTags(false);
 
     try {
-      await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: updatedTags }),
       });
-      await refreshConversations();
+
+      if (!response.ok) {
+        throw new Error('Failed to update tags');
+      }
+
+      // Don't refresh conversations - optimistic update is enough
+      // This prevents race condition where server data overwrites our update
     } catch (error) {
       console.error("Failed to add tag:", error);
       // Revert on error
@@ -1002,12 +1078,18 @@ export default function ConversationView() {
     updateConversationOptimistic(selectedConversation.id, { tags: newTags });
 
     try {
-      await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: newTags }),
       });
-      await refreshConversations();
+
+      if (!response.ok) {
+        throw new Error('Failed to update tags');
+      }
+
+      // Don't refresh conversations - optimistic update is enough
+      // This prevents race condition where server data overwrites our update
     } catch (error) {
       console.error("Failed to remove tag:", error);
       // Revert on error
@@ -1235,26 +1317,31 @@ export default function ConversationView() {
     {/* Right Sidebar */}
     <div className="w-80 border-l border-border bg-background flex flex-col shrink-0 overflow-hidden">
       {/* Past Conversations Section */}
-      <div className="border-b border-border">
-        <div className="px-6 py-4 bg-secondary/30">
+      <div className="border-b border-gray-200">
+        <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
           <div className="flex items-center justify-between">
-            <h3 className="font-sans font-bold text-foreground text-sm uppercase tracking-wide">Past Conversations</h3>
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h3 className="font-sans font-semibold text-blue-900 text-sm">Past Conversations</h3>
+            </div>
             <button
               onClick={() => setShowAllHistory(true)}
-              className="text-xs font-sans font-semibold text-primary hover:text-primary/80 transition-colors"
+              className="text-xs font-sans font-medium text-blue-600 hover:text-blue-800 transition-colors"
             >
               View All →
             </button>
           </div>
         </div>
 
-        <div className="h-[200px] overflow-y-auto px-4 py-3 space-y-2">
+        <div className="h-[160px] overflow-y-auto px-4 py-3 bg-white space-y-1.5">
           {loadingHistory ? (
             <>
               {[1, 2].map((i) => (
-                <div key={i} className="w-full p-3 bg-secondary/50 animate-pulse rounded-lg">
-                  <div className="h-3 bg-muted rounded w-3/4 mb-2"></div>
-                  <div className="h-2 bg-muted rounded w-1/2"></div>
+                <div key={i} className="w-full p-2.5 bg-gray-50 animate-pulse rounded">
+                  <div className="h-3 bg-gray-200 rounded w-3/4 mb-1.5"></div>
+                  <div className="h-2 bg-gray-200 rounded w-1/2"></div>
                 </div>
               ))}
             </>
@@ -1263,90 +1350,60 @@ export default function ConversationView() {
               <button
                 key={conv.id}
                 onClick={() => selectConversation(conv.id)}
-                className="w-full text-left p-3 bg-secondary/50 hover:bg-secondary border border-transparent hover:border-primary/20 transition-all cursor-pointer rounded-lg group"
+                className="w-full text-left p-2.5 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-all cursor-pointer rounded"
               >
-                <p className="text-xs font-sans font-semibold text-foreground mb-1 truncate group-hover:text-primary transition-colors">
+                <p className="text-xs font-sans font-medium text-gray-900 mb-0.5 truncate">
                   {conv.subject}
                 </p>
-                <p className="text-[10px] font-sans text-muted-foreground truncate">
+                <p className="text-[10px] font-sans text-gray-600 truncate">
                   {new Date(conv.lastMessageAt).toLocaleDateString()} • {conv.messages.length} messages
                 </p>
               </button>
             ))
           ) : (
             <div className="p-6 text-center">
-              <p className="text-xs font-sans text-muted-foreground">No past conversations</p>
+              <p className="text-xs font-sans text-gray-500">No past conversations</p>
             </div>
           )}
         </div>
       </div>
 
       {/* Quick Actions Section */}
-      <div className="border-b border-border">
-        <div className="px-6 py-4 bg-secondary/30">
-          <h3 className="font-sans font-bold text-foreground text-sm uppercase tracking-wide">Quick Actions</h3>
+      <div className="border-b border-gray-200">
+        <div className="px-4 py-3 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <h3 className="font-sans font-semibold text-emerald-900 text-sm">Quick Actions</h3>
+          </div>
         </div>
 
-        <div className="px-4 py-4 space-y-3">
+        <div className="px-4 py-3 bg-white space-y-2">
           {/* Next Unreplied Button */}
           <button
             onClick={goToNextUnreplied}
             disabled={navigatingUnreplied}
-            className="w-full px-4 py-3.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md group disabled:opacity-60 disabled:cursor-not-allowed relative"
+            className="w-full px-3 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors text-sm font-sans font-medium disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between shadow-sm"
           >
-            {navigatingUnreplied && (
-              <div className="absolute inset-0 bg-blue-600/50 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </div>
-            )}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
-                  />
-                </svg>
-                <span className="text-sm font-sans font-bold">{navigatingUnreplied ? 'Navigating...' : 'Next Unreplied'}</span>
-              </div>
-              <span className="text-xs font-sans font-medium opacity-80">→</span>
+            <div className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+              </svg>
+              <span>{navigatingUnreplied ? 'Navigating...' : 'Next Unreplied'}</span>
             </div>
           </button>
 
           {/* Oldest Unreplied Button */}
           <button
             onClick={goToOldestUnreplied}
-            className="w-full px-4 py-3.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md group"
+            className="w-full px-3 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-between shadow-sm"
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-                  />
-                </svg>
-                <span className="text-sm font-sans font-bold">Oldest Unreplied</span>
-              </div>
-              <span className="text-xs font-sans font-medium opacity-80">⏰</span>
+            <div className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+              <span>Oldest Unreplied</span>
             </div>
           </button>
 
@@ -1354,102 +1411,107 @@ export default function ConversationView() {
           {!selectedConversation.tags?.includes("non-customer-support") && (
             <button
               onClick={handleMarkNonSupport}
-              className="w-full px-4 py-3.5 bg-background border-2 border-red-500/20 hover:border-red-500 hover:bg-red-50 text-foreground rounded-lg transition-all group"
+              className="w-full px-3 py-2.5 bg-white border-2 border-orange-300 hover:bg-orange-50 text-orange-700 rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-between"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="currentColor"
-                    className="w-5 h-5 text-red-500"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636"
-                    />
-                  </svg>
-                  <span className="text-sm font-sans font-bold group-hover:text-red-600">Mark as Non-Support</span>
-                </div>
+              <div className="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                <span>Mark as Non-Support</span>
               </div>
             </button>
           )}
+
+          {/* Mark as Resolved Button */}
+          <button
+            onClick={handleMarkResolved}
+            className="w-full px-3 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-between shadow-sm"
+          >
+            <div className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Mark as Resolved</span>
+            </div>
+          </button>
         </div>
       </div>
 
       {/* Shopify Section */}
-      <div className="border-b border-border">
-        <div className="px-6 py-4 bg-secondary/30">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-sans font-bold text-foreground text-sm uppercase tracking-wide">Shopify</h3>
+      <div className="border-b border-gray-200">
+        <div className="px-4 py-3 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+              <h3 className="font-sans font-semibold text-purple-900 text-sm">Shopify Customer</h3>
+            </div>
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={handleAIDetectEmail}
                 disabled={detectingEmail || !selectedConversation}
-                className="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-md text-xs font-sans font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                className="px-2 py-1 bg-purple-500 hover:bg-purple-600 text-white rounded text-[10px] font-sans font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap shadow-sm"
                 title="Use AI to detect customer email from message"
               >
                 {detectingEmail ? "Detecting..." : "AI Detect"}
               </button>
               {shopifyCustomer && (
-                <span className="text-xs font-sans font-medium text-green-600">Connected</span>
+                <span className="text-[10px] font-sans font-medium text-green-700">● Connected</span>
               )}
             </div>
           </div>
 
           {/* Search for Customer */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <input
               type="text"
               value={shopifySearchQuery}
               onChange={(e) => setShopifySearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleShopifySearch()}
               placeholder="Search by email or name..."
-              className="flex-1 px-3 py-2 text-xs font-sans bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+              className="flex-1 px-2 py-1.5 text-xs font-sans bg-white text-gray-900 placeholder:text-gray-500 border border-purple-200 rounded focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-300"
             />
             <button
               onClick={handleShopifySearch}
               disabled={searchingShopify || !shopifySearchQuery.trim()}
-              className="px-3 py-2 bg-primary text-primary-foreground rounded-md text-xs font-sans font-bold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-2 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded text-xs font-sans font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
             >
               {searchingShopify ? "..." : "Search"}
             </button>
           </div>
         </div>
 
-        <div className="px-4 py-4 space-y-3 max-h-[500px] overflow-y-auto">
+        <div className="px-4 py-3 bg-white space-y-2 max-h-[400px] overflow-y-auto">
           {loadingShopify ? (
-            <div className="p-6 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-              <p className="text-sm font-sans text-muted-foreground">Loading Shopify data...</p>
+            <div className="p-4 text-center">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500 mx-auto mb-2"></div>
+              <p className="text-xs font-sans text-gray-600">Loading...</p>
             </div>
           ) : shopifyError ? (
-            <div className="p-4 bg-muted rounded-lg text-center">
-              <p className="text-sm font-sans text-muted-foreground">{shopifyError}</p>
+            <div className="p-3 bg-gray-50 rounded text-center">
+              <p className="text-xs font-sans text-gray-700">{shopifyError}</p>
             </div>
           ) : shopifyCustomer ? (
             <>
               {/* Customer Info */}
-              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
-                <p className="text-sm font-sans font-bold text-purple-900 mb-3">
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded p-3">
+                <p className="text-sm font-sans font-semibold text-purple-900 mb-2">
                   {shopifyCustomer.first_name} {shopifyCustomer.last_name}
                 </p>
-                <div className="space-y-1.5 text-xs font-sans text-purple-700">
-                  <p>Orders: {shopifyCustomer.orders_count}</p>
-                  <p>Total Spent: ${parseFloat(shopifyCustomer.total_spent).toFixed(2)}</p>
-                  <p className={shopifyCustomer.verified_email ? "text-green-600" : "text-red-600"}>
-                    Email {shopifyCustomer.verified_email ? "Verified" : "Not Verified"}
+                <div className="space-y-1 text-xs font-sans text-gray-700">
+                  <p>Orders: <span className="font-semibold text-purple-900">{shopifyCustomer.orders_count}</span></p>
+                  <p>Total Spent: <span className="font-semibold text-purple-900">${parseFloat(shopifyCustomer.total_spent).toFixed(2)}</span></p>
+                  <p className={shopifyCustomer.verified_email ? "text-green-700 font-medium" : "text-red-700 font-medium"}>
+                    {shopifyCustomer.verified_email ? "✓ Email Verified" : "✗ Email Not Verified"}
                   </p>
                 </div>
               </div>
 
               {/* Order List */}
               {shopifyOrders.length > 0 ? (
-                <div className="space-y-3">
-                  <p className="text-sm font-sans font-semibold text-foreground">Recent Orders</p>
+                <div className="space-y-2">
+                  <p className="text-xs font-sans font-semibold text-gray-800 px-1">Recent Orders</p>
                   {shopifyOrders.slice(0, 5).map((order) => {
                     const trackingInfo = getTrackingInfo(order);
                     const { days, weeks } = getDaysSincePurchase(order.created_at);
@@ -1458,86 +1520,85 @@ export default function ConversationView() {
                       <div
                         key={order.id}
                         onClick={() => setSelectedOrder(order.id === selectedOrder?.id ? null : order)}
-                        className="w-full text-left p-4 bg-background border border-border hover:border-primary rounded-lg transition-all"
+                        className="w-full text-left p-3 bg-gray-50 border border-gray-200 hover:border-purple-300 hover:bg-purple-50 rounded transition-all cursor-pointer"
                       >
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-sm font-sans font-bold text-foreground">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <p className="text-sm font-sans font-semibold text-gray-900">
                             {order.name}
                           </p>
-                          <span className={`text-xs font-sans px-2 py-1 rounded ${
+                          <span className={`text-[10px] font-sans font-semibold px-1.5 py-0.5 rounded ${
                             order.financial_status === "paid"
-                              ? "bg-green-100 text-green-700"
+                              ? "bg-green-100 text-green-800"
                               : order.financial_status === "refunded"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-yellow-100 text-yellow-700"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-amber-100 text-amber-800"
                           }`}>
                             {order.financial_status}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between text-xs font-sans text-muted-foreground mb-1">
+                        <div className="flex items-center justify-between text-xs font-sans text-gray-700 mb-1">
                           <span>{new Date(order.created_at).toLocaleDateString()}</span>
-                          <span className="font-bold text-foreground">${parseFloat(order.total_price).toFixed(2)}</span>
+                          <span className="font-bold text-gray-900">${parseFloat(order.total_price).toFixed(2)}</span>
                         </div>
 
-                        {/* Days/Weeks Since Purchase */}
-                        <div className="text-xs font-sans text-muted-foreground">
-                          {days} days ago ({weeks} {weeks === 1 ? 'week' : 'weeks'})
-                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="text-[10px] font-sans text-gray-600">
+                            {days} days ago ({weeks}w)
+                          </div>
 
-                        {/* Fulfillment Status Badge */}
-                        <div className="mt-2">
-                          <span className={`text-xs font-sans px-2 py-1 rounded ${
+                          {/* Fulfillment Status Badge */}
+                          <span className={`text-[10px] font-sans font-semibold px-1.5 py-0.5 rounded ${
                             order.fulfillment_status === "fulfilled"
-                              ? "bg-blue-100 text-blue-700"
+                              ? "bg-blue-100 text-blue-800"
                               : order.fulfillment_status === "partial"
-                              ? "bg-yellow-100 text-yellow-700"
-                              : "bg-red-100 text-red-700"
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-gray-200 text-gray-700"
                           }`}>
                             {order.fulfillment_status === "fulfilled"
                               ? "Shipped"
                               : order.fulfillment_status === "partial"
-                              ? "Partially Shipped"
+                              ? "Partial"
                               : "Unfulfilled"}
                           </span>
                         </div>
 
                         {/* Order Details (Expanded) */}
                         {selectedOrder?.id === order.id && (
-                          <div className="mt-3 pt-3 border-t border-border space-y-3" onClick={(e) => e.stopPropagation()}>
+                          <div className="mt-2 pt-2 border-t border-slate-200 space-y-2" onClick={(e) => e.stopPropagation()}>
                             {/* Tracking Information */}
                             {trackingInfo && trackingInfo.trackingNumber && (
-                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                <p className="text-xs font-sans font-bold text-blue-900 mb-2">Tracking Information</p>
-                                <div className="space-y-1.5 text-xs font-sans text-blue-800">
+                              <div className="bg-slate-50 border border-slate-200 rounded p-2">
+                                <p className="text-[10px] font-sans font-semibold text-slate-700 mb-1.5">Tracking</p>
+                                <div className="space-y-1 text-[10px] font-sans text-slate-600">
                                   <p className="flex items-center justify-between">
                                     <span>Status:</span>
-                                    <span className="font-semibold">{trackingInfo.status || 'Unknown'}</span>
+                                    <span className="font-medium text-slate-800">{trackingInfo.status || 'Unknown'}</span>
                                   </p>
                                   {trackingInfo.trackingCompany && (
                                     <p className="flex items-center justify-between">
                                       <span>Carrier:</span>
-                                      <span className="font-semibold">{trackingInfo.trackingCompany}</span>
+                                      <span className="font-medium text-slate-800">{trackingInfo.trackingCompany}</span>
                                     </p>
                                   )}
                                   <div className="flex items-center justify-between gap-2">
-                                    <span>Tracking #:</span>
+                                    <span>Number:</span>
                                     <div className="flex items-center gap-1">
-                                      <span className="font-mono text-xs">{trackingInfo.trackingNumber}</span>
+                                      <span className="font-mono text-[10px] text-slate-800">{trackingInfo.trackingNumber}</span>
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           copyTrackingNumber(trackingInfo.trackingNumber);
                                         }}
-                                        className="p-1 hover:bg-blue-100 rounded transition-colors"
+                                        className="p-0.5 hover:bg-slate-200 rounded transition-colors"
                                         title="Copy tracking number"
                                       >
                                         {copiedTrackingNumber === trackingInfo.trackingNumber ? (
-                                          <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                          <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
                                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                           </svg>
                                         ) : (
-                                          <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <svg className="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                           </svg>
                                         )}
@@ -1549,9 +1610,9 @@ export default function ConversationView() {
                                       e.stopPropagation();
                                       fetchDetailedTracking(trackingInfo.trackingNumber);
                                     }}
-                                    className="mt-2 w-full px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-md text-xs font-sans font-semibold shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
+                                    className="mt-1 w-full px-2 py-1.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-[10px] font-sans font-medium transition-colors flex items-center justify-center gap-1"
                                   >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                     </svg>
@@ -1561,40 +1622,40 @@ export default function ConversationView() {
                               </div>
                             )}
 
-                            <div className="text-xs font-sans space-y-1.5">
-                              <p className="flex justify-between">
-                                <span className="text-muted-foreground">Subtotal:</span>
-                                <span className="text-foreground">${parseFloat(order.subtotal_price).toFixed(2)}</span>
+                            <div className="text-[10px] font-sans space-y-0.5 bg-slate-50 border border-slate-200 rounded p-2">
+                              <p className="flex justify-between text-slate-600">
+                                <span>Subtotal:</span>
+                                <span className="text-slate-800 font-medium">${parseFloat(order.subtotal_price).toFixed(2)}</span>
                               </p>
-                              <p className="flex justify-between">
-                                <span className="text-muted-foreground">Tax:</span>
-                                <span className="text-foreground">${parseFloat(order.total_tax).toFixed(2)}</span>
+                              <p className="flex justify-between text-slate-600">
+                                <span>Tax:</span>
+                                <span className="text-slate-800 font-medium">${parseFloat(order.total_tax).toFixed(2)}</span>
                               </p>
-                              <p className="flex justify-between font-bold">
-                                <span className="text-foreground">Total:</span>
-                                <span className="text-foreground">${parseFloat(order.total_price).toFixed(2)}</span>
+                              <p className="flex justify-between font-semibold text-slate-800 pt-0.5 border-t border-slate-200">
+                                <span>Total:</span>
+                                <span>${parseFloat(order.total_price).toFixed(2)}</span>
                               </p>
                             </div>
 
-                            <div className="text-xs font-sans">
-                              <p className="text-muted-foreground mb-2 font-semibold">Items:</p>
-                              <div className="space-y-1.5">
+                            <div className="text-[10px] font-sans bg-slate-50 border border-slate-200 rounded p-2">
+                              <p className="text-slate-700 mb-1 font-semibold">Items:</p>
+                              <div className="space-y-0.5">
                                 {order.line_items.map((item: any) => (
-                                  <div key={item.id} className="flex justify-between text-foreground">
-                                    <span>{item.quantity}x {item.name}</span>
-                                    <span>${parseFloat(item.price).toFixed(2)}</span>
+                                  <div key={item.id} className="flex justify-between text-slate-600">
+                                    <span className="truncate mr-2">{item.quantity}x {item.name}</span>
+                                    <span className="font-medium text-slate-800">${parseFloat(item.price).toFixed(2)}</span>
                                   </div>
                                 ))}
                               </div>
                             </div>
 
-                            <div className="flex flex-col gap-2 pt-2">
+                            <div className="flex flex-col gap-1.5 pt-1">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   openRefundModal(order);
                                 }}
-                                className="w-full px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-sans font-bold rounded transition-colors"
+                                className="w-full px-2 py-1.5 bg-red-600 hover:bg-red-700 text-white text-[10px] font-sans font-medium rounded transition-colors"
                               >
                                 Process Refund
                               </button>
@@ -1603,7 +1664,7 @@ export default function ConversationView() {
                                   e.stopPropagation();
                                   window.open(`https://${process.env.NEXT_PUBLIC_SHOPIFY_STORE || 'put1rp-iq.myshopify.com'}/admin/orders/${order.id}`, '_blank');
                                 }}
-                                className="w-full px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white text-xs font-sans font-bold rounded transition-colors"
+                                className="w-full px-2 py-1.5 bg-slate-600 hover:bg-slate-700 text-white text-[10px] font-sans font-medium rounded transition-colors"
                               >
                                 View in Shopify
                               </button>
@@ -1615,88 +1676,293 @@ export default function ConversationView() {
                   })}
                 </div>
               ) : (
-                <div className="p-4 bg-muted rounded-lg text-center">
-                  <p className="text-sm font-sans text-muted-foreground">No orders found</p>
+                <div className="p-3 bg-gray-50 rounded text-center">
+                  <p className="text-xs font-sans text-gray-600">No orders found</p>
                 </div>
               )}
             </>
           ) : (
-            <div className="p-4 bg-muted rounded-lg text-center">
-              <p className="text-sm font-sans text-muted-foreground">No Shopify customer found</p>
+            <div className="p-3 bg-gray-50 rounded text-center">
+              <p className="text-xs font-sans text-gray-600">No Shopify customer found</p>
             </div>
           )}
         </div>
       </div>
 
       {/* AI Assistant Section */}
-      <div className="border-b border-border">
-        <div className="px-6 py-4 bg-secondary/30">
-          <h3 className="font-sans font-bold text-foreground text-sm uppercase tracking-wide">AI Assistant</h3>
+      <div className="border-b border-gray-200">
+        <div className="px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-100">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            <h3 className="font-sans font-semibold text-amber-900 text-sm">AI Assistant</h3>
+          </div>
         </div>
 
-        <div className="px-4 py-4 space-y-3">
-          {/* Summarize Button */}
-          <button
-            onClick={() => {/* TODO: Implement summarize */}}
-            disabled={!selectedConversation}
-            className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed text-left"
-          >
-            <span className="text-sm font-sans font-bold">Summarize</span>
-          </button>
+        <div className="px-4 py-3 bg-white space-y-2">
+          {/* Draft Button with KB Info */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                if (loadingDraft) {
+                  return;
+                }
 
-          {/* Draft Button */}
-          <button
-            onClick={() => {
-              if (draftMinimized && showDraftPopup) {
-                // If draft is minimized, maximize it
-                setDraftMinimized(false);
-              } else {
-                // Otherwise generate new draft
-                generateDraft();
-              }
-            }}
-            disabled={loadingDraft || !selectedConversation}
-            className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed relative text-left"
-          >
-            {loadingDraft && (
-              <div className="absolute inset-0 bg-purple-600/50 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                if (draftMinimized && showDraftPopup) {
+                  setDraftMinimized(false);
+                } else if (draftData && showDraftPopup && !draftMinimized) {
+                  setDraftMinimized(true);
+                } else if (draftData && !showDraftPopup) {
+                  setShowDraftPopup(true);
+                  setDraftMinimized(false);
+                } else if (!draftData && !loadingDraft) {
+                  generateDraft();
+                }
+              }}
+              disabled={!selectedConversation}
+              className="w-full px-3 py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-md transition-colors text-sm font-sans font-medium disabled:opacity-60 disabled:cursor-not-allowed relative flex items-center justify-between shadow-sm"
+            >
+              {loadingDraft && (
+                <div className="absolute inset-0 bg-violet-600/90 rounded-md flex items-center justify-center">
+                  <svg className="w-4 h-4 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span>{loadingDraft ? 'Generating...' : (draftData ? 'AI Draft' : 'Draft')}</span>
+                {/* Draft ready indicator */}
+                {draftData && !showDraftPopup && !loadingDraft && (
+                  <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </div>
+              {/* Info Icon */}
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowKBTab(!showKBTab);
+                }}
+                className="p-0.5 hover:bg-white/20 rounded transition-colors cursor-pointer"
+                title="View Knowledge Base"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowKBTab(!showKBTab);
+                  }
+                }}
+              >
+                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                 </svg>
               </div>
-            )}
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : 'Draft'}</span>
-              {/* Minimized indicator */}
-              {showDraftPopup && draftMinimized && !loadingDraft && (
-                <div className="w-2 h-2 bg-white rounded-full animate-pulse" title="Draft minimized - click to view"></div>
-              )}
-            </div>
-          </button>
+            </button>
 
-          {/* Placeholder for future buttons */}
-          <div className="h-12 border-2 border-dashed border-muted-foreground/20 rounded-lg flex items-center justify-center">
-            <span className="text-xs font-sans text-muted-foreground italic">More AI tools coming soon</span>
+            {/* Expandable Knowledge Base Tab for Draft */}
+            {showKBTab && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-10 bg-white border border-slate-300 rounded shadow-lg overflow-hidden">
+                {/* Header */}
+                <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    <span className="text-xs font-sans font-semibold text-slate-700">Draft Knowledge Base</span>
+                  </div>
+                  <button
+                    onClick={() => setShowKBTab(false)}
+                    className="p-0.5 hover:bg-slate-200 rounded transition-colors"
+                    title="Close"
+                  >
+                    <svg className="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="max-h-64 overflow-y-auto p-2 space-y-1.5">
+                  {/* General Guidelines */}
+                  <div className="border border-slate-200 rounded overflow-hidden">
+                    <button
+                      onClick={() => setExpandedKBSections(prev => ({ ...prev, general: !prev.general }))}
+                      className="w-full px-2 py-1.5 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between text-left"
+                    >
+                      <span className="text-[10px] font-sans font-semibold text-slate-700">General Guidelines</span>
+                      <svg className={`w-3 h-3 text-slate-600 transition-transform ${expandedKBSections.general ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedKBSections.general && (
+                      <div className="px-2 py-1.5 bg-white text-[9px] font-sans text-slate-600 space-y-0.5">
+                        <div>• Email Classification Tags</div>
+                        <div>• Link Policy</div>
+                        <div>• Draft Requirements</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tool Specific */}
+                  <div className="border border-slate-200 rounded overflow-hidden">
+                    <button
+                      onClick={() => setExpandedKBSections(prev => ({ ...prev, toolSpecific: !prev.toolSpecific }))}
+                      className="w-full px-2 py-1.5 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between text-left"
+                    >
+                      <span className="text-[10px] font-sans font-semibold text-slate-700">AI Draft Specific</span>
+                      <svg className={`w-3 h-3 text-slate-600 transition-transform ${expandedKBSections.toolSpecific ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedKBSections.toolSpecific && (
+                      <div className="px-2 py-1.5 bg-white text-[9px] font-sans text-slate-600 space-y-0.5">
+                        <div>• Return & Refund Policy</div>
+                        <div>• Order Processing & Shipping</div>
+                        <div>• Draft Decision Rules</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* View Full Details Link */}
+                  {draftData?.knowledgeBase && (
+                    <button
+                      onClick={() => {
+                        setShowKBTab(false);
+                        setShowKnowledgeBase(true);
+                      }}
+                      className="w-full px-2 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-[10px] font-sans font-medium text-slate-700 transition-colors flex items-center justify-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      View Full KB
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-          <div className="h-12 border-2 border-dashed border-muted-foreground/20 rounded-lg flex items-center justify-center">
-            <span className="text-xs font-sans text-muted-foreground italic">More AI tools coming soon</span>
+
+          {/* Summarize Button with KB Info */}
+          <div className="relative">
+            <button
+              onClick={() => {/* TODO: Implement summarize */}}
+              disabled={!selectedConversation}
+              className="w-full px-3 py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-md transition-colors text-sm font-sans font-medium disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between shadow-sm"
+            >
+              <span>Summarize</span>
+              {/* Info Icon */}
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSummarizeKBTab(!showSummarizeKBTab);
+                }}
+                className="p-0.5 hover:bg-white/20 rounded transition-colors cursor-pointer"
+                title="View Knowledge Base"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowSummarizeKBTab(!showSummarizeKBTab);
+                  }
+                }}
+              >
+                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </button>
+
+            {/* Expandable Knowledge Base Tab for Summarize */}
+            {showSummarizeKBTab && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-10 bg-white border border-slate-300 rounded shadow-lg overflow-hidden">
+                {/* Header */}
+                <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    <span className="text-xs font-sans font-semibold text-slate-700">Summarize Knowledge Base</span>
+                  </div>
+                  <button
+                    onClick={() => setShowSummarizeKBTab(false)}
+                    className="p-0.5 hover:bg-slate-200 rounded transition-colors"
+                    title="Close"
+                  >
+                    <svg className="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="max-h-64 overflow-y-auto p-2 space-y-1.5">
+                  {/* General Guidelines */}
+                  <div className="border border-slate-200 rounded overflow-hidden">
+                    <button
+                      onClick={() => setExpandedKBSections(prev => ({ ...prev, general: !prev.general }))}
+                      className="w-full px-2 py-1.5 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between text-left"
+                    >
+                      <span className="text-[10px] font-sans font-semibold text-slate-700">General Guidelines</span>
+                      <svg className={`w-3 h-3 text-slate-600 transition-transform ${expandedKBSections.general ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedKBSections.general && (
+                      <div className="px-2 py-1.5 bg-white text-[9px] font-sans text-slate-600 space-y-0.5">
+                        <div>• Email Classification Tags</div>
+                        <div>• Link Policy</div>
+                        <div>• Summary Requirements</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Summarize Tool Specific */}
+                  <div className="border border-slate-200 rounded overflow-hidden">
+                    <button
+                      onClick={() => setExpandedKBSections(prev => ({ ...prev, toolSpecific: !prev.toolSpecific }))}
+                      className="w-full px-2 py-1.5 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between text-left"
+                    >
+                      <span className="text-[10px] font-sans font-semibold text-slate-700">Summarize Specific</span>
+                      <svg className={`w-3 h-3 text-slate-600 transition-transform ${expandedKBSections.toolSpecific ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedKBSections.toolSpecific && (
+                      <div className="px-2 py-1.5 bg-white text-[9px] font-sans text-slate-600 space-y-0.5">
+                        <div>• Conversation Context Analysis</div>
+                        <div>• Key Points Extraction</div>
+                        <div>• Action Items Identification</div>
+                        <div>• Customer Sentiment</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Spacer */}
-      <div className="flex-1"></div>
+      {/* Spacer - leaves room at bottom above compose email */}
+      <div className="flex-1 min-h-[60px]"></div>
 
       {/* Compose Email Button */}
-      <div className="border-t border-border p-4">
+      <div className="border-t border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100 p-4">
         <button
           onClick={() => openEmailComposer()}
-          className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md group flex items-center justify-center gap-2"
+          className="w-full px-3 py-2.5 bg-teal-500 hover:bg-teal-600 text-white rounded-md transition-colors text-sm font-sans font-semibold flex items-center justify-center gap-2 shadow-sm"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          <span className="text-sm font-sans font-bold">Compose Email</span>
+          <span>Compose Email</span>
         </button>
       </div>
     </div>
@@ -2515,9 +2781,22 @@ export default function ConversationView() {
                 </svg>
               </div>
               <div>
-                <h3 className="font-sans font-bold text-slate-900 text-base">
-                  AI Draft Assistant
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-sans font-bold text-slate-900 text-base">
+                    AI Draft Assistant
+                  </h3>
+                  {draftData?.knowledgeBase && (
+                    <button
+                      onClick={() => setShowKnowledgeBase(true)}
+                      className="p-1 hover:bg-white/50 rounded-full transition-colors group"
+                      title="View Knowledge Base"
+                    >
+                      <svg className="w-4 h-4 text-purple-600 group-hover:text-purple-700" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
                 {draftData?.tags && draftData.tags.length > 0 && (
                   <div className="flex items-center gap-2 mt-1">
                     {draftData.tags.slice(0, 3).map((tag: string) => (
@@ -2679,16 +2958,34 @@ export default function ConversationView() {
             </div>
           )}
 
-          {/* Footer with Delete button */}
+          {/* Footer with Regenerate and Delete buttons */}
           {!loadingDraft && draftData && (
-            <div className="px-8 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end shrink-0">
+            <div className="px-8 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+              <button
+                onClick={() => {
+                  generateDraft();
+                }}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all font-sans text-sm font-medium flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Regenerate Draft
+              </button>
               <button
                 onClick={() => {
                   if (confirm('Are you sure you want to delete this draft? This cannot be undone.')) {
                     setShowDraftPopup(false);
                     setDraftMinimized(false);
-                    setDraftData(null);
                     setDraftError(null);
+                    // Delete draft for current conversation
+                    if (selectedConversation?.id) {
+                      setDraftsByConversationId(prev => {
+                        const newDrafts = { ...prev };
+                        delete newDrafts[selectedConversation.id];
+                        return newDrafts;
+                      });
+                    }
                   }
                 }}
                 className="px-4 py-2 bg-white border border-slate-300 hover:bg-red-50 hover:border-red-300 text-slate-700 hover:text-red-700 rounded-lg transition-all font-sans text-sm font-medium flex items-center gap-2"
@@ -2700,6 +2997,118 @@ export default function ConversationView() {
               </button>
             </div>
           )}
+        </div>
+      </div>
+    )}
+
+    {/* Knowledge Base Modal */}
+    {showKnowledgeBase && draftData?.knowledgeBase && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="bg-white border border-slate-200 shadow-2xl w-[800px] max-h-[85vh] flex flex-col rounded-xl overflow-hidden">
+          {/* Header */}
+          <div className="px-6 py-4 bg-gradient-to-r from-purple-50 to-blue-50 border-b border-slate-200 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-sans font-bold text-slate-900 text-base">AI Knowledge Base</h3>
+                <p className="text-xs text-slate-600 font-sans">Training data used for draft generation</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowKnowledgeBase(false)}
+              className="p-2 hover:bg-white/50 rounded-lg transition-colors group"
+              title="Close"
+            >
+              <svg className="w-5 h-5 text-slate-500 group-hover:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-6 overflow-y-auto flex-1 space-y-4">
+            {/* Check if knowledge base is structured or plain text */}
+            {typeof draftData.knowledgeBase === 'object' && draftData.knowledgeBase.general ? (
+              <>
+                {/* General Knowledge Base */}
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedKBSections(prev => ({ ...prev, general: !prev.general }))}
+                    className="w-full px-4 py-3 bg-gradient-to-r from-blue-50 to-cyan-50 hover:from-blue-100 hover:to-cyan-100 transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                      </svg>
+                      <span className="font-sans font-bold text-blue-900">{draftData.knowledgeBase.general.title}</span>
+                    </div>
+                    <svg className={`w-5 h-5 text-blue-600 transition-transform ${expandedKBSections.general ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {expandedKBSections.general && (
+                    <div className="p-4 bg-white space-y-3">
+                      {draftData.knowledgeBase.general.sections.map((section: any, idx: number) => (
+                        <div key={idx} className="border-l-4 border-blue-400 pl-3">
+                          <h4 className="text-sm font-sans font-bold text-slate-900 mb-1">{section.title}</h4>
+                          <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap break-words">{section.content}</pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Tool-Specific Knowledge Base */}
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedKBSections(prev => ({ ...prev, toolSpecific: !prev.toolSpecific }))}
+                    className="w-full px-4 py-3 bg-gradient-to-r from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      <span className="font-sans font-bold text-purple-900">{draftData.knowledgeBase.toolSpecific.title}</span>
+                    </div>
+                    <svg className={`w-5 h-5 text-purple-600 transition-transform ${expandedKBSections.toolSpecific ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {expandedKBSections.toolSpecific && (
+                    <div className="p-4 bg-white space-y-3">
+                      {draftData.knowledgeBase.toolSpecific.sections.map((section: any, idx: number) => (
+                        <div key={idx} className="border-l-4 border-purple-400 pl-3">
+                          <h4 className="text-sm font-sans font-bold text-slate-900 mb-1">{section.title}</h4>
+                          <pre className="text-xs font-mono text-slate-700 whitespace-pre-wrap break-words">{section.content}</pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* Fallback for plain text knowledge base */
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                <pre className="text-xs font-mono text-slate-800 whitespace-pre-wrap break-words">
+                  {typeof draftData.knowledgeBase === 'string' ? draftData.knowledgeBase : JSON.stringify(draftData.knowledgeBase, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end shrink-0">
+            <button
+              onClick={() => setShowKnowledgeBase(false)}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-sans text-sm font-medium"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     )}
