@@ -1,6 +1,8 @@
 import express, { type Request, type Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
 // Load from .env.local first, fallback to .env
 dotenv.config({ path: ".env.local" });
 dotenv.config(); // This will load .env if .env.local doesn't exist
@@ -1322,6 +1324,157 @@ app.post("/tracking/batch", async (req: Request, res: Response) => {
     console.error("Error fetching batch tracking info:", error);
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to fetch batch tracking information"
+    });
+  }
+});
+
+/**
+ * AI Draft Functionality
+ * POST /conversations/:id/draft
+ */
+
+// Load knowledge base
+let knowledgeBase = "";
+try {
+  const kbPath = path.join(__dirname, "knowledge-base", "customer-support-policy.md");
+  knowledgeBase = fs.readFileSync(kbPath, "utf-8");
+} catch (error) {
+  console.error("Warning: Could not load knowledge base:", error);
+}
+
+app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.id;
+
+    // Fetch conversation with all messages
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: {
+        customer: true,
+        messages: {
+          orderBy: { sentAt: "asc" },
+        },
+      },
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+
+    // Fetch customer's Shopify data if available
+    let shopifyData = null;
+    if (conversation.customer?.primaryEmail) {
+      try {
+        const customer = await shopify.getCustomerByEmail(conversation.customer.primaryEmail);
+        if (customer) {
+          const orders = await shopify.getCustomerOrders(customer.id);
+          shopifyData = {
+            customer,
+            orders: orders.slice(0, 5), // Last 5 orders
+          };
+        }
+      } catch (error) {
+        console.log("Could not fetch Shopify data:", error);
+      }
+    }
+
+    // Build email thread context
+    const emailThread = conversation.messages.map((msg: any) => ({
+      from: msg.direction === "inbound" ? conversation.customer?.primaryEmail : "support@outlight.us",
+      direction: msg.direction,
+      date: msg.sentAt,
+      subject: msg.subject || conversation.subject,
+      body: msg.bodyPlain || msg.bodyHtml,
+    }));
+
+    // Build context for AI
+    const context = {
+      emailThread,
+      customer: conversation.customer ? {
+        name: conversation.customer.name,
+        email: conversation.customer.primaryEmail,
+      } : null,
+      shopifyData,
+      currentTags: conversation.tags || [],
+    };
+
+    // Call OpenAI for draft generation
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `You are an AI assistant helping Outlight customer support agents draft email responses.
+
+KNOWLEDGE BASE:
+${knowledgeBase}
+
+Your task is to:
+1. Analyze the email thread
+2. Classify the email with appropriate tags
+3. Check customer/order data against policies
+4. Either draft a response email OR provide actionable steps for the agent
+
+IMPORTANT OUTPUT FORMAT:
+You must respond with a valid JSON object with this exact structure:
+{
+  "tags": ["tag1", "tag2"],
+  "category": "primary-category",
+  "reasoning": "Step-by-step reasoning for your classification and response",
+  "shouldDraft": true or false,
+  "draft": "The email draft text (if shouldDraft is true)" or null,
+  "actionSteps": ["step 1", "step 2"] (if shouldDraft is false) or null,
+  "orderInfo": {
+    "orderId": "order id if relevant",
+    "orderDate": "date",
+    "deliveryDate": "date",
+    "isWithinReturnWindow": true/false
+  } or null
+}
+
+Rules:
+- For "non-support" and "chargeback": shouldDraft = false, no draft needed
+- For "return": Check policy, draft if within window
+- For "refund" (already returned): shouldDraft = false, provide verification steps
+- For "product-inquiry": shouldDraft = false, provide research steps
+- Use customer's name in drafts when available
+- Be professional, empathetic, and concise
+- Include specific order numbers, dates, and URLs when relevant`
+        },
+        {
+          role: "user",
+          content: `Analyze this customer support email and generate a response:
+
+CONTEXT:
+${JSON.stringify(context, null, 2)}
+
+Generate the classification, reasoning, and either a draft response or action steps.`
+        }
+      ],
+      temperature: 0.7,
+      response_format: { type: "json_object" }
+    });
+
+    const result = JSON.parse(completion.choices[0].message.content || "{}");
+
+    // Update conversation tags if new tags were added
+    if (result.tags && result.tags.length > 0) {
+      const uniqueTags = Array.from(new Set([...(conversation.tags || []), ...result.tags]));
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { tags: uniqueTags },
+      });
+    }
+
+    res.json({
+      ...result,
+      conversationId,
+      processingTime: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Error generating draft:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to generate draft"
     });
   }
 });
