@@ -111,7 +111,35 @@ app.get("/conversations", async (req: Request, res: Response) => {
   }
 });
 
-// Get a single conversation
+// IMPORTANT: Specific routes must come BEFORE parameterized routes in Express
+// Get oldest unreplied conversation (no ID parameter)
+app.get("/conversations/next-unreplied", async (_req: Request, res: Response) => {
+  try {
+    const unreplied = await getUnrepliedConversations();
+    res.json(unreplied[0] || null);
+  } catch (error) {
+    console.error("Error fetching next unreplied:", error);
+    res.status(500).json({ error: "Failed to fetch next unreplied" });
+  }
+});
+
+// Get next unreplied conversation after a specific one
+app.get("/conversations/next-unreplied/:currentId", async (req: Request, res: Response) => {
+  try {
+    const { currentId } = req.params;
+    const unreplied = await getUnrepliedConversations();
+
+    // Find the next one after current
+    const currentIndex = unreplied.findIndex(c => c.id === currentId);
+    const next = unreplied[currentIndex + 1] || unreplied[0];
+    res.json(next || null);
+  } catch (error) {
+    console.error("Error fetching next unreplied:", error);
+    res.status(500).json({ error: "Failed to fetch next unreplied" });
+  }
+});
+
+// Get a single conversation (parameterized route - must come AFTER specific routes)
 app.get("/conversations/:id", async (req: Request, res: Response) => {
   try {
     const conversation = await prisma.conversation.findUnique({
@@ -232,33 +260,6 @@ async function getUnrepliedConversations() {
     c.messages.length > 0 && c.messages[0].direction === "inbound"
   );
 }
-
-// Get oldest unreplied conversation
-app.get("/conversations/next-unreplied", async (_req: Request, res: Response) => {
-  try {
-    const unreplied = await getUnrepliedConversations();
-    res.json(unreplied[0] || null);
-  } catch (error) {
-    console.error("Error fetching next unreplied:", error);
-    res.status(500).json({ error: "Failed to fetch next unreplied" });
-  }
-});
-
-// Get next unreplied conversation after a specific one
-app.get("/conversations/next-unreplied/:currentId", async (req: Request, res: Response) => {
-  try {
-    const { currentId } = req.params;
-    const unreplied = await getUnrepliedConversations();
-
-    // Find the next one after current
-    const currentIndex = unreplied.findIndex(c => c.id === currentId);
-    const next = unreplied[currentIndex + 1] || unreplied[0];
-    res.json(next || null);
-  } catch (error) {
-    console.error("Error fetching next unreplied:", error);
-    res.status(500).json({ error: "Failed to fetch next unreplied" });
-  }
-});
 
 // Toggle starred
 app.patch("/conversations/:id/star", async (req: Request, res: Response) => {
