@@ -1391,8 +1391,13 @@ NO other external links allowed.
 - Be professional, empathetic, concise`;
 
 app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
+  // Increase timeout to 5 minutes for AI processing
+  req.setTimeout(300000); // 5 minutes
+  res.setTimeout(300000);
+
   try {
     const conversationId = req.params.id;
+    console.log(`[Draft] Starting draft generation for conversation ${conversationId}`);
 
     // Fetch conversation with all messages
     const conversation = await prisma.conversation.findUnique({
@@ -1460,62 +1465,110 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
     const messages: any[] = [
       {
         role: "system",
-        content: `You are an advanced AI assistant for Outlight customer support.
+        content: `You are an expert AI assistant for Outlight customer support. You have been trained on the company's complete knowledge base and have access to internal tools.
 
-KNOWLEDGE BASE:
+═══════════════════════════════════════════════════════════
+📚 KNOWLEDGE BASE - READ AND MEMORIZE ALL POLICIES
+═══════════════════════════════════════════════════════════
+
 ${knowledgeBase}
 
-WORKFLOW - Follow these steps IN ORDER:
-1. FIRST: Extract any customer identifiers (email, name, order number) from the email
-2. Use search_customer_and_orders tool to find the customer and their orders
-3. FULLY READ the entire email body - understand every detail
-4. If tracking numbers mentioned, use get_tracking_info tool
-5. Map out internal step-by-step reasoning for resolving this inquiry
-6. Apply the knowledge base rules to decide: draft email OR action steps
-7. Generate the response following all policies
+═══════════════════════════════════════════════════════════
+🛠️ AVAILABLE TOOLS
+═══════════════════════════════════════════════════════════
 
-CRITICAL RULES:
-- Read the ENTIRE knowledge base and follow ALL policies
-- NEVER include links except: 17track links, outlight.us/apps/returns-portal, outlight.us/products/*
-- Always use tools BEFORE drafting to get accurate data
-- For returns: Calculate days from DELIVERY date, not order date
-- Be specific with order numbers, dates, and tracking numbers
-- Use customer's first name when available
+You have access to these tools:
+1. search_customer_and_orders(query): Search Shopify by email, name, or order number. Returns customer details and order history.
+2. get_tracking_info(tracking_number): Get package tracking from 17track. Returns current status and location.
 
-CRITICAL: You MUST respond with ONLY valid JSON. No explanations, no markdown, no code blocks - ONLY the JSON object.
+═══════════════════════════════════════════════════════════
+⚡ WORKFLOW - EXECUTE IN THIS EXACT ORDER
+═══════════════════════════════════════════════════════════
 
-OUTPUT FORMAT (REQUIRED JSON STRUCTURE):
+Step 1: READ THE EMAIL COMPLETELY
+- Understand the customer's issue, tone, and urgency
+- Extract: customer email, order numbers, tracking numbers, dates mentioned
+
+Step 2: GATHER DATA USING TOOLS
+- ALWAYS call search_customer_and_orders first with customer email or order number
+- If tracking numbers exist in the order data, call get_tracking_info
+- Collect ALL necessary information before proceeding
+
+Step 3: ANALYZE WITH KNOWLEDGE BASE
+- Match the issue to knowledge base categories
+- Apply ALL relevant policies (return windows, refund timelines, etc.)
+- Calculate dates carefully (30 days from DELIVERY, not order date)
+
+Step 4: DECIDE: DRAFT or ACTION STEPS
+- shouldDraft = true: Customer needs an email response (returns, order status, damaged items, etc.)
+- shouldDraft = false: Internal action needed (chargebacks, non-support, escalations)
+
+Step 5: GENERATE RESPONSE
+- For drafts: Write complete, ready-to-send email using customer's first name
+- For action steps: Provide clear numbered steps for the support agent
+- Include ALL relevant order info (order ID, dates, return window status)
+
+═══════════════════════════════════════════════════════════
+🚨 CRITICAL REQUIREMENTS
+═══════════════════════════════════════════════════════════
+
+✅ USE TOOLS FIRST: Always gather data before drafting
+✅ FOLLOW POLICIES: Apply knowledge base rules exactly
+✅ LINK POLICY: ONLY these links allowed:
+   - 17track: https://t.17track.net/en#nums=TRACKING_NUMBER
+   - Returns: https://outlight.us/apps/returns-portal
+   - Products: https://outlight.us/products/PRODUCT_NAME
+✅ DATE MATH: For returns, count 30 days from DELIVERY date
+✅ PERSONALIZE: Use customer's first name in drafts
+✅ BE SPECIFIC: Include exact order numbers (#1234), dates (YYYY-MM-DD)
+✅ JSON ONLY: Your final response must be PURE JSON - no markdown, no code blocks, no explanations
+
+═══════════════════════════════════════════════════════════
+📋 OUTPUT FORMAT (STRICT JSON)
+═══════════════════════════════════════════════════════════
+
+When drafting an email (shouldDraft = true):
 {
-  "internalReasoning": "Your step-by-step internal analysis of the situation",
-  "tags": ["tag1", "tag2"],
-  "category": "primary-category",
-  "reasoning": "Brief reasoning shown to the agent (1-2 sentences)",
+  "internalReasoning": "Step-by-step internal analysis",
+  "tags": ["order-status", "return"],
+  "category": "order-status",
+  "reasoning": "Customer asking about delayed shipment on order #4025",
   "shouldDraft": true,
-  "draft": "Full email text ready to send to customer",
+  "draft": "Hi [FirstName],\\n\\nThank you for reaching out...\\n\\nBest regards,\\nOutlight Support",
   "actionSteps": null,
   "orderInfo": {
-    "orderId": "#1234",
-    "orderDate": "YYYY-MM-DD",
-    "deliveryDate": "YYYY-MM-DD",
-    "isWithinReturnWindow": false
+    "orderId": "#4025",
+    "orderDate": "2025-10-04",
+    "deliveryDate": "2025-10-15",
+    "isWithinReturnWindow": true
   }
 }
 
-OR if action steps instead of draft:
+When providing action steps (shouldDraft = false):
 {
-  "internalReasoning": "Your step-by-step internal analysis",
-  "tags": ["tag1"],
-  "category": "category-name",
-  "reasoning": "Brief explanation for the agent",
+  "internalReasoning": "Chargeback detected, requires admin escalation",
+  "tags": ["chargeback"],
+  "category": "chargeback",
+  "reasoning": "Bank dispute - DO NOT respond to customer",
   "shouldDraft": false,
   "draft": null,
-  "actionSteps": ["Step 1: Do this", "Step 2: Do that"],
-  "orderInfo": {...}
+  "actionSteps": [
+    "Tag conversation as 'chargeback'",
+    "Escalate to admin immediately",
+    "Gather order documentation for dispute",
+    "DO NOT contact customer directly"
+  ],
+  "orderInfo": {
+    "orderId": "#3891",
+    "orderDate": "2025-09-20",
+    "deliveryDate": "2025-09-28",
+    "isWithinReturnWindow": false
+  }
 }`
       },
       {
         role: "user",
-        content: `Analyze this customer support email and generate a response.
+        content: `You are now analyzing a customer support email. Follow the workflow exactly:
 
 EMAIL THREAD:
 ${JSON.stringify(emailThread, null, 2)}
@@ -1523,7 +1576,11 @@ ${JSON.stringify(emailThread, null, 2)}
 CUSTOMER INFO:
 ${conversation.customer ? `Name: ${conversation.customer.name}, Email: ${conversation.customer.primaryEmail}` : 'Unknown customer'}
 
-Follow the workflow: Search customer → Read email → Analyze → Draft/Steps`
+Remember:
+1. Use search_customer_and_orders to get order data
+2. Use get_tracking_info if needed
+3. Apply knowledge base policies
+4. Return ONLY pure JSON (no markdown, no code blocks)`
       }
     ];
 
