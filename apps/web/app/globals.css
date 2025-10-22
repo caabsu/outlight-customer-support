@@ -322,15 +322,26 @@ html, body, div, span, p, a, h1, h2, h3, h4, h5, h6, ul, li, table, tr, td, th, 
   font-family: var(--font-roboto) !important;
 }
 
-/* Prevent tables and images from breaking layout */
+/* Prevent tables and images from breaking layout - CRITICAL FOR SIDEBAR */
 .email-html-container table {
   max-width: 100% !important;
+  width: auto !important;
   table-layout: auto !important;
+  box-sizing: border-box !important;
 }
 
 .email-html-container img {
   max-width: 100% !important;
+  width: auto !important;
   height: auto !important;
+}
+
+/* Force all email content to respect container boundaries */
+.email-html-container * {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
 }
 
 /* Force white background on all containers */

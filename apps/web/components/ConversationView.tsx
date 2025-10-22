@@ -511,12 +511,13 @@ export default function ConversationView() {
             <div className="email-content">
               {message.bodyHtml ? (
                 <div
-                  className="email-html-container font-sans p-4 rounded border overflow-auto"
+                  className="email-html-container font-sans p-4 rounded border overflow-y-auto overflow-x-hidden"
                   style={{
                     fontWeight: 400,
                     fontSize: '14px',
                     lineHeight: 1.6,
                     maxWidth: '100%',
+                    width: '100%',
                     backgroundColor: '#ffffff',
                     color: '#000000',
                     borderColor: '#e5e7eb'
