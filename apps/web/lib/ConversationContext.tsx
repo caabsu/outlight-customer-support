@@ -115,7 +115,9 @@ export function ConversationProvider({
       setConversations(conversationsList);
       setPagination(paginationData);
 
-      if (conversationsList.length > 0 && !selectedId) {
+      // Only auto-select first conversation on initial load (when no selection exists)
+      // Don't auto-select when navigating between pages
+      if (conversationsList.length > 0 && !selectedId && conversations.length === 0) {
         setSelectedId(conversationsList[0].id);
       }
     } catch (error) {
@@ -136,17 +138,17 @@ export function ConversationProvider({
     }
   };
 
-  // Initial fetch with delay and retry
+  // Initial fetch with minimal delay and retry
   useEffect(() => {
     let retryTimer: NodeJS.Timeout;
     let mounted = true;
 
-    // Small delay to let API server start
+    // Immediate fetch with minimal delay
     const timer = setTimeout(async () => {
       if (!mounted) return;
       await fetchConversations(false, 0, false); // Don't suppress initial errors
 
-      // If still no data after 2 seconds, retry once
+      // If still no data after 1 second, retry once
       retryTimer = setTimeout(async () => {
         if (!mounted) return;
         await fetchConversations(false, 1, false); // Don't suppress retry errors
@@ -154,9 +156,9 @@ export function ConversationProvider({
         // Force loading to false after final retry
         setTimeout(() => {
           if (mounted) setLoading(false);
-        }, 1000);
-      }, 2000);
-    }, 500);
+        }, 500);
+      }, 1000);
+    }, 100);
 
     return () => {
       mounted = false;
@@ -233,7 +235,8 @@ export function ConversationProvider({
 
   const goToPage = async (page: number) => {
     setCurrentPage(page);
-    await fetchConversations(false, 0, false, page);
+    // Use silent mode to prevent full loading screen during page transitions
+    await fetchConversations(true, 0, false, page);
   };
 
   const nextPage = () => {
