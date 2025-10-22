@@ -260,8 +260,6 @@ export default function ConversationView() {
   const goToNextUnreplied = async () => {
     if (navigatingUnreplied) return; // Prevent multiple clicks
 
-    setNavigatingUnreplied(true);
-
     try {
       if (!selectedConversation) {
         // No conversation selected - just select first unreplied on current page
@@ -301,9 +299,11 @@ export default function ConversationView() {
       const isOnCurrentPage = conversations.some(conv => conv.id === nextConversation.id);
 
       if (isOnCurrentPage) {
-        // Just select it - already on current page
+        // INSTANT NAVIGATION - same page, no loading needed
         selectConversation(nextConversation.id);
       } else if (pagination) {
+        // Cross-page navigation - NOW show loading
+        setNavigatingUnreplied(true);
         // Need to find which page has this conversation
         // Optimize: check current page's date range to determine search direction
         const nextConvDate = new Date(nextConversation.lastMessageAt).getTime();
@@ -364,22 +364,21 @@ export default function ConversationView() {
           // Wait for page to load, then select the conversation
           setTimeout(() => {
             selectConversation(nextConversation.id);
+            setNavigatingUnreplied(false);
           }, 200);
         } else {
           // Fallback: just select it
           selectConversation(nextConversation.id);
+          setNavigatingUnreplied(false);
         }
       } else {
         // No pagination - just select it
         selectConversation(nextConversation.id);
+        setNavigatingUnreplied(false);
       }
     } catch (error) {
       console.error("Error navigating to next unreplied:", error);
-    } finally {
-      // Clear loading state after navigation completes
-      setTimeout(() => {
-        setNavigatingUnreplied(false);
-      }, 300);
+      setNavigatingUnreplied(false);
     }
   };
 
