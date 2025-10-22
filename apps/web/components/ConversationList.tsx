@@ -427,14 +427,14 @@ export default function ConversationList() {
             </button>
 
             <div className="flex items-center gap-2 font-sans text-sm">
-              <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-foreground/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
-              <span className="font-bold text-foreground">
-                {(pagination.page - 1) * pagination.limit + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)}
+              <span className="font-bold text-foreground text-base">
+                {pagination.page}
               </span>
-              <span className="text-muted-foreground">/</span>
-              <span className="font-semibold text-foreground">{pagination.total}</span>
+              <span className="text-muted-foreground font-normal">/</span>
+              <span className="font-semibold text-foreground text-base">{pagination.totalPages}</span>
             </div>
 
             <button
