@@ -173,6 +173,8 @@ html, body, div, span, p, a, h1, h2, h3, h4, h5, h6, ul, li, table, tr, td, th, 
   font-weight: 400 !important;
   font-size: 14px !important;
   line-height: 1.6 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 /* Force white background in light mode, keep email content readable */
@@ -318,6 +320,17 @@ html, body, div, span, p, a, h1, h2, h3, h4, h5, h6, ul, li, table, tr, td, th, 
   font-size: 14px !important;
   color: #000000 !important;
   font-family: var(--font-roboto) !important;
+}
+
+/* Prevent tables and images from breaking layout */
+.email-html-container table {
+  max-width: 100% !important;
+  table-layout: auto !important;
+}
+
+.email-html-container img {
+  max-width: 100% !important;
+  height: auto !important;
 }
 
 /* Force white background on all containers */

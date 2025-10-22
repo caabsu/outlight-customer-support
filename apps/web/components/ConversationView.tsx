@@ -28,9 +28,10 @@ function sanitizeEmailHtml(html: string): string {
   sanitized = sanitized.replace(/\sstyle\s*=\s*"[^"]*"/gi, '');
   sanitized = sanitized.replace(/\sstyle\s*=\s*'[^']*'/gi, '');
 
-  // Remove width/height attributes
-  sanitized = sanitized.replace(/\s(width|height)\s*=\s*"[^"]*"/gi, '');
-  sanitized = sanitized.replace(/\s(width|height)\s*=\s*'[^"]*'/gi, '');
+  // DON'T remove width/height from tables and images (needed for layout)
+  // Only remove from text elements that break layout
+  sanitized = sanitized.replace(/<(span|div|p|h1|h2|h3|h4|h5|h6)[^>]*\s(width|height)\s*=\s*"[^"]*"/gi, '<$1');
+  sanitized = sanitized.replace(/<(span|div|p|h1|h2|h3|h4|h5|h6)[^>]*\s(width|height)\s*=\s*'[^']*'/gi, '<$1');
 
   // Remove any <font> tags but keep their content
   sanitized = sanitized.replace(/<font[^>]*>/gi, '');
@@ -389,7 +390,7 @@ export default function ConversationView() {
         </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
         {selectedConversation.messages.map((message) => (
           <div
             key={message.id}
@@ -421,7 +422,7 @@ export default function ConversationView() {
               {message.bodyHtml ? (
                 <div
                   className="email-html-container font-sans p-4 rounded border border-border overflow-auto bg-background"
-                  style={{ fontWeight: 400, fontSize: '14px', lineHeight: 1.6 }}
+                  style={{ fontWeight: 400, fontSize: '14px', lineHeight: 1.6, maxWidth: '100%' }}
                   dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(message.bodyHtml) }}
                 />
               ) : (
