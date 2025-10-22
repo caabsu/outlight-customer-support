@@ -1696,9 +1696,9 @@ export default function ConversationView() {
     {/* Refund Modal */}
     {showRefundModal && refundOrder && (
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-        <div className="bg-background border border-border w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+        <div className="bg-white border border-slate-300 w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
           {/* Header */}
-          <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-slate-900">
+          <div className="px-6 py-4 border-b border-slate-300 flex items-center justify-between shrink-0 bg-slate-900">
             <h2 className="text-base font-sans font-semibold text-white">
               Process Refund - {refundOrder.name}
             </h2>
@@ -1711,13 +1711,13 @@ export default function ConversationView() {
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-white">
             {/* Order Summary */}
-            <div className="border border-border bg-slate-50/50">
-              <div className="px-4 py-2 border-b border-border bg-slate-100">
+            <div className="border border-slate-300 bg-slate-50">
+              <div className="px-4 py-2 border-b border-slate-300 bg-slate-100">
                 <h3 className="text-xs font-sans font-bold text-slate-900 uppercase tracking-wide">Order Summary</h3>
               </div>
-              <div className="p-4 space-y-2 text-sm font-sans text-slate-800">
+              <div className="p-4 space-y-2 text-sm font-sans text-slate-800 bg-white">
                 <div className="flex justify-between">
                   <span>Order Total:</span>
                   <span className="font-bold text-slate-900">${parseFloat(refundOrder.total_price).toFixed(2)}</span>
@@ -1736,7 +1736,7 @@ export default function ConversationView() {
             {/* Refund Mode Switcher */}
             <div>
               <h3 className="text-xs font-sans font-bold text-slate-900 uppercase tracking-wide mb-3">Refund Type</h3>
-              <div className="grid grid-cols-2 gap-px bg-border">
+              <div className="grid grid-cols-2 gap-px bg-slate-300">
                 <button
                   onClick={() => {
                     setRefundMode('simple');
@@ -1745,7 +1745,7 @@ export default function ConversationView() {
                   className={`px-4 py-3 text-sm font-sans font-semibold transition-colors ${
                     refundMode === 'simple'
                       ? 'bg-slate-900 text-white'
-                      : 'bg-background text-foreground hover:bg-slate-50'
+                      : 'bg-white text-slate-900 hover:bg-slate-50'
                   }`}
                 >
                   Simple Refund
@@ -1755,7 +1755,7 @@ export default function ConversationView() {
                   className={`px-4 py-3 text-sm font-sans font-semibold transition-colors ${
                     refundMode === 'items'
                       ? 'bg-slate-900 text-white'
-                      : 'bg-background text-foreground hover:bg-slate-50'
+                      : 'bg-white text-slate-900 hover:bg-slate-50'
                   }`}
                 >
                   Refund by Items
@@ -1776,10 +1776,10 @@ export default function ConversationView() {
                     return (
                       <div
                         key={item.id}
-                        className={`border border-border p-4 transition-all ${
+                        className={`border border-slate-300 p-4 transition-all ${
                           isSelected
                             ? 'bg-slate-100 border-l-4 border-l-slate-900'
-                            : 'bg-background hover:bg-slate-50'
+                            : 'bg-white hover:bg-slate-50'
                         }`}
                       >
                         <div className="flex items-start gap-3">
@@ -1805,7 +1805,7 @@ export default function ConversationView() {
                             </div>
 
                             {isSelected && (
-                              <div className="space-y-3 pt-3 border-t border-border">
+                              <div className="space-y-3 pt-3 border-t border-slate-300">
                                 <div className="flex items-center gap-3">
                                   <label className="text-xs font-sans font-semibold text-slate-900 uppercase tracking-wide">
                                     Quantity:
@@ -1821,7 +1821,7 @@ export default function ConversationView() {
                                         updateLineItemQuantity(item.id, val);
                                       }
                                     }}
-                                    className="w-20 px-3 py-1.5 text-sm font-sans bg-background border border-border focus:outline-none focus:border-slate-900"
+                                    className="w-20 px-3 py-1.5 text-sm font-sans bg-white text-slate-900 border border-slate-300 focus:outline-none focus:border-slate-900"
                                   />
                                   <span className="text-xs font-sans text-slate-600">
                                     of {maxQuantity}
@@ -1860,7 +1860,7 @@ export default function ConversationView() {
                 <label className={`flex items-center justify-between p-4 border-l-4 cursor-pointer transition-all ${
                   refundType === 'preset' && refundPreset === 80
                     ? 'border-l-slate-900 bg-slate-100'
-                    : 'border-l-transparent bg-background hover:bg-slate-50 border border-border'
+                    : 'border-l-transparent bg-white hover:bg-slate-50 border border-slate-300'
                 }`}>
                   <div className="flex items-center gap-3">
                     <input
@@ -1886,7 +1886,7 @@ export default function ConversationView() {
                 <label className={`flex items-center justify-between p-4 border-l-4 cursor-pointer transition-all ${
                   refundType === 'preset' && refundPreset === 50
                     ? 'border-l-slate-900 bg-slate-100'
-                    : 'border-l-transparent bg-background hover:bg-slate-50 border border-border'
+                    : 'border-l-transparent bg-white hover:bg-slate-50 border border-slate-300'
                 }`}>
                   <div className="flex items-center gap-3">
                     <input
@@ -1912,7 +1912,7 @@ export default function ConversationView() {
                 <label className={`flex items-center justify-between p-4 border-l-4 cursor-pointer transition-all ${
                   refundType === 'full'
                     ? 'border-l-slate-900 bg-slate-100'
-                    : 'border-l-transparent bg-background hover:bg-slate-50 border border-border'
+                    : 'border-l-transparent bg-white hover:bg-slate-50 border border-slate-300'
                 }`}>
                   <div className="flex items-center gap-3">
                     <input
@@ -1934,7 +1934,7 @@ export default function ConversationView() {
               </div>
 
               {/* Custom Percentage */}
-              <div className="border-t border-border pt-4 mt-4">
+              <div className="border-t border-slate-300 pt-4 mt-4">
                 <label className={`flex items-center gap-3 mb-3`}>
                   <input
                     type="radio"
@@ -1957,7 +1957,7 @@ export default function ConversationView() {
                     placeholder="0"
                     min="0"
                     max="100"
-                    className="w-20 px-3 py-2 text-sm font-sans bg-background border border-border focus:outline-none focus:border-slate-900"
+                    className="w-20 px-3 py-2 text-sm font-sans bg-white text-slate-900 border border-slate-300 focus:outline-none focus:border-slate-900"
                   />
                   <span className="text-sm font-sans text-slate-900">%</span>
                   <span className="text-sm font-sans text-slate-600">
@@ -1967,7 +1967,7 @@ export default function ConversationView() {
               </div>
 
               {/* Custom Dollar Amount */}
-              <div className="border-t border-border pt-4 mt-4">
+              <div className="border-t border-slate-300 pt-4 mt-4">
                 <label className={`flex items-center gap-3 mb-3`}>
                   <input
                     type="radio"
@@ -1992,7 +1992,7 @@ export default function ConversationView() {
                     min="0"
                     max={parseFloat(refundOrder.total_price)}
                     step="0.01"
-                    className="w-28 px-3 py-2 text-sm font-sans bg-background border border-border focus:outline-none focus:border-slate-900"
+                    className="w-28 px-3 py-2 text-sm font-sans bg-white text-slate-900 border border-slate-300 focus:outline-none focus:border-slate-900"
                   />
                   <span className="text-xs font-sans text-slate-600">
                     (Max: ${parseFloat(refundOrder.total_price).toFixed(2)})
@@ -2022,13 +2022,13 @@ export default function ConversationView() {
                 onChange={(e) => setRefundReason(e.target.value)}
                 placeholder="Enter reason for refund..."
                 rows={3}
-                className="w-full px-4 py-3 text-sm font-sans bg-background border border-border focus:outline-none focus:border-slate-900 resize-none"
+                className="w-full px-4 py-3 text-sm font-sans bg-white text-slate-900 border border-slate-300 focus:outline-none focus:border-slate-900 resize-none"
               />
             </div>
 
             {/* Options */}
             <div className="space-y-px">
-              <label className="flex items-center gap-3 p-4 bg-background border border-border cursor-pointer hover:bg-slate-50 transition-colors">
+              <label className="flex items-center gap-3 p-4 bg-white border border-slate-300 cursor-pointer hover:bg-slate-50 transition-colors">
                 <input
                   type="checkbox"
                   checked={refundNotifyCustomer}
@@ -2041,7 +2041,7 @@ export default function ConversationView() {
                 </div>
               </label>
 
-              <label className="flex items-center gap-3 p-4 bg-background border border-border cursor-pointer hover:bg-slate-50 transition-colors">
+              <label className="flex items-center gap-3 p-4 bg-white border border-slate-300 cursor-pointer hover:bg-slate-50 transition-colors">
                 <input
                   type="checkbox"
                   checked={refundRestock}
