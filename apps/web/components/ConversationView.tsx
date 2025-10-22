@@ -104,6 +104,7 @@ export default function ConversationView() {
   const [showDraftPopup, setShowDraftPopup] = useState(false);
   const [draftMinimized, setDraftMinimized] = useState(false);
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
+  const [showKBTab, setShowKBTab] = useState(false); // For expandable tab on button
   const [expandedKBSections, setExpandedKBSections] = useState<Record<string, boolean>>({
     general: true,
     toolSpecific: true
@@ -1680,56 +1681,166 @@ export default function ConversationView() {
             <span className="text-sm font-sans font-bold">Summarize</span>
           </button>
 
-          {/* Draft Button */}
-          <button
-            onClick={() => {
-              if (draftMinimized && showDraftPopup) {
-                // If draft is minimized, maximize it
-                setDraftMinimized(false);
-              } else if (draftData && showDraftPopup && !draftMinimized) {
-                // If draft is already shown, minimize it
-                setDraftMinimized(true);
-              } else {
-                // Generate new draft (or show existing if available)
-                if (draftData) {
-                  setShowDraftPopup(true);
+          {/* Draft Button with KB Info */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                if (draftMinimized && showDraftPopup) {
+                  // If draft is minimized, maximize it
                   setDraftMinimized(false);
+                } else if (draftData && showDraftPopup && !draftMinimized) {
+                  // If draft is already shown, minimize it
+                  setDraftMinimized(true);
                 } else {
-                  generateDraft();
+                  // Generate new draft (or show existing if available)
+                  if (draftData) {
+                    setShowDraftPopup(true);
+                    setDraftMinimized(false);
+                  } else {
+                    generateDraft();
+                  }
                 }
-              }
-            }}
-            disabled={loadingDraft || !selectedConversation}
-            className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed relative text-left"
-          >
-            {loadingDraft && (
-              <div className="absolute inset-0 bg-purple-600/50 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+              }}
+              disabled={loadingDraft || !selectedConversation}
+              className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed relative text-left"
+            >
+              {loadingDraft && (
+                <div className="absolute inset-0 bg-purple-600/50 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col gap-1 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : (draftData ? 'AI Draft' : 'Draft')}</span>
+                    {/* Minimized indicator */}
+                    {showDraftPopup && draftMinimized && !loadingDraft && (
+                      <div className="w-2 h-2 bg-white rounded-full animate-pulse" title="Draft ready - click to view"></div>
+                    )}
+                    {/* Draft ready indicator */}
+                    {draftData && !showDraftPopup && !loadingDraft && (
+                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                  {!loadingDraft && (
+                    <span className="text-[10px] font-sans text-white/80">
+                      {draftData ? 'Ready • Click to view' : 'General + Order policies'}
+                    </span>
+                  )}
+                </div>
+                {/* Info Icon - separate clickable area */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowKBTab(!showKBTab);
+                  }}
+                  className="p-1 hover:bg-white/20 rounded-full transition-colors"
+                  title="View Knowledge Base"
+                >
+                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </button>
+
+            {/* Expandable Knowledge Base Tab */}
+            {showKBTab && (
+              <div className="absolute left-0 right-0 top-full mt-2 z-10 bg-white border-2 border-purple-300 rounded-lg shadow-xl overflow-hidden animate-in slide-in-from-top-2 duration-200">
+                {/* Header */}
+                <div className="px-4 py-3 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    <span className="text-sm font-sans font-bold text-purple-900">Knowledge Base</span>
+                  </div>
+                  <button
+                    onClick={() => setShowKBTab(false)}
+                    className="p-1 hover:bg-white/50 rounded transition-colors"
+                    title="Close"
+                  >
+                    <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="max-h-96 overflow-y-auto p-3 space-y-2">
+                  {/* General Guidelines */}
+                  <div className="border border-blue-200 rounded overflow-hidden">
+                    <button
+                      onClick={() => setExpandedKBSections(prev => ({ ...prev, general: !prev.general }))}
+                      className="w-full px-3 py-2 bg-blue-50 hover:bg-blue-100 transition-colors flex items-center justify-between text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                        </svg>
+                        <span className="text-xs font-sans font-bold text-blue-900">General Guidelines</span>
+                      </div>
+                      <svg className={`w-4 h-4 text-blue-600 transition-transform ${expandedKBSections.general ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedKBSections.general && (
+                      <div className="px-3 py-2 bg-white text-[10px] font-sans text-slate-700 space-y-1">
+                        <div>• Email Classification Tags</div>
+                        <div>• Link Policy</div>
+                        <div>• Draft Requirements</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tool Specific */}
+                  <div className="border border-purple-200 rounded overflow-hidden">
+                    <button
+                      onClick={() => setExpandedKBSections(prev => ({ ...prev, toolSpecific: !prev.toolSpecific }))}
+                      className="w-full px-3 py-2 bg-purple-50 hover:bg-purple-100 transition-colors flex items-center justify-between text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        <span className="text-xs font-sans font-bold text-purple-900">AI Draft Specific</span>
+                      </div>
+                      <svg className={`w-4 h-4 text-purple-600 transition-transform ${expandedKBSections.toolSpecific ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedKBSections.toolSpecific && (
+                      <div className="px-3 py-2 bg-white text-[10px] font-sans text-slate-700 space-y-1">
+                        <div>• Return & Refund Policy</div>
+                        <div>• Order Processing & Shipping</div>
+                        <div>• Draft Decision Rules</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* View Full Details Link */}
+                  {draftData?.knowledgeBase && (
+                    <button
+                      onClick={() => {
+                        setShowKBTab(false);
+                        setShowKnowledgeBase(true);
+                      }}
+                      className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-xs font-sans font-medium text-slate-700 transition-colors flex items-center justify-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      View Full Knowledge Base
+                    </button>
+                  )}
+                </div>
               </div>
             )}
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : (draftData ? 'AI Draft' : 'Draft')}</span>
-                {/* Minimized indicator */}
-                {showDraftPopup && draftMinimized && !loadingDraft && (
-                  <div className="w-2 h-2 bg-white rounded-full animate-pulse" title="Draft ready - click to view"></div>
-                )}
-                {/* Draft ready indicator */}
-                {draftData && !showDraftPopup && !loadingDraft && (
-                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </div>
-              {!loadingDraft && (
-                <span className="text-[10px] font-sans text-white/80">
-                  {draftData ? 'Ready • Click to view' : 'KB: General + Order policies'}
-                </span>
-              )}
-            </div>
-          </button>
+          </div>
 
           {/* Placeholder for future buttons */}
           <div className="h-12 border-2 border-dashed border-muted-foreground/20 rounded-lg flex items-center justify-center">
