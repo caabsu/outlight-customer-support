@@ -1526,8 +1526,8 @@ Follow the workflow: Search customer → Read email → Analyze → Draft/Steps`
 
         // Execute each tool call
         for (const toolCall of assistantMessage.tool_calls) {
-          const functionName = toolCall.function.name;
-          const functionArgs = JSON.parse(toolCall.function.arguments);
+          const functionName = (toolCall as any).function.name;
+          const functionArgs = JSON.parse((toolCall as any).function.arguments);
 
           let toolResult: any = null;
 
