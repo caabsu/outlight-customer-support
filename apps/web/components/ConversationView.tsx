@@ -365,7 +365,7 @@ export default function ConversationView() {
         {selectedConversation.messages.map((message) => (
           <div
             key={message.id}
-            className={`rounded-lg border border-gray-300 p-4 bg-white ${
+            className={`rounded-lg border border-border p-4 bg-background ${
               message.direction === "outbound" ? "ml-12" : ""
             }`}
           >
@@ -377,26 +377,26 @@ export default function ConversationView() {
                   </span>
                 </div>
                 <div>
-                  <p className="text-sm font-sans font-medium text-black">
+                  <p className="text-sm font-sans font-medium text-foreground">
                     {message.fromEmail}
                   </p>
-                  <p className="text-xs font-sans text-black">
+                  <p className="text-xs font-sans text-foreground/80">
                     to: {message.toEmails.join(", ")}
                   </p>
                 </div>
               </div>
-              <span className="text-xs font-sans text-black">
+              <span className="text-xs font-sans text-foreground/70">
                 {formatDate(message.sentAt)}
               </span>
             </div>
             <div className="email-content">
               {message.bodyHtml ? (
                 <div
-                  className="email-html-container font-sans p-4 rounded border border-gray-200 overflow-auto bg-white text-black"
+                  className="email-html-container font-sans p-4 rounded border border-border overflow-auto bg-background"
                   dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
                 />
               ) : (
-                <p className="text-sm font-sans text-black whitespace-pre-wrap">
+                <p className="text-sm font-sans text-foreground whitespace-pre-wrap">
                   {message.bodyText}
                 </p>
               )}

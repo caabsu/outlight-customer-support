@@ -172,6 +172,19 @@ html, body, div, span, p, a, h1, h2, h3, h4, h5, h6, ul, li, table, tr, td, th, 
   font-family: var(--font-roboto), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
   font-weight: 400 !important;
   font-size: 14px !important;
+  line-height: 1.6 !important;
+}
+
+/* Force white background in light mode, keep email content readable */
+:not(.dark) .email-html-container {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+/* In dark mode, use a light container to preserve email design */
+.dark .email-html-container {
+  background-color: #ffffff !important;
+  color: #000000 !important;
 }
 
 /* Override every possible element with maximum specificity - NUCLEAR OPTION */

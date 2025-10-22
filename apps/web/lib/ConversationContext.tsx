@@ -165,19 +165,19 @@ export function ConversationProvider({
       setRefreshing(true);
       setRefreshProgress(10);
 
-      // First, poll Gmail for new emails (with 30s timeout)
+      // First, poll Gmail for new emails (with 10s timeout - backend now uses parallel processing)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout (reduced from 30s)
 
       try {
-        setRefreshProgress(20);
+        setRefreshProgress(30);
         const pollRes = await fetch("/api/gmail/poll", {
           method: "POST",
           signal: controller.signal
         });
         clearTimeout(timeoutId);
 
-        setRefreshProgress(60);
+        setRefreshProgress(70);
 
         if (!pollRes.ok && pollRes.status !== 500) {
           console.error(`Gmail poll failed: ${pollRes.status}`);
@@ -185,12 +185,12 @@ export function ConversationProvider({
       } catch (err) {
         clearTimeout(timeoutId);
         if (err instanceof Error && err.name === 'AbortError') {
-          console.error("Gmail poll timed out after 30 seconds");
+          console.error("Gmail poll timed out after 10 seconds - check backend performance");
         }
         // Don't re-throw, just continue to refresh conversations
       }
 
-      setRefreshProgress(80);
+      setRefreshProgress(90);
       // Then refresh conversations from database (don't suppress errors for manual refresh)
       await fetchConversations(true, 1, false);
       setRefreshProgress(100);

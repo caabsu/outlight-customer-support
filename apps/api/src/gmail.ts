@@ -72,13 +72,19 @@ export async function pollOnce(_req: Request, res: Response) {
   if (!existing) {
     const t = await gmail.users.threads.list({ userId: "me", q: "in:inbox", maxResults: 50 });
     const threads = t.data.threads ?? [];
-    for (const th of threads) await ingestThread(gmail, th.id!);
+
+    // Process initial threads in parallel for much faster first-time sync
+    await Promise.all(threads.map(th => ingestThread(gmail, th.id!)));
+
     return res.json({ ingestedThreads: threads.length });
   }
 
   const t = await gmail.users.threads.list({ userId: "me", q: "in:inbox newer_than:2d", maxResults: 20 });
   const threads = t.data.threads ?? [];
-  for (const th of threads) await ingestThread(gmail, th.id!);
+
+  // Process threads in parallel for much faster performance (was sequential, now parallel)
+  await Promise.all(threads.map(th => ingestThread(gmail, th.id!)));
+
   res.json({ updatedThreads: threads.length });
 }
 
