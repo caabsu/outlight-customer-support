@@ -11,6 +11,21 @@ type ConversationHistory = {
   messages: { direction: string }[];
 };
 
+// Sanitize email HTML by stripping font-related inline styles
+function sanitizeEmailHtml(html: string): string {
+  if (!html) return html;
+
+  // Remove font-weight, font-size, font-family from inline styles
+  // This regex finds style="..." and removes font-related properties
+  return html
+    .replace(/font-weight\s*:\s*[^;}"']+;?/gi, '')
+    .replace(/font-size\s*:\s*[^;}"']+;?/gi, '')
+    .replace(/font-family\s*:\s*[^;}"']+;?/gi, '')
+    // Clean up empty style attributes
+    .replace(/style\s*=\s*["'](\s*;?\s*)["']/gi, '')
+    .replace(/style\s*=\s*["']\s*["']/gi, '');
+}
+
 export default function ConversationView() {
   const { conversations, selectedConversation, selectConversation, refreshConversations, updateConversationOptimistic } = useConversations();
   const router = useRouter();
@@ -393,7 +408,7 @@ export default function ConversationView() {
               {message.bodyHtml ? (
                 <div
                   className="email-html-container font-sans p-4 rounded border border-border overflow-auto bg-background"
-                  dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(message.bodyHtml) }}
                 />
               ) : (
                 <p className="text-sm font-sans text-foreground whitespace-pre-wrap">
