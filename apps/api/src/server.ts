@@ -1152,23 +1152,43 @@ app.get("/tracking/:trackingNumber", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Tracking number is required" });
     }
 
-    // Step 1: Register the tracking number (in case it's not already registered)
-    // This is idempotent - registering an already-registered number is safe
-    try {
-      await fetch("https://api.17track.net/track/v2.2/register", {
-        method: "POST",
-        headers: {
-          "17token": apiKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify([{
-          number: trackingNumber
-        }]),
+    // Step 1: Register the tracking number first
+    const registerResponse = await fetch("https://api.17track.net/track/v2.2/register", {
+      method: "POST",
+      headers: {
+        "17token": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify([{
+        number: trackingNumber
+      }]),
+    });
+
+    if (!registerResponse.ok) {
+      const registerError = await registerResponse.text();
+      console.error("17track registration HTTP error:", registerResponse.status, registerError);
+      return res.status(registerResponse.status).json({
+        error: "Failed to register tracking number",
+        details: registerError
       });
-      // We don't care if registration fails - the number might already be registered
-    } catch (registerError) {
-      console.log("Registration attempt (may already be registered):", registerError);
     }
+
+    const registerData = await registerResponse.json();
+    console.log("17track registration response:", JSON.stringify(registerData, null, 2));
+
+    // Check if registration was rejected (API returns 200 but with rejection in data)
+    if (registerData.data?.rejected && registerData.data.rejected.length > 0) {
+      const rejection = registerData.data.rejected[0];
+      console.error("Tracking number rejected:", rejection);
+      return res.status(400).json({
+        error: "Failed to register tracking number",
+        details: rejection.error?.message || "Registration rejected",
+        errorCode: rejection.error?.code
+      });
+    }
+
+    // Wait a moment for 17track to process the registration
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
     // Step 2: Fetch tracking info
     const response = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
