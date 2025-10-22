@@ -170,16 +170,20 @@ export async function sendReply(conversationId: string, to: string, body: string
   // Get the conversation to find the thread ID
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
-    include: { messages: { orderBy: { sentAt: "desc" } } }
+    include: {
+      messages: { orderBy: { sentAt: "desc" } },
+      customer: true
+    }
   });
 
   if (!conversation) {
     throw new Error("Conversation not found");
   }
 
-  // Find the most recent inbound message to check for Reply-To
+  // CRITICAL: Always use the explicitly provided 'to' address
+  // Only fall back to Reply-To if no explicit address is provided
   const lastInboundMessage = conversation.messages.find(m => m.direction === "inbound");
-  const recipientEmail = lastInboundMessage?.replyToEmail || to;
+  const recipientEmail = to || lastInboundMessage?.replyToEmail || conversation.customer?.primaryEmail;
 
   // Create email in RFC 2822 format
   const subject = conversation.subject;
