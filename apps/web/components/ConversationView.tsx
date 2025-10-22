@@ -97,6 +97,12 @@ export default function ConversationView() {
   const [trackingError, setTrackingError] = useState<string | null>(null);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
 
+  // AI Draft state
+  const [draftData, setDraftData] = useState<any>(null);
+  const [loadingDraft, setLoadingDraft] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [showDraftPanel, setShowDraftPanel] = useState(false);
+
   // Fetch conversation history
   useEffect(() => {
     if (selectedConversation?.id) {
@@ -559,6 +565,37 @@ export default function ConversationView() {
       setTrackingError(error instanceof Error ? error.message : "Failed to fetch tracking information");
     } finally {
       setLoadingTracking(false);
+    }
+  };
+
+  // Generate AI draft
+  const generateDraft = async () => {
+    if (!selectedConversation) return;
+
+    setLoadingDraft(true);
+    setDraftError(null);
+    setShowDraftPanel(true);
+    setDraftData(null);
+
+    try {
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/draft`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate draft");
+      }
+
+      const data = await response.json();
+      setDraftData(data);
+
+      // Refresh conversation to get updated tags
+      await refreshConversations();
+    } catch (error) {
+      console.error("Error generating draft:", error);
+      setDraftError(error instanceof Error ? error.message : "Failed to generate draft");
+    } finally {
+      setLoadingDraft(false);
     }
   };
 
@@ -1091,6 +1128,172 @@ export default function ConversationView() {
           </div>
         </div>
 
+      {/* AI Draft Panel - Collapsible */}
+      {showDraftPanel && (
+        <div className="border-b border-border bg-gradient-to-r from-purple-50 to-pink-50">
+          <div
+            className="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-purple-100/50 transition-colors"
+            onClick={() => setShowDraftPanel(!showDraftPanel)}
+          >
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+              </svg>
+              <h3 className="font-sans font-bold text-purple-900 text-sm uppercase tracking-wide">
+                AI Draft Assistant
+                {draftData?.tags && draftData.tags.length > 0 && (
+                  <span className="ml-3 text-xs normal-case font-normal text-purple-600">
+                    {draftData.tags.join(", ")}
+                  </span>
+                )}
+              </h3>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDraftPanel(false);
+                setDraftData(null);
+                setDraftError(null);
+              }}
+              className="text-purple-600 hover:text-purple-800 text-lg font-bold"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="px-6 pb-6">
+            {loadingDraft && (
+              <div className="flex flex-col items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-10 w-10 border-4 border-purple-500 border-t-transparent mb-3"></div>
+                <p className="text-sm font-sans text-purple-700">Analyzing email and generating draft...</p>
+              </div>
+            )}
+
+            {draftError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-red-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-sans font-semibold text-red-900">Error Generating Draft</p>
+                    <p className="text-sm font-sans text-red-700 mt-1">{draftError}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!loadingDraft && !draftError && draftData && (
+              <div className="space-y-4">
+                {/* Category and Tags */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-3 py-1 bg-purple-600 text-white text-xs font-sans font-semibold rounded-full">
+                    {draftData.category}
+                  </span>
+                  {draftData.tags?.map((tag: string) => (
+                    <span key={tag} className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-sans font-semibold rounded-full border border-purple-300">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                {/* AI Reasoning / Steps */}
+                <div className="bg-white border border-purple-200 rounded-lg p-4">
+                  <h4 className="text-xs font-sans font-bold text-purple-900 uppercase tracking-wide mb-2 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    AI Reasoning
+                  </h4>
+                  <p className="text-sm font-sans text-gray-700 whitespace-pre-wrap">{draftData.reasoning}</p>
+                </div>
+
+                {/* Order Information (if available) */}
+                {draftData.orderInfo && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="text-xs font-sans font-bold text-blue-900 uppercase tracking-wide mb-2">Order Information</h4>
+                    <div className="grid grid-cols-2 gap-2 text-sm font-sans">
+                      {draftData.orderInfo.orderId && (
+                        <div>
+                          <span className="text-blue-600">Order ID:</span>
+                          <p className="font-semibold text-blue-900">{draftData.orderInfo.orderId}</p>
+                        </div>
+                      )}
+                      {draftData.orderInfo.orderDate && (
+                        <div>
+                          <span className="text-blue-600">Order Date:</span>
+                          <p className="font-semibold text-blue-900">{draftData.orderInfo.orderDate}</p>
+                        </div>
+                      )}
+                      {draftData.orderInfo.deliveryDate && (
+                        <div>
+                          <span className="text-blue-600">Delivery Date:</span>
+                          <p className="font-semibold text-blue-900">{draftData.orderInfo.deliveryDate}</p>
+                        </div>
+                      )}
+                      {draftData.orderInfo.isWithinReturnWindow !== undefined && (
+                        <div>
+                          <span className="text-blue-600">Return Window:</span>
+                          <p className={`font-semibold ${draftData.orderInfo.isWithinReturnWindow ? 'text-green-600' : 'text-red-600'}`}>
+                            {draftData.orderInfo.isWithinReturnWindow ? 'Within 30 days ✓' : 'Expired ✗'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Draft Email or Action Steps */}
+                {draftData.shouldDraft && draftData.draft ? (
+                  <div className="bg-white border-2 border-purple-300 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-xs font-sans font-bold text-purple-900 uppercase tracking-wide flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19v-8.93a2 2 0 01.89-1.664l7-4.666a2 2 0 012.22 0l7 4.666A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-1.14.76a2 2 0 01-2.22 0l-1.14-.76" />
+                        </svg>
+                        Email Draft
+                      </h4>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(draftData.draft)}
+                        className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-sans font-semibold rounded transition-colors"
+                      >
+                        Copy Draft
+                      </button>
+                    </div>
+                    <div className="bg-gray-50 rounded p-4 font-sans text-sm text-gray-800 whitespace-pre-wrap border border-gray-200">
+                      {draftData.draft}
+                    </div>
+                  </div>
+                ) : draftData.actionSteps && draftData.actionSteps.length > 0 ? (
+                  <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+                    <h4 className="text-xs font-sans font-bold text-yellow-900 uppercase tracking-wide mb-3 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                      Action Steps for Agent
+                    </h4>
+                    <ol className="space-y-2">
+                      {draftData.actionSteps.map((step: string, index: number) => (
+                        <li key={index} className="flex items-start gap-3">
+                          <span className="flex-shrink-0 w-6 h-6 bg-yellow-600 text-white rounded-full flex items-center justify-center text-xs font-sans font-bold">
+                            {index + 1}
+                          </span>
+                          <p className="text-sm font-sans text-yellow-900 pt-0.5">{step}</p>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <p className="text-sm font-sans text-gray-600 italic">No draft or action steps generated.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
         {selectedConversation.messages.map((message) => (
@@ -1430,6 +1633,41 @@ export default function ConversationView() {
                 <span className="text-sm font-sans font-bold">Oldest Unreplied</span>
               </div>
               <span className="text-xs font-sans font-medium opacity-80">⏰</span>
+            </div>
+          </button>
+
+          {/* AI Draft Button */}
+          <button
+            onClick={generateDraft}
+            disabled={loadingDraft || !selectedConversation}
+            className="w-full px-4 py-3.5 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md group disabled:opacity-60 disabled:cursor-not-allowed relative"
+          >
+            {loadingDraft && (
+              <div className="absolute inset-0 bg-purple-600/50 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"
+                  />
+                </svg>
+                <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : 'AI Draft'}</span>
+              </div>
+              <span className="text-xs font-sans font-medium opacity-80">✨</span>
             </div>
           </button>
 
