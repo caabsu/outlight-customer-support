@@ -257,58 +257,120 @@ export default function ConversationView() {
   };
 
   const goToNextUnreplied = async () => {
-    // Filter to unreplied conversations (last message is inbound)
-    const unrepliedConversations = conversations.filter((conv) => {
-      // Exclude non-customer-support
-      if (conv.tags?.includes("non-customer-support")) return false;
+    if (!selectedConversation) {
+      // No conversation selected - just select first unreplied on current page
+      const unrepliedConversations = conversations.filter((conv) => {
+        if (conv.tags?.includes("non-customer-support")) return false;
+        if (conv.messages.length === 0) return false;
+        const lastMessage = conv.messages[conv.messages.length - 1];
+        return lastMessage.direction === "inbound";
+      });
 
-      // Check if last message is inbound (needs reply)
-      if (conv.messages.length === 0) return false;
-      const lastMessage = conv.messages[conv.messages.length - 1];
-      return lastMessage.direction === "inbound";
-    });
+      const sortedUnreplied = unrepliedConversations.sort((a, b) =>
+        new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
+      );
 
-    // Sort by lastMessageAt (oldest first - priority to older unreplied)
-    const sortedUnreplied = unrepliedConversations.sort((a, b) =>
-      new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
-    );
+      if (sortedUnreplied.length > 0) {
+        selectConversation(sortedUnreplied[0].id);
+      }
+      return;
+    }
 
-    if (sortedUnreplied.length === 0) {
-      // No unreplied on current page - check if we should navigate to another page
-      if (pagination && pagination.totalPages > 1) {
-        const nextPage = pagination.page < pagination.totalPages ? pagination.page + 1 : 1;
-        await goToPage(nextPage);
-        // After page loads, recursively call this function to find unreplied on new page
-        setTimeout(() => goToNextUnreplied(), 100);
+    try {
+      // Use API to get next unreplied conversation (works across all pages)
+      const response = await fetch(`/api/conversations/next-unreplied/${selectedConversation.id}`);
+
+      if (!response.ok) {
+        console.error("Failed to fetch next unreplied");
         return;
       }
-      alert("No unreplied emails!");
-      return;
+
+      const nextConversation = await response.json();
+
+      if (!nextConversation || !nextConversation.id) {
+        alert("No more unreplied emails!");
+        return;
+      }
+
+      // Check if the next conversation is on the current page
+      const isOnCurrentPage = conversations.some(conv => conv.id === nextConversation.id);
+
+      if (isOnCurrentPage) {
+        // Just select it - already on current page
+        selectConversation(nextConversation.id);
+      } else if (pagination) {
+        // Need to find which page has this conversation
+        // Optimize: check current page's date range to determine search direction
+        const nextConvDate = new Date(nextConversation.lastMessageAt).getTime();
+        const currentPageOldest = new Date(conversations[conversations.length - 1]?.lastMessageAt || 0).getTime();
+        const currentPageNewest = new Date(conversations[0]?.lastMessageAt || 0).getTime();
+
+        let foundPage = 0;
+
+        // Smart search: if next conversation is older than current page, search forward (later pages)
+        // If newer, search backward (earlier pages)
+        if (nextConvDate < currentPageOldest) {
+          // Search forward through later pages
+          for (let page = pagination.page + 1; page <= pagination.totalPages; page++) {
+            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            if (res.ok) {
+              const data = await res.json();
+              const convs = data.conversations || data;
+              if (convs.some((c: any) => c.id === nextConversation.id)) {
+                foundPage = page;
+                break;
+              }
+            }
+          }
+        } else if (nextConvDate > currentPageNewest) {
+          // Search backward through earlier pages
+          for (let page = pagination.page - 1; page >= 1; page--) {
+            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            if (res.ok) {
+              const data = await res.json();
+              const convs = data.conversations || data;
+              if (convs.some((c: any) => c.id === nextConversation.id)) {
+                foundPage = page;
+                break;
+              }
+            }
+          }
+        }
+
+        // If not found in smart search, do full search as fallback
+        if (foundPage === 0) {
+          for (let page = 1; page <= pagination.totalPages; page++) {
+            if (page === pagination.page) continue; // Skip current page (already checked)
+            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            if (res.ok) {
+              const data = await res.json();
+              const convs = data.conversations || data;
+              if (convs.some((c: any) => c.id === nextConversation.id)) {
+                foundPage = page;
+                break;
+              }
+            }
+          }
+        }
+
+        if (foundPage > 0 && foundPage !== pagination.page) {
+          // Navigate to the page with the conversation
+          await goToPage(foundPage);
+          // Wait for page to load, then select the conversation
+          setTimeout(() => {
+            selectConversation(nextConversation.id);
+          }, 150);
+        } else {
+          // Fallback: just select it
+          selectConversation(nextConversation.id);
+        }
+      } else {
+        // No pagination - just select it
+        selectConversation(nextConversation.id);
+      }
+    } catch (error) {
+      console.error("Error navigating to next unreplied:", error);
     }
-
-    // Find current conversation index
-    const currentIndex = selectedConversation
-      ? sortedUnreplied.findIndex(conv => conv.id === selectedConversation.id)
-      : -1;
-
-    // Check if we're at the end of current page's unreplied
-    const isAtEnd = currentIndex >= sortedUnreplied.length - 1;
-
-    if (isAtEnd && pagination && pagination.totalPages > 1) {
-      // Navigate to next page (or wrap to page 1 if on last page)
-      const nextPage = pagination.page < pagination.totalPages ? pagination.page + 1 : 1;
-      await goToPage(nextPage);
-      // After page loads, select first unreplied on new page
-      setTimeout(() => goToNextUnreplied(), 100);
-      return;
-    }
-
-    // Get next conversation (wrap around to start if at end on single page)
-    const nextIndex = isAtEnd ? 0 : currentIndex + 1;
-    const nextConv = sortedUnreplied[nextIndex];
-
-    // Instant navigation - no API call!
-    selectConversation(nextConv.id);
   };
 
   const goToOldestUnreplied = async () => {
