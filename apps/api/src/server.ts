@@ -1130,6 +1130,160 @@ app.get("/shopify/order/:orderId/refunds", async (req: Request, res: Response) =
   }
 });
 
+/**
+ * 17track API Integration
+ * Docs: https://asset.17track.net/api/document/v2_en/index.html
+ */
+
+/**
+ * Get tracking information for a package
+ * GET /tracking/:trackingNumber
+ */
+app.get("/tracking/:trackingNumber", async (req: Request, res: Response) => {
+  try {
+    const { trackingNumber } = req.params;
+    const apiKey = process.env.SEVENTEENTRACK_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: "17track API key not configured" });
+    }
+
+    if (!trackingNumber) {
+      return res.status(400).json({ error: "Tracking number is required" });
+    }
+
+    // Call 17track API to get tracking info
+    const response = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
+      method: "POST",
+      headers: {
+        "17token": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify([{
+        number: trackingNumber
+      }]),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("17track API error:", response.status, errorText);
+      return res.status(response.status).json({
+        error: "Failed to fetch tracking information",
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error("Error fetching tracking info:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to fetch tracking information"
+    });
+  }
+});
+
+/**
+ * Register a tracking number with 17track
+ * POST /tracking/register
+ * Body: { trackingNumber: string, carrier?: number }
+ */
+app.post("/tracking/register", async (req: Request, res: Response) => {
+  try {
+    const { trackingNumber, carrier } = req.body;
+    const apiKey = process.env.SEVENTEENTRACK_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: "17track API key not configured" });
+    }
+
+    if (!trackingNumber) {
+      return res.status(400).json({ error: "Tracking number is required" });
+    }
+
+    const payload: any = { number: trackingNumber };
+    if (carrier) {
+      payload.carrier = carrier;
+    }
+
+    // Register tracking number with 17track
+    const response = await fetch("https://api.17track.net/track/v2.2/register", {
+      method: "POST",
+      headers: {
+        "17token": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify([payload]),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("17track register API error:", response.status, errorText);
+      return res.status(response.status).json({
+        error: "Failed to register tracking number",
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error("Error registering tracking number:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to register tracking number"
+    });
+  }
+});
+
+/**
+ * Get tracking info for multiple packages
+ * POST /tracking/batch
+ * Body: { trackingNumbers: string[] }
+ */
+app.post("/tracking/batch", async (req: Request, res: Response) => {
+  try {
+    const { trackingNumbers } = req.body;
+    const apiKey = process.env.SEVENTEENTRACK_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: "17track API key not configured" });
+    }
+
+    if (!trackingNumbers || !Array.isArray(trackingNumbers)) {
+      return res.status(400).json({ error: "trackingNumbers array is required" });
+    }
+
+    const payload = trackingNumbers.map(number => ({ number }));
+
+    // Call 17track API for batch tracking
+    const response = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
+      method: "POST",
+      headers: {
+        "17token": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("17track batch API error:", response.status, errorText);
+      return res.status(response.status).json({
+        error: "Failed to fetch batch tracking information",
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error("Error fetching batch tracking info:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to fetch batch tracking information"
+    });
+  }
+});
+
 const port = process.env.PORT || 3001;
 
 // Start server immediately for fast startup

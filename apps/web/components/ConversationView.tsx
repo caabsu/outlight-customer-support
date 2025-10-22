@@ -91,6 +91,12 @@ export default function ConversationView() {
   const [refundConfirmation, setRefundConfirmation] = useState(false);
   const [selectedLineItems, setSelectedLineItems] = useState<Map<number, { quantity: number; restock: boolean }>>(new Map());
 
+  // 17track state
+  const [trackingData, setTrackingData] = useState<any>(null);
+  const [loadingTracking, setLoadingTracking] = useState(false);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
+
   // Fetch conversation history
   useEffect(() => {
     if (selectedConversation?.id) {
@@ -529,6 +535,31 @@ export default function ConversationView() {
       };
     }
     return null;
+  };
+
+  // Fetch detailed tracking from 17track
+  const fetchDetailedTracking = async (trackingNumber: string) => {
+    if (!trackingNumber) return;
+
+    setLoadingTracking(true);
+    setTrackingError(null);
+    setShowTrackingModal(true);
+
+    try {
+      const response = await fetch(`/api/tracking/${encodeURIComponent(trackingNumber)}`);
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch tracking information");
+      }
+
+      const data = await response.json();
+      setTrackingData(data);
+    } catch (error) {
+      console.error("Error fetching tracking info:", error);
+      setTrackingError(error instanceof Error ? error.message : "Failed to fetch tracking information");
+    } finally {
+      setLoadingTracking(false);
+    }
   };
 
   // Search for Shopify customer by email or name
@@ -1596,17 +1627,19 @@ export default function ConversationView() {
                                       </button>
                                     </div>
                                   </div>
-                                  {trackingInfo.trackingUrl && (
-                                    <a
-                                      href={trackingInfo.trackingUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="text-blue-600 hover:text-blue-800 underline text-xs block mt-2"
-                                    >
-                                      Track Package →
-                                    </a>
-                                  )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      fetchDetailedTracking(trackingInfo.trackingNumber);
+                                    }}
+                                    className="mt-2 w-full px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-md text-xs font-sans font-semibold shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    Track with 17track
+                                  </button>
                                 </div>
                               </div>
                             )}
@@ -2298,6 +2331,199 @@ export default function ConversationView() {
                 </>
               )}
             </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* 17track Tracking Modal */}
+    {showTrackingModal && (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="bg-white border border-slate-300 w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-slate-300 flex items-center justify-between shrink-0 bg-gradient-to-r from-indigo-600 to-purple-600">
+            <div className="flex items-center gap-3">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <h2 className="text-base font-sans font-semibold text-white">
+                Package Tracking
+              </h2>
+            </div>
+            <button
+              onClick={() => {
+                setShowTrackingModal(false);
+                setTrackingData(null);
+                setTrackingError(null);
+              }}
+              className="text-white/80 hover:text-white transition-colors text-lg font-bold"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-white">
+            {loadingTracking && (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mb-4"></div>
+                <p className="text-sm font-sans text-slate-600">Fetching tracking information...</p>
+              </div>
+            )}
+
+            {trackingError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-red-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-sans font-semibold text-red-900">Error Loading Tracking</p>
+                    <p className="text-sm font-sans text-red-700 mt-1">{trackingError}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!loadingTracking && !trackingError && trackingData && (
+              <div className="space-y-6">
+                {/* Tracking Summary */}
+                {trackingData.data && trackingData.data.accepted && trackingData.data.accepted.length > 0 && (
+                  <div className="border border-slate-300 bg-slate-50">
+                    <div className="px-4 py-3 border-b border-slate-300 bg-slate-100">
+                      <h3 className="text-xs font-sans font-bold text-slate-900 uppercase tracking-wide">Tracking Details</h3>
+                    </div>
+                    <div className="p-4 space-y-3">
+                      {trackingData.data.accepted.map((track: any, index: number) => (
+                        <div key={index}>
+                          <div className="grid grid-cols-2 gap-4 text-sm font-sans">
+                            <div>
+                              <span className="text-slate-600">Tracking Number:</span>
+                              <p className="font-mono font-semibold text-slate-900 mt-1">{track.number}</p>
+                            </div>
+                            {track.track_info && (
+                              <>
+                                {track.track_info.latest_status && (
+                                  <div>
+                                    <span className="text-slate-600">Status:</span>
+                                    <p className="font-semibold text-slate-900 mt-1">
+                                      {track.track_info.latest_status.status || 'In Transit'}
+                                    </p>
+                                  </div>
+                                )}
+                                {track.track_info.shipping_info && (
+                                  <>
+                                    {track.track_info.shipping_info.shipper_address && (
+                                      <div>
+                                        <span className="text-slate-600">From:</span>
+                                        <p className="font-semibold text-slate-900 mt-1">
+                                          {track.track_info.shipping_info.shipper_address.country || 'Unknown'}
+                                        </p>
+                                      </div>
+                                    )}
+                                    {track.track_info.shipping_info.recipient_address && (
+                                      <div>
+                                        <span className="text-slate-600">To:</span>
+                                        <p className="font-semibold text-slate-900 mt-1">
+                                          {track.track_info.shipping_info.recipient_address.country || 'Unknown'}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </div>
+
+                          {/* Tracking Timeline */}
+                          {track.track_info && track.track_info.tracking && track.track_info.tracking.providers && (
+                            <div className="mt-6">
+                              <h4 className="text-xs font-sans font-bold text-slate-900 uppercase tracking-wide mb-4">Tracking History</h4>
+                              <div className="space-y-3">
+                                {track.track_info.tracking.providers.map((provider: any, pIndex: number) => (
+                                  <div key={pIndex}>
+                                    {provider.events && provider.events.map((event: any, eIndex: number) => (
+                                      <div key={eIndex} className="flex gap-4 pb-4 border-b border-slate-200 last:border-0">
+                                        <div className="flex flex-col items-center">
+                                          <div className="w-3 h-3 rounded-full bg-indigo-600 mt-1"></div>
+                                          {eIndex < (provider.events?.length || 0) - 1 && (
+                                            <div className="w-0.5 h-full bg-slate-300 my-1"></div>
+                                          )}
+                                        </div>
+                                        <div className="flex-1 pb-2">
+                                          <p className="text-sm font-sans font-semibold text-slate-900">
+                                            {event.description || event.stage || 'Package Update'}
+                                          </p>
+                                          {event.location && (
+                                            <p className="text-xs font-sans text-slate-600 mt-1">
+                                              {event.location}
+                                            </p>
+                                          )}
+                                          {event.time_iso && (
+                                            <p className="text-xs font-sans text-slate-500 mt-1">
+                                              {new Date(event.time_iso).toLocaleString()}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* No tracking data available */}
+                {(!trackingData.data || !trackingData.data.accepted || trackingData.data.accepted.length === 0) && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-sans font-semibold text-yellow-900">No Tracking Information</p>
+                        <p className="text-sm font-sans text-yellow-700 mt-1">
+                          Tracking information is not yet available. Please try again later.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-slate-300 shrink-0 flex items-center justify-end gap-3 bg-slate-50">
+            <button
+              onClick={() => {
+                setShowTrackingModal(false);
+                setTrackingData(null);
+                setTrackingError(null);
+              }}
+              className="px-5 py-2.5 border border-slate-300 text-slate-900 text-sm font-sans font-semibold hover:bg-slate-100 transition-colors"
+            >
+              Close
+            </button>
+            {trackingData && trackingData.data && trackingData.data.accepted && trackingData.data.accepted[0] && (
+              <a
+                href={`https://t.17track.net/en#nums=${trackingData.data.accepted[0].number}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-sans font-semibold transition-colors flex items-center gap-2"
+              >
+                View on 17track
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            )}
           </div>
         </div>
       </div>
