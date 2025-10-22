@@ -56,6 +56,13 @@ export default function ConversationView() {
   const [summaryMinimized, setSummaryMinimized] = useState(false);
   const [activeInfoTooltip, setActiveInfoTooltip] = useState<string | null>(null);
 
+  // Shopify state
+  const [shopifyCustomer, setShopifyCustomer] = useState<any>(null);
+  const [shopifyOrders, setShopifyOrders] = useState<any[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [loadingShopify, setLoadingShopify] = useState(false);
+  const [shopifyError, setShopifyError] = useState<string | null>(null);
+
   // Fetch conversation history
   useEffect(() => {
     if (selectedConversation?.id) {
@@ -76,6 +83,60 @@ export default function ConversationView() {
       setLoadingHistory(false);
     }
   }, [selectedConversation?.id]);
+
+  // Fetch Shopify customer data
+  useEffect(() => {
+    if (selectedConversation?.customer?.primaryEmail) {
+      setLoadingShopify(true);
+      setShopifyError(null);
+      setShopifyCustomer(null);
+      setShopifyOrders([]);
+      setSelectedOrder(null);
+
+      fetch(`/api/shopify/customer?email=${encodeURIComponent(selectedConversation.customer.primaryEmail)}`)
+        .then((res) => {
+          if (res.status === 404) {
+            setShopifyError("Customer not found in Shopify");
+            setLoadingShopify(false);
+            return null;
+          }
+          if (!res.ok) {
+            throw new Error("Failed to fetch customer");
+          }
+          return res.json();
+        })
+        .then((customer) => {
+          if (customer) {
+            setShopifyCustomer(customer);
+            // Fetch customer orders
+            return fetch(`/api/shopify/customer/${customer.id}/orders`);
+          }
+          return null;
+        })
+        .then((res) => {
+          if (res) {
+            return res.json();
+          }
+          return null;
+        })
+        .then((orders) => {
+          if (orders) {
+            setShopifyOrders(orders);
+          }
+          setLoadingShopify(false);
+        })
+        .catch((err) => {
+          console.error("Failed to fetch Shopify data:", err);
+          setShopifyError("Failed to load Shopify data");
+          setLoadingShopify(false);
+        });
+    } else {
+      setShopifyCustomer(null);
+      setShopifyOrders([]);
+      setSelectedOrder(null);
+      setLoadingShopify(false);
+    }
+  }, [selectedConversation?.customer?.primaryEmail]);
 
   // Manual AI summary generation
   const handleGenerateSummary = async () => {
@@ -201,6 +262,33 @@ export default function ConversationView() {
 
     // Instant navigation - no API call!
     selectConversation(nextConv.id);
+  };
+
+  const goToOldestUnreplied = () => {
+    // Filter to unreplied conversations (last message is inbound)
+    const unrepliedConversations = conversations.filter((conv) => {
+      // Exclude non-customer-support
+      if (conv.tags?.includes("non-customer-support")) return false;
+
+      // Check if last message is inbound (needs reply)
+      if (conv.messages.length === 0) return false;
+      const lastMessage = conv.messages[conv.messages.length - 1];
+      return lastMessage.direction === "inbound";
+    });
+
+    // Sort by lastMessageAt (oldest first)
+    const sortedUnreplied = unrepliedConversations.sort((a, b) =>
+      new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
+    );
+
+    if (sortedUnreplied.length === 0) {
+      alert("No unreplied emails!");
+      return;
+    }
+
+    // Jump directly to the oldest unreplied email
+    const oldestConv = sortedUnreplied[0];
+    selectConversation(oldestConv.id);
   };
 
   const handleAddTag = async () => {
@@ -696,6 +784,33 @@ export default function ConversationView() {
             </div>
           </button>
 
+          {/* Oldest Unreplied Button */}
+          <button
+            onClick={goToOldestUnreplied}
+            className="w-full px-4 py-3.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md group"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="w-5 h-5"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                  />
+                </svg>
+                <span className="text-sm font-sans font-bold">Oldest Unreplied</span>
+              </div>
+              <span className="text-xs font-sans font-medium opacity-80">⏰</span>
+            </div>
+          </button>
+
           {/* Mark as Non-Support Button */}
           {!selectedConversation.tags?.includes("non-customer-support") && (
             <button
@@ -722,6 +837,132 @@ export default function ConversationView() {
                 </div>
               </div>
             </button>
+          )}
+        </div>
+      </div>
+
+      {/* Shopify Section */}
+      <div className="border-b border-border">
+        <div className="px-6 py-4 bg-secondary/30">
+          <div className="flex items-center justify-between">
+            <h3 className="font-sans font-bold text-foreground text-sm uppercase tracking-wide">Shopify</h3>
+            {shopifyCustomer && (
+              <span className="text-xs font-sans font-medium text-green-600">Connected</span>
+            )}
+          </div>
+        </div>
+
+        <div className="px-4 py-4 space-y-3 max-h-[400px] overflow-y-auto">
+          {loadingShopify ? (
+            <div className="p-6 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+              <p className="text-xs font-sans text-muted-foreground">Loading Shopify data...</p>
+            </div>
+          ) : shopifyError ? (
+            <div className="p-4 bg-muted rounded-lg text-center">
+              <p className="text-xs font-sans text-muted-foreground">{shopifyError}</p>
+            </div>
+          ) : shopifyCustomer ? (
+            <>
+              {/* Customer Info */}
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3">
+                <p className="text-xs font-sans font-bold text-purple-900 mb-2">
+                  {shopifyCustomer.first_name} {shopifyCustomer.last_name}
+                </p>
+                <div className="space-y-1 text-[10px] font-sans text-purple-700">
+                  <p>Orders: {shopifyCustomer.orders_count}</p>
+                  <p>Total Spent: ${parseFloat(shopifyCustomer.total_spent).toFixed(2)}</p>
+                  <p className={shopifyCustomer.verified_email ? "text-green-600" : "text-red-600"}>
+                    Email {shopifyCustomer.verified_email ? "Verified" : "Not Verified"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Order List */}
+              {shopifyOrders.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-sans font-semibold text-foreground">Recent Orders</p>
+                  {shopifyOrders.slice(0, 5).map((order) => (
+                    <button
+                      key={order.id}
+                      onClick={() => setSelectedOrder(order.id === selectedOrder?.id ? null : order)}
+                      className="w-full text-left p-3 bg-background border border-border hover:border-primary rounded-lg transition-all"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs font-sans font-bold text-foreground">
+                          {order.name}
+                        </p>
+                        <span className={`text-[10px] font-sans px-2 py-0.5 rounded ${
+                          order.financial_status === "paid"
+                            ? "bg-green-100 text-green-700"
+                            : order.financial_status === "refunded"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}>
+                          {order.financial_status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-sans text-muted-foreground">
+                        <span>{new Date(order.created_at).toLocaleDateString()}</span>
+                        <span className="font-bold text-foreground">${parseFloat(order.total_price).toFixed(2)}</span>
+                      </div>
+
+                      {/* Order Details (Expanded) */}
+                      {selectedOrder?.id === order.id && (
+                        <div className="mt-3 pt-3 border-t border-border space-y-2">
+                          <div className="text-[10px] font-sans space-y-1">
+                            <p className="flex justify-between">
+                              <span className="text-muted-foreground">Subtotal:</span>
+                              <span className="text-foreground">${parseFloat(order.subtotal_price).toFixed(2)}</span>
+                            </p>
+                            <p className="flex justify-between">
+                              <span className="text-muted-foreground">Tax:</span>
+                              <span className="text-foreground">${parseFloat(order.total_tax).toFixed(2)}</span>
+                            </p>
+                            <p className="flex justify-between font-bold">
+                              <span className="text-foreground">Total:</span>
+                              <span className="text-foreground">${parseFloat(order.total_price).toFixed(2)}</span>
+                            </p>
+                          </div>
+
+                          <div className="text-[10px] font-sans">
+                            <p className="text-muted-foreground mb-1">Items:</p>
+                            <div className="space-y-1">
+                              {order.line_items.map((item: any) => (
+                                <div key={item.id} className="flex justify-between text-foreground">
+                                  <span>{item.quantity}x {item.name}</span>
+                                  <span>${parseFloat(item.price).toFixed(2)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2 pt-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`https://${process.env.NEXT_PUBLIC_SHOPIFY_STORE || 'put1rp-iq.myshopify.com'}/admin/orders/${order.id}`, '_blank');
+                              }}
+                              className="flex-1 px-2 py-1.5 bg-purple-500 hover:bg-purple-600 text-white text-[10px] font-sans font-bold rounded transition-colors"
+                            >
+                              View in Shopify
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 bg-muted rounded-lg text-center">
+                  <p className="text-xs font-sans text-muted-foreground">No orders found</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="p-4 bg-muted rounded-lg text-center">
+              <p className="text-xs font-sans text-muted-foreground">No Shopify customer found</p>
+            </div>
           )}
         </div>
       </div>

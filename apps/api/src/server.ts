@@ -6,6 +6,7 @@ import OpenAI from "openai";
 
 import { googleAuthStart, googleAuthCallback, pollOnce, sendReply } from "./gmail";
 import { prisma } from "./db";
+import * as shopify from "./shopify";
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -781,6 +782,231 @@ app.delete("/knowledge-base/:id", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error deleting knowledge base entry:", error);
     res.status(500).json({ error: "Failed to delete entry" });
+  }
+});
+
+// ============================================================================
+// SHOPIFY API ENDPOINTS
+// ============================================================================
+
+/**
+ * Test Shopify connection
+ * GET /shopify/test
+ */
+app.get("/shopify/test", async (_req: Request, res: Response) => {
+  try {
+    const result = await shopify.testShopifyConnection();
+    res.json(result);
+  } catch (error) {
+    console.error("Error testing Shopify connection:", error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+
+/**
+ * Find customer by email
+ * GET /shopify/customer?email=customer@example.com
+ */
+app.get("/shopify/customer", async (req: Request, res: Response) => {
+  try {
+    const { email } = req.query;
+
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ error: "Email parameter is required" });
+    }
+
+    const customer = await shopify.findCustomerByEmail(email);
+
+    if (!customer) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    res.json(customer);
+  } catch (error) {
+    console.error("Error finding customer:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to find customer"
+    });
+  }
+});
+
+/**
+ * Get customer details by ID
+ * GET /shopify/customer/:customerId
+ */
+app.get("/shopify/customer/:customerId", async (req: Request, res: Response) => {
+  try {
+    const { customerId } = req.params;
+    const customer = await shopify.getCustomer(customerId);
+    res.json(customer);
+  } catch (error) {
+    console.error("Error getting customer:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to get customer"
+    });
+  }
+});
+
+/**
+ * Get customer orders
+ * GET /shopify/customer/:customerId/orders?limit=50
+ */
+app.get("/shopify/customer/:customerId/orders", async (req: Request, res: Response) => {
+  try {
+    const { customerId } = req.params;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+
+    const orders = await shopify.getCustomerOrders(customerId, limit);
+    res.json(orders);
+  } catch (error) {
+    console.error("Error getting customer orders:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to get customer orders"
+    });
+  }
+});
+
+/**
+ * Get order details
+ * GET /shopify/order/:orderId
+ */
+app.get("/shopify/order/:orderId", async (req: Request, res: Response) => {
+  try {
+    const orderId = parseInt(req.params.orderId);
+
+    if (isNaN(orderId)) {
+      return res.status(400).json({ error: "Invalid order ID" });
+    }
+
+    const order = await shopify.getOrder(orderId);
+    res.json(order);
+  } catch (error) {
+    console.error("Error getting order:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to get order"
+    });
+  }
+});
+
+/**
+ * Search for order by order number
+ * GET /shopify/order/search?number=#1234
+ */
+app.get("/shopify/order/search", async (req: Request, res: Response) => {
+  try {
+    const { number } = req.query;
+
+    if (!number || typeof number !== "string") {
+      return res.status(400).json({ error: "Order number parameter is required" });
+    }
+
+    const order = await shopify.findOrderByNumber(number);
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json(order);
+  } catch (error) {
+    console.error("Error searching for order:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to search for order"
+    });
+  }
+});
+
+/**
+ * Calculate refund (preview)
+ * POST /shopify/order/:orderId/refund/calculate
+ * Body: { refundLineItems: [{ line_item_id: number, quantity: number }] }
+ */
+app.post("/shopify/order/:orderId/refund/calculate", async (req: Request, res: Response) => {
+  try {
+    const orderId = parseInt(req.params.orderId);
+
+    if (isNaN(orderId)) {
+      return res.status(400).json({ error: "Invalid order ID" });
+    }
+
+    const { refundLineItems } = req.body;
+
+    if (!refundLineItems || !Array.isArray(refundLineItems)) {
+      return res.status(400).json({ error: "refundLineItems array is required" });
+    }
+
+    const calculation = await shopify.calculateRefund(orderId, refundLineItems);
+    res.json(calculation);
+  } catch (error) {
+    console.error("Error calculating refund:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to calculate refund"
+    });
+  }
+});
+
+/**
+ * Create refund
+ * POST /shopify/order/:orderId/refund
+ * Body: {
+ *   refundLineItems: [{ line_item_id: number, quantity: number, restock_type?: string }],
+ *   amount?: string,
+ *   reason?: string,
+ *   notify?: boolean,
+ *   note?: string
+ * }
+ */
+app.post("/shopify/order/:orderId/refund", async (req: Request, res: Response) => {
+  try {
+    const orderId = parseInt(req.params.orderId);
+
+    if (isNaN(orderId)) {
+      return res.status(400).json({ error: "Invalid order ID" });
+    }
+
+    const { refundLineItems, amount, reason, notify, note } = req.body;
+
+    if (!refundLineItems || !Array.isArray(refundLineItems)) {
+      return res.status(400).json({ error: "refundLineItems array is required" });
+    }
+
+    const refund = await shopify.createRefund(orderId, refundLineItems, {
+      amount,
+      reason,
+      notify,
+      note
+    });
+
+    res.json(refund);
+  } catch (error) {
+    console.error("Error creating refund:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to create refund"
+    });
+  }
+});
+
+/**
+ * Get order refunds
+ * GET /shopify/order/:orderId/refunds
+ */
+app.get("/shopify/order/:orderId/refunds", async (req: Request, res: Response) => {
+  try {
+    const orderId = parseInt(req.params.orderId);
+
+    if (isNaN(orderId)) {
+      return res.status(400).json({ error: "Invalid order ID" });
+    }
+
+    const refunds = await shopify.getOrderRefunds(orderId);
+    res.json(refunds);
+  } catch (error) {
+    console.error("Error getting order refunds:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to get order refunds"
+    });
   }
 });
 
