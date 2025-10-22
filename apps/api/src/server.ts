@@ -150,9 +150,11 @@ app.get("/conversations/next-unreplied/:currentId", async (req: Request, res: Re
       }
 
       // Find next unreplied chronologically after current conversation
-      const next = unreplied.find(c =>
-        new Date(c.lastMessageAt).getTime() > new Date(current.lastMessageAt).getTime()
-      );
+      const currentTime = current.lastMessageAt ? new Date(current.lastMessageAt).getTime() : 0;
+      const next = unreplied.find(c => {
+        const messageTime = c.lastMessageAt ? new Date(c.lastMessageAt).getTime() : 0;
+        return messageTime > currentTime;
+      });
 
       // If found, return it; otherwise wrap to oldest
       res.json(next || unreplied[0] || null);
