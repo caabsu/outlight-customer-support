@@ -188,6 +188,89 @@ export async function findCustomerByEmail(email: string): Promise<ShopifyCustome
 }
 
 /**
+ * Comprehensive search for customer and orders by email, name, or order number
+ * Returns customer details and order details when found
+ */
+export async function searchCustomerAndOrders(query: string): Promise<{
+  customer: ShopifyCustomer | null;
+  orders: ShopifyOrder[];
+  searchType: 'email' | 'name' | 'order' | 'not_found';
+}> {
+  try {
+    // First, try to find an order by order number (e.g., #1001 or 1001)
+    const orderNumber = query.replace('#', '');
+    if (/^\d+$/.test(orderNumber)) {
+      try {
+        const orderResponse = await shopifyRequest<{ orders: ShopifyOrder[] }>(
+          `/orders.json?name=${encodeURIComponent('#' + orderNumber)}&status=any`
+        );
+
+        if (orderResponse.orders && orderResponse.orders.length > 0) {
+          const order = orderResponse.orders[0];
+
+          // Get the customer for this order
+          let customer = null;
+          if (order.customer && order.customer.id) {
+            customer = await getCustomer(order.customer.id.toString());
+          }
+
+          // Get all orders for this customer
+          const allOrders = customer
+            ? await getCustomerOrders(customer.id.toString())
+            : [order];
+
+          return {
+            customer,
+            orders: allOrders,
+            searchType: 'order'
+          };
+        }
+      } catch (error) {
+        console.log('Order not found, trying other search methods...');
+      }
+    }
+
+    // Try searching by email
+    if (query.includes('@')) {
+      const customer = await findCustomerByEmail(query);
+      if (customer) {
+        const orders = await getCustomerOrders(customer.id.toString());
+        return {
+          customer,
+          orders,
+          searchType: 'email'
+        };
+      }
+    }
+
+    // Try searching by name
+    const nameResponse = await shopifyRequest<{ customers: ShopifyCustomer[] }>(
+      `/customers/search.json?query=${encodeURIComponent(query)}`
+    );
+
+    if (nameResponse.customers && nameResponse.customers.length > 0) {
+      const customer = nameResponse.customers[0];
+      const orders = await getCustomerOrders(customer.id.toString());
+      return {
+        customer,
+        orders,
+        searchType: 'name'
+      };
+    }
+
+    // Nothing found
+    return {
+      customer: null,
+      orders: [],
+      searchType: 'not_found'
+    };
+  } catch (error) {
+    console.error('Error in comprehensive search:', error);
+    throw error;
+  }
+}
+
+/**
  * Get customer details by ID
  */
 export async function getCustomer(customerId: string): Promise<ShopifyCustomer> {

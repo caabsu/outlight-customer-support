@@ -1327,15 +1327,58 @@ app.post("/tracking/batch", async (req: Request, res: Response) => {
 });
 
 /**
- * AI Draft Functionality
+ * AI Draft Functionality with Tool Access
  * POST /conversations/:id/draft
  */
 
-// Knowledge base - Add your policy content here
-const knowledgeBase = `
-# Outlight Customer Support Knowledge Base
-(Add your policy content here)
-`;
+// Enhanced Knowledge base
+const knowledgeBase = `# Outlight Customer Support - AI Draft Tool Knowledge Base
+
+## CRITICAL: Email Classification Tags
+Apply ALL relevant tags (emails can have multiple):
+- **non-support**: Marketing, partnerships, spam, sales
+- **chargeback**: Bank dispute - DO NOT RESPOND TO CUSTOMER
+- **return**: Customer wants to return product
+- **refund**: Asking about refund status
+- **product-inquiry**: Product questions/specs
+- **order-status**: Tracking/shipping questions
+- **damaged-product**: Defective/damaged item
+- **missing-items**: Missing from order
+- **cancellation**: Cancel order request
+
+## Return & Refund Policy
+**Return Eligibility**: 30 days from DELIVERY date (not order date)
+**Returns Portal**: https://outlight.us/apps/returns-portal
+**Refund Timeline**: 5-7 business days after warehouse receives return
+**If approved <7 days ago**: Still in transit, ask for patience
+
+## Draft Decision Rules
+### DRAFT FULL EMAIL (shouldDraft = true):
+- **return**: Check 30-day policy, draft approval/denial with returns portal link
+- **order-status**: Draft with tracking link
+- **damaged-product**: Draft apology + replacement/refund offer
+- **missing-items**: Draft apology + send items
+- **cancellation**: Draft confirmation or return guide
+
+### ACTION STEPS ONLY (shouldDraft = false):
+- **non-support**: Tag and archive (no response)
+- **chargeback**: Tag and escalate to admin immediately (DO NOT RESPOND)
+- **refund** (already returned): Steps: 1) Confirm approved in Shopify 2) Check arrival 3) Process refund
+- **product-inquiry**: Steps: Check product page, answer question, consult admin
+
+## CRITICAL: Link Policy
+ONLY include these links in drafts:
+- 17track tracking links: https://t.17track.net/en#nums=TRACKING_NUMBER
+- Returns portal: https://outlight.us/apps/returns-portal
+- Outlight product pages: https://outlight.us/products/PRODUCT_NAME
+NO other external links allowed.
+
+## Draft Requirements
+- Use customer's first name
+- Include order numbers (#1234 format)
+- Include dates (order date, delivery date)
+- Check delivery date vs 30-day window for returns
+- Be professional, empathetic, concise`;
 
 app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
   try {
@@ -1356,23 +1399,6 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
-    // Fetch customer's Shopify data if available
-    let shopifyData = null;
-    if (conversation.customer?.primaryEmail) {
-      try {
-        const customer = await shopify.findCustomerByEmail(conversation.customer.primaryEmail);
-        if (customer) {
-          const orders = await shopify.getCustomerOrders(customer.id);
-          shopifyData = {
-            customer,
-            orders: orders.slice(0, 5), // Last 5 orders
-          };
-        }
-      } catch (error) {
-        console.log("Could not fetch Shopify data:", error);
-      }
-    }
-
     // Build email thread context
     const emailThread = conversation.messages.map((msg: any) => ({
       from: msg.direction === "inbound" ? conversation.customer?.primaryEmail : "support@outlight.us",
@@ -1382,79 +1408,190 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
       body: msg.bodyPlain || msg.bodyHtml,
     }));
 
-    // Build context for AI
-    const context = {
-      emailThread,
-      customer: conversation.customer ? {
-        name: conversation.customer.name,
-        email: conversation.customer.primaryEmail,
-      } : null,
-      shopifyData,
-      currentTags: conversation.tags || [],
-    };
+    // Define tools for AI to use
+    const tools = [
+      {
+        type: "function",
+        function: {
+          name: "search_customer_and_orders",
+          description: "Search for a Shopify customer and their orders by email, name, or order number. Returns customer details and all their orders. Use this FIRST before analyzing the email.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: {
+                type: "string",
+                description: "Email address, customer name, or order number (e.g., 'john@example.com', 'John Smith', '1001', or '#1001')"
+              }
+            },
+            required: ["query"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_tracking_info",
+          description: "Get detailed tracking information for a package using 17track. Returns tracking status, location, and timeline.",
+          parameters: {
+            type: "object",
+            properties: {
+              tracking_number: {
+                type: "string",
+                description: "The tracking number from the order fulfillment"
+              }
+            },
+            required: ["tracking_number"]
+          }
+        }
+      }
+    ];
 
-    // Call OpenAI for draft generation
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: `You are an AI assistant helping Outlight customer support agents draft email responses.
+    // Initial AI call with function calling
+    const messages: any[] = [
+      {
+        role: "system",
+        content: `You are an advanced AI assistant for Outlight customer support.
 
 KNOWLEDGE BASE:
 ${knowledgeBase}
 
-Your task is to:
-1. Analyze the email thread
-2. Classify the email with appropriate tags
-3. Check customer/order data against policies
-4. Either draft a response email OR provide actionable steps for the agent
+WORKFLOW - Follow these steps IN ORDER:
+1. FIRST: Extract any customer identifiers (email, name, order number) from the email
+2. Use search_customer_and_orders tool to find the customer and their orders
+3. FULLY READ the entire email body - understand every detail
+4. If tracking numbers mentioned, use get_tracking_info tool
+5. Map out internal step-by-step reasoning for resolving this inquiry
+6. Apply the knowledge base rules to decide: draft email OR action steps
+7. Generate the response following all policies
 
-IMPORTANT OUTPUT FORMAT:
-You must respond with a valid JSON object with this exact structure:
+CRITICAL RULES:
+- Read the ENTIRE knowledge base and follow ALL policies
+- NEVER include links except: 17track links, outlight.us/apps/returns-portal, outlight.us/products/*
+- Always use tools BEFORE drafting to get accurate data
+- For returns: Calculate days from DELIVERY date, not order date
+- Be specific with order numbers, dates, and tracking numbers
+- Use customer's first name when available
+
+OUTPUT FORMAT (JSON):
 {
-  "tags": ["tag1", "tag2"],
+  "internalReasoning": "Your step-by-step analysis of the situation",
+  "tags": ["array", "of", "tags"],
   "category": "primary-category",
-  "reasoning": "Step-by-step reasoning for your classification and response",
-  "shouldDraft": true or false,
-  "draft": "The email draft text (if shouldDraft is true)" or null,
-  "actionSteps": ["step 1", "step 2"] (if shouldDraft is false) or null,
+  "reasoning": "Reasoning shown to agent",
+  "shouldDraft": true/false,
+  "draft": "email text" or null,
+  "actionSteps": ["step1", "step2"] or null,
   "orderInfo": {
-    "orderId": "order id if relevant",
+    "orderId": "order id",
     "orderDate": "date",
     "deliveryDate": "date",
     "isWithinReturnWindow": true/false
   } or null
-}
+}`
+      },
+      {
+        role: "user",
+        content: `Analyze this customer support email and generate a response.
 
-Rules:
-- For "non-support" and "chargeback": shouldDraft = false, no draft needed
-- For "return": Check policy, draft if within window
-- For "refund" (already returned): shouldDraft = false, provide verification steps
-- For "product-inquiry": shouldDraft = false, provide research steps
-- Use customer's name in drafts when available
-- Be professional, empathetic, and concise
-- Include specific order numbers, dates, and URLs when relevant`
-        },
-        {
-          role: "user",
-          content: `Analyze this customer support email and generate a response:
+EMAIL THREAD:
+${JSON.stringify(emailThread, null, 2)}
 
-CONTEXT:
-${JSON.stringify(context, null, 2)}
+CUSTOMER INFO:
+${conversation.customer ? `Name: ${conversation.customer.name}, Email: ${conversation.customer.primaryEmail}` : 'Unknown customer'}
 
-Generate the classification, reasoning, and either a draft response or action steps.`
+Follow the workflow: Search customer → Read email → Analyze → Draft/Steps`
+      }
+    ];
+
+    let finalResult: any = null;
+    let toolCallCount = 0;
+    const MAX_TOOL_CALLS = 5;
+
+    // Tool calling loop
+    while (toolCallCount < MAX_TOOL_CALLS) {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages,
+        tools: tools as any,
+        tool_choice: toolCallCount === 0 ? "auto" : "auto",
+        temperature: 0.3,
+      });
+
+      const assistantMessage = completion.choices[0].message;
+      messages.push(assistantMessage);
+
+      // Check if AI wants to call a tool
+      if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+        toolCallCount++;
+
+        // Execute each tool call
+        for (const toolCall of assistantMessage.tool_calls) {
+          const functionName = toolCall.function.name;
+          const functionArgs = JSON.parse(toolCall.function.arguments);
+
+          let toolResult: any = null;
+
+          if (functionName === "search_customer_and_orders") {
+            try {
+              toolResult = await shopify.searchCustomerAndOrders(functionArgs.query);
+            } catch (error) {
+              toolResult = { error: "Failed to search Shopify", details: String(error) };
+            }
+          } else if (functionName === "get_tracking_info") {
+            try {
+              // Register and fetch tracking from 17track
+              const registerResponse = await fetch("https://api.17track.net/track/v2.2/register", {
+                method: "POST",
+                headers: {
+                  "17token": process.env.SEVENTEENTRACK_API_KEY || "",
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify([{ number: functionArgs.tracking_number }]),
+              });
+
+              // Wait a moment then fetch tracking info
+              await new Promise(resolve => setTimeout(resolve, 1000));
+
+              const trackResponse = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
+                method: "POST",
+                headers: {
+                  "17token": process.env.SEVENTEENTRACK_API_KEY || "",
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify([{ number: functionArgs.tracking_number }]),
+              });
+
+              toolResult = await trackResponse.json();
+            } catch (error) {
+              toolResult = { error: "Failed to fetch tracking", details: String(error) };
+            }
+          }
+
+          // Add tool result to messages
+          messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(toolResult)
+          });
         }
-      ],
-      temperature: 0.7,
-      response_format: { type: "json_object" }
-    });
-
-    const result = JSON.parse(completion.choices[0].message.content || "{}");
+      } else {
+        // No more tool calls - AI is done
+        try {
+          finalResult = JSON.parse(assistantMessage.content || "{}");
+        } catch (error) {
+          // If not JSON, wrap it
+          finalResult = {
+            reasoning: assistantMessage.content,
+            error: "AI did not return valid JSON"
+          };
+        }
+        break;
+      }
+    }
 
     // Update conversation tags if new tags were added
-    if (result.tags && result.tags.length > 0) {
-      const uniqueTags = Array.from(new Set([...(conversation.tags || []), ...result.tags]));
+    if (finalResult.tags && finalResult.tags.length > 0) {
+      const uniqueTags = Array.from(new Set([...(conversation.tags || []), ...finalResult.tags]));
       await prisma.conversation.update({
         where: { id: conversationId },
         data: { tags: uniqueTags },
@@ -1462,9 +1599,10 @@ Generate the classification, reasoning, and either a draft response or action st
     }
 
     res.json({
-      ...result,
+      ...finalResult,
       conversationId,
       processingTime: new Date().toISOString(),
+      toolCallsMade: toolCallCount
     });
   } catch (error) {
     console.error("Error generating draft:", error);
