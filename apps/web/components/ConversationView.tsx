@@ -398,43 +398,12 @@ export default function ConversationView() {
     if (navigatingUnreplied) return; // Prevent multiple clicks
 
     try {
-      // STEP 1: Check current page FIRST for oldest unreplied (instant!)
-      const unrepliedOnPage = conversations.filter((conv) => {
-        if (conv.tags?.includes("non-customer-support")) return false;
-        if (conv.messages.length === 0) return false;
-        const lastMessage = conv.messages[conv.messages.length - 1];
-        return lastMessage.direction === "inbound";
-      });
-
-      const sortedUnreplied = unrepliedOnPage.sort((a, b) =>
-        new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
-      );
-
-      // If oldest is on current page, select it INSTANTLY
-      if (sortedUnreplied.length > 0) {
-        const oldestOnPage = sortedUnreplied[0];
-
-        // Check if this is the globally oldest by calling API
-        const response = await fetch(`/api/conversations/next-unreplied`);
-        if (response.ok) {
-          const globallyOldest = await response.json();
-
-          // If the oldest on this page IS the globally oldest, select it instantly
-          if (globallyOldest && globallyOldest.id === oldestOnPage.id) {
-            selectConversation(oldestOnPage.id);
-            return; // ⚡ INSTANT
-          }
-        }
-      }
-
-      // STEP 2: Need to find oldest across all pages - use API
-      setNavigatingUnreplied(true);
-
+      // Get globally oldest unreplied from API
       const response = await fetch(`/api/conversations/next-unreplied`);
 
       if (!response.ok) {
-        console.error("Failed to fetch oldest unreplied");
-        setNavigatingUnreplied(false);
+        console.error("Failed to fetch oldest unreplied:", response.status, response.statusText);
+        alert("Failed to fetch oldest unreplied email. Please try again.");
         return;
       }
 
@@ -442,7 +411,6 @@ export default function ConversationView() {
 
       if (!oldestConversation || !oldestConversation.id) {
         alert("No unreplied emails!");
-        setNavigatingUnreplied(false);
         return;
       }
 
@@ -450,9 +418,11 @@ export default function ConversationView() {
       const isOnCurrentPage = conversations.some(conv => conv.id === oldestConversation.id);
 
       if (isOnCurrentPage) {
+        // INSTANT - already on current page
         selectConversation(oldestConversation.id);
-        setNavigatingUnreplied(false);
       } else if (pagination) {
+        // Cross-page navigation - show loading
+        setNavigatingUnreplied(true);
         // Need to find which page has this conversation
         const oldestDate = new Date(oldestConversation.lastMessageAt).getTime();
         const currentPageOldest = new Date(conversations[conversations.length - 1]?.lastMessageAt || 0).getTime();
@@ -1330,7 +1300,7 @@ export default function ConversationView() {
           </div>
         </div>
 
-        <div className="max-h-[200px] overflow-y-auto px-4 py-3 space-y-2">
+        <div className="h-[200px] overflow-y-auto px-4 py-3 space-y-2">
           {loadingHistory ? (
             <>
               {[1, 2].map((i) => (
