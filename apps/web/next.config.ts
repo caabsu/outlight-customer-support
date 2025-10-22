@@ -9,16 +9,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // Increase server timeout for AI operations
-  experimental: {
-    serverActions: {
-      bodySizeLimit: '2mb',
-    },
-  },
-  // Increase API route timeout
-  serverRuntimeConfig: {
-    apiTimeout: 300000, // 5 minutes
-  },
 };
 
 export default nextConfig;

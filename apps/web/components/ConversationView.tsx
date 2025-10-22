@@ -593,7 +593,13 @@ export default function ConversationView() {
     setDraftData(null);
 
     try {
-      const response = await fetch(`/api/conversations/${selectedConversation.id}/draft`, {
+      // Call API server directly to avoid Next.js proxy timeout
+      // In production, this would use the same domain, but in dev we bypass the proxy
+      const apiUrl = process.env.NODE_ENV === 'development'
+        ? `http://localhost:3001/conversations/${selectedConversation.id}/draft`
+        : `/api/conversations/${selectedConversation.id}/draft`;
+
+      const response = await fetch(apiUrl, {
         method: "POST",
       });
 
