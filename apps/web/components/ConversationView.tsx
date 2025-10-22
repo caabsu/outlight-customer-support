@@ -1639,16 +1639,24 @@ export default function ConversationView() {
           <button
             onClick={() => {/* TODO: Implement summarize */}}
             disabled={!selectedConversation}
-            className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed text-left"
           >
             <span className="text-sm font-sans font-bold">Summarize</span>
           </button>
 
           {/* Draft Button */}
           <button
-            onClick={generateDraft}
+            onClick={() => {
+              if (draftMinimized && showDraftPopup) {
+                // If draft is minimized, maximize it
+                setDraftMinimized(false);
+              } else {
+                // Otherwise generate new draft
+                generateDraft();
+              }
+            }}
             disabled={loadingDraft || !selectedConversation}
-            className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed relative"
+            className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed relative text-left"
           >
             {loadingDraft && (
               <div className="absolute inset-0 bg-purple-600/50 rounded-lg flex items-center justify-center">
@@ -1657,7 +1665,13 @@ export default function ConversationView() {
                 </svg>
               </div>
             )}
-            <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : 'Draft'}</span>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : 'Draft'}</span>
+              {/* Minimized indicator */}
+              {showDraftPopup && draftMinimized && !loadingDraft && (
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse" title="Draft minimized - click to view"></div>
+              )}
+            </div>
           </button>
 
           {/* Placeholder for future buttons */}
@@ -2489,42 +2503,41 @@ export default function ConversationView() {
     )}
 
     {/* AI Draft Popup Modal */}
-    {showDraftPopup && (
-      <div className={`fixed ${draftMinimized ? 'bottom-4 right-4' : 'inset-0'} z-50 ${draftMinimized ? '' : 'flex items-center justify-center bg-black/50'}`}>
-        <div className={`bg-background border border-border shadow-2xl ${draftMinimized ? 'w-80' : 'w-[800px] max-h-[90vh]'} flex flex-col rounded-lg`}>
+    {showDraftPopup && !draftMinimized && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="bg-white border border-slate-200 shadow-2xl w-[900px] max-h-[85vh] flex flex-col rounded-xl overflow-hidden">
           {/* Header */}
-          <div className="px-6 py-4 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-border flex items-center justify-between rounded-t-lg shrink-0">
-            <div className="flex items-center gap-3">
-              <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
-              </svg>
-              <h3 className="font-sans font-bold text-purple-900 text-sm uppercase tracking-wide">
-                AI Draft Assistant
-                {draftData?.tags && draftData.tags.length > 0 && !draftMinimized && (
-                  <span className="ml-3 text-xs normal-case font-normal text-purple-600">
-                    {draftData.tags.join(", ")}
-                  </span>
+          <div className="px-8 py-5 bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 border-b border-slate-200 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-md">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-sans font-bold text-slate-900 text-base">
+                  AI Draft Assistant
+                </h3>
+                {draftData?.tags && draftData.tags.length > 0 && (
+                  <div className="flex items-center gap-2 mt-1">
+                    {draftData.tags.slice(0, 3).map((tag: string) => (
+                      <span key={tag} className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-sans font-medium rounded-md">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 )}
-              </h3>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setDraftMinimized(!draftMinimized)}
-                className="text-purple-600 hover:text-purple-800 text-sm font-bold px-2"
-                title={draftMinimized ? "Maximize" : "Minimize"}
-              >
-                {draftMinimized ? '□' : '−'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowDraftPopup(false);
-                  setDraftMinimized(false);
-                }}
-                className="text-purple-600 hover:text-purple-800 text-lg font-bold"
-              >
-                ×
-              </button>
-            </div>
+            <button
+              onClick={() => setDraftMinimized(true)}
+              className="p-2 hover:bg-white/50 rounded-lg transition-colors group"
+              title="Minimize"
+            >
+              <svg className="w-5 h-5 text-slate-500 group-hover:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
           </div>
 
           {/* Content */}
@@ -2663,6 +2676,28 @@ export default function ConversationView() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Footer with Delete button */}
+          {!loadingDraft && draftData && (
+            <div className="px-8 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end shrink-0">
+              <button
+                onClick={() => {
+                  if (confirm('Are you sure you want to delete this draft? This cannot be undone.')) {
+                    setShowDraftPopup(false);
+                    setDraftMinimized(false);
+                    setDraftData(null);
+                    setDraftError(null);
+                  }
+                }}
+                className="px-4 py-2 bg-white border border-slate-300 hover:bg-red-50 hover:border-red-300 text-slate-700 hover:text-red-700 rounded-lg transition-all font-sans text-sm font-medium flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete Draft
+              </button>
             </div>
           )}
         </div>
