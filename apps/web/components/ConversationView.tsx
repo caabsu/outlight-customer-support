@@ -63,6 +63,16 @@ export default function ConversationView() {
   const [loadingShopify, setLoadingShopify] = useState(false);
   const [shopifyError, setShopifyError] = useState<string | null>(null);
   const [copiedTrackingNumber, setCopiedTrackingNumber] = useState<string | null>(null);
+  const [shopifySearchQuery, setShopifySearchQuery] = useState("");
+  const [searchingShopify, setSearchingShopify] = useState(false);
+
+  // Email composer state
+  const [showEmailComposer, setShowEmailComposer] = useState(false);
+  const [composerTo, setComposerTo] = useState("");
+  const [composerSubject, setComposerSubject] = useState("");
+  const [composerBody, setComposerBody] = useState("");
+  const [composerAttachments, setComposerAttachments] = useState<File[]>([]);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   // Fetch conversation history
   useEffect(() => {
@@ -325,6 +335,103 @@ export default function ConversationView() {
       };
     }
     return null;
+  };
+
+  // Search for Shopify customer by email or name
+  const handleShopifySearch = async () => {
+    if (!shopifySearchQuery.trim()) return;
+
+    setSearchingShopify(true);
+    setShopifyError(null);
+    setShopifyCustomer(null);
+    setShopifyOrders([]);
+    setSelectedOrder(null);
+
+    try {
+      // Try searching by email first (exact match)
+      const emailResponse = await fetch(`/api/shopify/customer?email=${encodeURIComponent(shopifySearchQuery.trim())}`);
+
+      if (emailResponse.ok) {
+        const customer = await emailResponse.json();
+        setShopifyCustomer(customer);
+
+        // Fetch customer orders
+        const ordersResponse = await fetch(`/api/shopify/customer/${customer.id}/orders`);
+        if (ordersResponse.ok) {
+          const orders = await ordersResponse.json();
+          setShopifyOrders(orders);
+        }
+      } else {
+        setShopifyError("Customer not found in Shopify");
+      }
+    } catch (err) {
+      console.error("Failed to search Shopify customer:", err);
+      setShopifyError("Failed to search for customer");
+    } finally {
+      setSearchingShopify(false);
+    }
+  };
+
+  // Open email composer
+  const openEmailComposer = (to?: string, subject?: string) => {
+    setComposerTo(to || selectedConversation?.customer?.primaryEmail || "");
+    setComposerSubject(subject || (selectedConversation?.subject ? `Re: ${selectedConversation.subject}` : ""));
+    setComposerBody("");
+    setComposerAttachments([]);
+    setShowEmailComposer(true);
+  };
+
+  // Handle file attachments
+  const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      setComposerAttachments([...composerAttachments, ...files]);
+    }
+  };
+
+  // Remove attachment
+  const removeAttachment = (index: number) => {
+    setComposerAttachments(composerAttachments.filter((_, i) => i !== index));
+  };
+
+  // Send email from composer
+  const handleSendComposerEmail = async () => {
+    if (!composerTo.trim() || !composerBody.trim()) {
+      alert("Please provide recipient email and message body");
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      // For now, use the same endpoint as reply
+      // In the future, we can enhance this to support attachments
+      const response = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: selectedConversation?.id,
+          to: composerTo,
+          subject: composerSubject,
+          body: composerBody,
+        }),
+      });
+
+      if (response.ok) {
+        setShowEmailComposer(false);
+        setComposerTo("");
+        setComposerSubject("");
+        setComposerBody("");
+        setComposerAttachments([]);
+        await refreshConversations();
+      } else {
+        throw new Error("Failed to send email");
+      }
+    } catch (error) {
+      console.error("Failed to send email:", error);
+      alert("Failed to send email. Please try again.");
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   const handleAddTag = async () => {
@@ -881,11 +988,30 @@ export default function ConversationView() {
       {/* Shopify Section */}
       <div className="border-b border-border">
         <div className="px-6 py-4 bg-secondary/30">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-3">
             <h3 className="font-sans font-bold text-foreground text-sm uppercase tracking-wide">Shopify</h3>
             {shopifyCustomer && (
               <span className="text-xs font-sans font-medium text-green-600">Connected</span>
             )}
+          </div>
+
+          {/* Search for Customer */}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={shopifySearchQuery}
+              onChange={(e) => setShopifySearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleShopifySearch()}
+              placeholder="Search by email or name..."
+              className="flex-1 px-3 py-2 text-xs font-sans bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <button
+              onClick={handleShopifySearch}
+              disabled={searchingShopify || !shopifySearchQuery.trim()}
+              className="px-3 py-2 bg-primary text-primary-foreground rounded-md text-xs font-sans font-bold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {searchingShopify ? "..." : "Search"}
+            </button>
           </div>
         </div>
 
@@ -1095,6 +1221,19 @@ export default function ConversationView() {
 
       {/* Spacer */}
       <div className="flex-1"></div>
+
+      {/* Compose Email Button */}
+      <div className="border-t border-border p-4">
+        <button
+          onClick={() => openEmailComposer()}
+          className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md group flex items-center justify-center gap-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          <span className="text-sm font-sans font-bold">Compose Email</span>
+        </button>
+      </div>
     </div>
 
     {/* View All Past Conversations Modal */}
@@ -1143,6 +1282,139 @@ export default function ConversationView() {
                 <p className="text-sm font-sans text-muted-foreground">No past conversations found</p>
               </div>
             )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Email Composer Modal */}
+    {showEmailComposer && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-background border border-border rounded-lg w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl ml-[384px]">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-gradient-to-r from-green-500 to-green-600">
+            <h2 className="text-lg font-sans font-bold text-white flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Compose Email
+            </h2>
+            <button
+              onClick={() => setShowEmailComposer(false)}
+              className="text-white hover:text-gray-200 transition-colors text-xl"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {/* To Field */}
+            <div>
+              <label className="block text-sm font-sans font-semibold text-foreground mb-2">To</label>
+              <input
+                type="email"
+                value={composerTo}
+                onChange={(e) => setComposerTo(e.target.value)}
+                placeholder="recipient@example.com"
+                className="w-full px-4 py-2 font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-foreground"
+              />
+            </div>
+
+            {/* Subject Field */}
+            <div>
+              <label className="block text-sm font-sans font-semibold text-foreground mb-2">Subject</label>
+              <input
+                type="text"
+                value={composerSubject}
+                onChange={(e) => setComposerSubject(e.target.value)}
+                placeholder="Email subject"
+                className="w-full px-4 py-2 font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-foreground"
+              />
+            </div>
+
+            {/* Message Body */}
+            <div>
+              <label className="block text-sm font-sans font-semibold text-foreground mb-2">Message</label>
+              <textarea
+                value={composerBody}
+                onChange={(e) => setComposerBody(e.target.value)}
+                placeholder="Type your message here..."
+                rows={12}
+                className="w-full px-4 py-3 font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-foreground resize-none"
+              />
+            </div>
+
+            {/* Attachments */}
+            <div>
+              <label className="block text-sm font-sans font-semibold text-foreground mb-2">Attachments</label>
+              <div className="space-y-2">
+                {composerAttachments.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg border border-border">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8 4a3 3 0 00-3 3v4a5 5 0 0010 0V7a1 1 0 112 0v4a7 7 0 11-14 0V7a5 5 0 0110 0v4a3 3 0 11-6 0V7a1 1 0 012 0v4a1 1 0 102 0V7a3 3 0 00-3-3z" clipRule="evenodd" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-sans font-medium text-foreground">{file.name}</p>
+                        <p className="text-xs font-sans text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeAttachment(index)}
+                      className="p-1 hover:bg-background rounded transition-colors"
+                      title="Remove attachment"
+                    >
+                      <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+
+                <label className="inline-flex items-center gap-2 px-4 py-2 bg-muted hover:bg-accent border border-border rounded-lg cursor-pointer transition-colors">
+                  <svg className="w-5 h-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                  <span className="text-sm font-sans font-medium text-foreground">Add Attachment</span>
+                  <input
+                    type="file"
+                    multiple
+                    onChange={handleAttachmentChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-border shrink-0 flex items-center justify-between bg-secondary/30">
+            <button
+              onClick={() => setShowEmailComposer(false)}
+              className="px-4 py-2 bg-muted text-foreground rounded-lg text-sm font-sans font-medium hover:bg-accent transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSendComposerEmail}
+              disabled={sendingEmail || !composerTo.trim() || !composerBody.trim()}
+              className="px-6 py-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg text-sm font-sans font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {sendingEmail ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                  Send Email
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>
