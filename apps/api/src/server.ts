@@ -1528,8 +1528,8 @@ Follow the workflow: Search customer → Read email → Analyze → Draft/Steps`
         messages,
         tools: tools as any,
         tool_choice: toolCallCount === 0 ? "auto" : "auto",
-        temperature: 0.3,
         response_format: { type: "json_object" }
+        // Note: GPT-5 only supports default temperature (1), custom values not allowed
       });
 
       const assistantMessage = completion.choices[0].message;
