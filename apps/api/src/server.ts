@@ -1,7 +1,9 @@
 import express, { type Request, type Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+// Load from .env.local first, fallback to .env
 dotenv.config({ path: ".env.local" });
+dotenv.config(); // This will load .env if .env.local doesn't exist
 import OpenAI from "openai";
 
 import { googleAuthStart, googleAuthCallback, pollOnce, sendReply, sendNewEmail } from "./gmail";
@@ -109,7 +111,61 @@ app.get("/conversations", async (req: Request, res: Response) => {
   }
 });
 
-// Get a single conversation
+// IMPORTANT: Specific routes must come BEFORE parameterized routes in Express
+// Get oldest unreplied conversation (no ID parameter)
+app.get("/conversations/next-unreplied", async (_req: Request, res: Response) => {
+  try {
+    const unreplied = await getUnrepliedConversations();
+    res.json(unreplied[0] || null);
+  } catch (error) {
+    console.error("Error fetching next unreplied:", error);
+    res.status(500).json({ error: "Failed to fetch next unreplied" });
+  }
+});
+
+// Get next unreplied conversation after a specific one
+app.get("/conversations/next-unreplied/:currentId", async (req: Request, res: Response) => {
+  try {
+    const { currentId } = req.params;
+    const unreplied = await getUnrepliedConversations();
+
+    // Find the next one after current
+    const currentIndex = unreplied.findIndex(c => c.id === currentId);
+
+    if (currentIndex >= 0) {
+      // Current conversation is in unreplied list - get next one
+      const next = unreplied[currentIndex + 1] || unreplied[0];
+      res.json(next || null);
+    } else {
+      // Current conversation not in unreplied list (e.g., just marked as non-support)
+      // Fetch the current conversation to get its timestamp
+      const current = await prisma.conversation.findUnique({
+        where: { id: currentId }
+      });
+
+      if (!current) {
+        // Current conversation doesn't exist, return oldest unreplied
+        res.json(unreplied[0] || null);
+        return;
+      }
+
+      // Find next unreplied chronologically after current conversation
+      const currentTime = current.lastMessageAt ? new Date(current.lastMessageAt).getTime() : 0;
+      const next = unreplied.find(c => {
+        const messageTime = c.lastMessageAt ? new Date(c.lastMessageAt).getTime() : 0;
+        return messageTime > currentTime;
+      });
+
+      // If found, return it; otherwise wrap to oldest
+      res.json(next || unreplied[0] || null);
+    }
+  } catch (error) {
+    console.error("Error fetching next unreplied:", error);
+    res.status(500).json({ error: "Failed to fetch next unreplied" });
+  }
+});
+
+// Get a single conversation (parameterized route - must come AFTER specific routes)
 app.get("/conversations/:id", async (req: Request, res: Response) => {
   try {
     const conversation = await prisma.conversation.findUnique({
@@ -230,33 +286,6 @@ async function getUnrepliedConversations() {
     c.messages.length > 0 && c.messages[0].direction === "inbound"
   );
 }
-
-// Get oldest unreplied conversation
-app.get("/conversations/next-unreplied", async (_req: Request, res: Response) => {
-  try {
-    const unreplied = await getUnrepliedConversations();
-    res.json(unreplied[0] || null);
-  } catch (error) {
-    console.error("Error fetching next unreplied:", error);
-    res.status(500).json({ error: "Failed to fetch next unreplied" });
-  }
-});
-
-// Get next unreplied conversation after a specific one
-app.get("/conversations/next-unreplied/:currentId", async (req: Request, res: Response) => {
-  try {
-    const { currentId } = req.params;
-    const unreplied = await getUnrepliedConversations();
-
-    // Find the next one after current
-    const currentIndex = unreplied.findIndex(c => c.id === currentId);
-    const next = unreplied[currentIndex + 1] || unreplied[0];
-    res.json(next || null);
-  } catch (error) {
-    console.error("Error fetching next unreplied:", error);
-    res.status(500).json({ error: "Failed to fetch next unreplied" });
-  }
-});
 
 // Toggle starred
 app.patch("/conversations/:id/star", async (req: Request, res: Response) => {
@@ -1101,5 +1130,638 @@ app.get("/shopify/order/:orderId/refunds", async (req: Request, res: Response) =
   }
 });
 
+/**
+ * 17track API Integration
+ * Docs: https://asset.17track.net/api/document/v2_en/index.html
+ */
+
+/**
+ * Get tracking information for a package
+ * GET /tracking/:trackingNumber
+ */
+app.get("/tracking/:trackingNumber", async (req: Request, res: Response) => {
+  try {
+    const { trackingNumber } = req.params;
+    const apiKey = process.env.SEVENTEENTRACK_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: "17track API key not configured" });
+    }
+
+    if (!trackingNumber) {
+      return res.status(400).json({ error: "Tracking number is required" });
+    }
+
+    // Step 1: Register the tracking number first
+    const registerResponse = await fetch("https://api.17track.net/track/v2.2/register", {
+      method: "POST",
+      headers: {
+        "17token": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify([{
+        number: trackingNumber
+      }]),
+    });
+
+    if (!registerResponse.ok) {
+      const registerError = await registerResponse.text();
+      console.error("17track registration HTTP error:", registerResponse.status, registerError);
+      return res.status(registerResponse.status).json({
+        error: "Failed to register tracking number",
+        details: registerError
+      });
+    }
+
+    const registerData = await registerResponse.json();
+    console.log("17track registration response:", JSON.stringify(registerData, null, 2));
+
+    // Check if registration was rejected (API returns 200 but with rejection in data)
+    if (registerData.data?.rejected && registerData.data.rejected.length > 0) {
+      const rejection = registerData.data.rejected[0];
+      console.log("Tracking number rejected:", rejection);
+
+      // Provide user-friendly error message
+      let userMessage = "Invalid tracking number";
+      if (rejection.error?.message?.toLowerCase().includes("carrier")) {
+        userMessage = "Invalid tracking number - carrier not recognized";
+      } else if (rejection.error?.message) {
+        userMessage = `Invalid tracking number - ${rejection.error.message.toLowerCase()}`;
+      }
+
+      return res.status(400).json({
+        error: userMessage,
+        isInvalidTracking: true,
+        details: rejection.error?.message || "Registration rejected",
+        errorCode: rejection.error?.code
+      });
+    }
+
+    // Wait a moment for 17track to process the registration
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Step 2: Fetch tracking info
+    const response = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
+      method: "POST",
+      headers: {
+        "17token": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify([{
+        number: trackingNumber
+      }]),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("17track API error:", response.status, errorText);
+      return res.status(response.status).json({
+        error: "Failed to fetch tracking information",
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
+
+    // Log the response for debugging
+    console.log("17track API response:", JSON.stringify(data, null, 2));
+
+    res.json(data);
+  } catch (error) {
+    console.error("Error fetching tracking info:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to fetch tracking information"
+    });
+  }
+});
+
+/**
+ * Register a tracking number with 17track
+ * POST /tracking/register
+ * Body: { trackingNumber: string, carrier?: number }
+ */
+app.post("/tracking/register", async (req: Request, res: Response) => {
+  try {
+    const { trackingNumber, carrier } = req.body;
+    const apiKey = process.env.SEVENTEENTRACK_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: "17track API key not configured" });
+    }
+
+    if (!trackingNumber) {
+      return res.status(400).json({ error: "Tracking number is required" });
+    }
+
+    const payload: any = { number: trackingNumber };
+    if (carrier) {
+      payload.carrier = carrier;
+    }
+
+    // Register tracking number with 17track
+    const response = await fetch("https://api.17track.net/track/v2.2/register", {
+      method: "POST",
+      headers: {
+        "17token": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify([payload]),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("17track register API error:", response.status, errorText);
+      return res.status(response.status).json({
+        error: "Failed to register tracking number",
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error("Error registering tracking number:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to register tracking number"
+    });
+  }
+});
+
+/**
+ * Get tracking info for multiple packages
+ * POST /tracking/batch
+ * Body: { trackingNumbers: string[] }
+ */
+app.post("/tracking/batch", async (req: Request, res: Response) => {
+  try {
+    const { trackingNumbers } = req.body;
+    const apiKey = process.env.SEVENTEENTRACK_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: "17track API key not configured" });
+    }
+
+    if (!trackingNumbers || !Array.isArray(trackingNumbers)) {
+      return res.status(400).json({ error: "trackingNumbers array is required" });
+    }
+
+    const payload = trackingNumbers.map(number => ({ number }));
+
+    // Call 17track API for batch tracking
+    const response = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
+      method: "POST",
+      headers: {
+        "17token": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("17track batch API error:", response.status, errorText);
+      return res.status(response.status).json({
+        error: "Failed to fetch batch tracking information",
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error("Error fetching batch tracking info:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to fetch batch tracking information"
+    });
+  }
+});
+
+/**
+ * AI Draft Functionality with Tool Access
+ * POST /conversations/:id/draft
+ */
+
+// Enhanced Knowledge base
+const knowledgeBase = `# Outlight Customer Support - AI Draft Tool Knowledge Base
+
+## CRITICAL: Email Classification Tags
+Apply ALL relevant tags (emails can have multiple):
+- **non-support**: Marketing, partnerships, spam, sales
+- **chargeback**: Bank dispute - DO NOT RESPOND TO CUSTOMER
+- **return**: Customer wants to return product
+- **refund**: Asking about refund status
+- **product-inquiry**: Product questions/specs
+- **order-status**: Tracking/shipping questions
+- **damaged-product**: Defective/damaged item
+- **missing-items**: Missing from order
+- **cancellation**: Cancel order request
+
+## Return & Refund Policy
+**Return Eligibility**: 30 days from DELIVERY date (not order date)
+**Returns Portal**: https://outlight.us/apps/returns-portal
+**Refund Timeline**: 5-7 business days after warehouse receives return
+**If approved <7 days ago**: Still in transit, ask for patience
+
+## Draft Decision Rules
+### DRAFT FULL EMAIL (shouldDraft = true):
+- **return**: Check 30-day policy, draft approval/denial with returns portal link
+- **order-status**: Draft with tracking link
+- **damaged-product**: Draft apology + replacement/refund offer
+- **missing-items**: Draft apology + send items
+- **cancellation**: Draft confirmation or return guide
+
+### ACTION STEPS ONLY (shouldDraft = false):
+- **non-support**: Tag and archive (no response)
+- **chargeback**: Tag and escalate to admin immediately (DO NOT RESPOND)
+- **refund** (already returned): Steps: 1) Confirm approved in Shopify 2) Check arrival 3) Process refund
+- **product-inquiry**: Steps: Check product page, answer question, consult admin
+
+## CRITICAL: Link Policy
+ONLY include these links in drafts:
+- 17track tracking links: https://t.17track.net/en#nums=TRACKING_NUMBER
+- Returns portal: https://outlight.us/apps/returns-portal
+- Outlight product pages: https://outlight.us/products/PRODUCT_NAME
+NO other external links allowed.
+
+## Draft Requirements
+- Use customer's first name
+- Include order numbers (#1234 format)
+- Include dates (order date, delivery date)
+- Check delivery date vs 30-day window for returns
+- Be professional, empathetic, concise`;
+
+app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
+  // Increase timeout to 5 minutes for AI processing
+  req.setTimeout(300000); // 5 minutes
+  res.setTimeout(300000);
+
+  try {
+    const conversationId = req.params.id;
+    console.log(`[Draft] Starting draft generation for conversation ${conversationId}`);
+
+    // Fetch conversation with all messages
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: {
+        customer: true,
+        messages: {
+          orderBy: { sentAt: "asc" },
+        },
+      },
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+
+    // Build email thread context
+    const emailThread = conversation.messages.map((msg: any) => ({
+      from: msg.direction === "inbound" ? conversation.customer?.primaryEmail : "support@outlight.us",
+      direction: msg.direction,
+      date: msg.sentAt,
+      subject: msg.subject || conversation.subject,
+      body: msg.bodyPlain || msg.bodyHtml,
+    }));
+
+    // Define tools for AI to use
+    const tools = [
+      {
+        type: "function",
+        function: {
+          name: "search_customer_and_orders",
+          description: "Search for a Shopify customer and their orders by email, name, or order number. Returns customer details and all their orders. Use this FIRST before analyzing the email.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: {
+                type: "string",
+                description: "Email address, customer name, or order number (e.g., 'john@example.com', 'John Smith', '1001', or '#1001')"
+              }
+            },
+            required: ["query"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_tracking_info",
+          description: "Get detailed tracking information for a package using 17track. Returns tracking status, location, and timeline.",
+          parameters: {
+            type: "object",
+            properties: {
+              tracking_number: {
+                type: "string",
+                description: "The tracking number from the order fulfillment"
+              }
+            },
+            required: ["tracking_number"]
+          }
+        }
+      }
+    ];
+
+    // Initial AI call with function calling
+    const messages: any[] = [
+      {
+        role: "system",
+        content: `You are an expert AI assistant for Outlight customer support. You have been trained on the company's complete knowledge base and have access to internal tools.
+
+═══════════════════════════════════════════════════════════
+📚 KNOWLEDGE BASE - READ AND MEMORIZE ALL POLICIES
+═══════════════════════════════════════════════════════════
+
+${knowledgeBase}
+
+═══════════════════════════════════════════════════════════
+🛠️ AVAILABLE TOOLS
+═══════════════════════════════════════════════════════════
+
+You have access to these tools:
+1. search_customer_and_orders(query): Search Shopify by email, name, or order number. Returns customer details and order history.
+2. get_tracking_info(tracking_number): Get package tracking from 17track. Returns current status and location.
+
+═══════════════════════════════════════════════════════════
+⚡ WORKFLOW - EXECUTE IN THIS EXACT ORDER
+═══════════════════════════════════════════════════════════
+
+Step 1: READ THE EMAIL COMPLETELY
+- Understand the customer's issue, tone, and urgency
+- Extract: customer email, order numbers, tracking numbers, dates mentioned
+
+Step 2: GATHER DATA USING TOOLS
+- ALWAYS call search_customer_and_orders first with customer email or order number
+- If tracking numbers exist in the order data, call get_tracking_info
+- Collect ALL necessary information before proceeding
+
+Step 3: ANALYZE WITH KNOWLEDGE BASE
+- Match the issue to knowledge base categories
+- Apply ALL relevant policies (return windows, refund timelines, etc.)
+- Calculate dates carefully (30 days from DELIVERY, not order date)
+
+Step 4: DECIDE: DRAFT or ACTION STEPS
+- shouldDraft = true: Customer needs an email response (returns, order status, damaged items, etc.)
+- shouldDraft = false: Internal action needed (chargebacks, non-support, escalations)
+
+Step 5: GENERATE RESPONSE
+- For drafts: Write complete, ready-to-send email using customer's first name
+- For action steps: Provide clear numbered steps for the support agent
+- Include ALL relevant order info (order ID, dates, return window status)
+
+═══════════════════════════════════════════════════════════
+🚨 CRITICAL REQUIREMENTS
+═══════════════════════════════════════════════════════════
+
+✅ USE TOOLS FIRST: Always gather data before drafting
+✅ FOLLOW POLICIES: Apply knowledge base rules exactly
+✅ LINK POLICY: ONLY these links allowed:
+   - 17track: https://t.17track.net/en#nums=TRACKING_NUMBER
+   - Returns: https://outlight.us/apps/returns-portal
+   - Products: https://outlight.us/products/PRODUCT_NAME
+✅ DATE MATH: For returns, count 30 days from DELIVERY date
+✅ PERSONALIZE: Use customer's first name in drafts
+✅ BE SPECIFIC: Include exact order numbers (#1234), dates (YYYY-MM-DD)
+✅ JSON ONLY: Your final response must be PURE JSON - no markdown, no code blocks, no explanations
+
+═══════════════════════════════════════════════════════════
+📋 OUTPUT FORMAT (STRICT JSON)
+═══════════════════════════════════════════════════════════
+
+When drafting an email (shouldDraft = true):
+{
+  "internalReasoning": "Step-by-step internal analysis",
+  "tags": ["order-status", "return"],
+  "category": "order-status",
+  "reasoning": "Customer asking about delayed shipment on order #4025",
+  "shouldDraft": true,
+  "draft": "Hi [FirstName],\\n\\nThank you for reaching out...\\n\\nBest regards,\\nOutlight Support",
+  "actionSteps": null,
+  "orderInfo": {
+    "orderId": "#4025",
+    "orderDate": "2025-10-04",
+    "deliveryDate": "2025-10-15",
+    "isWithinReturnWindow": true
+  }
+}
+
+When providing action steps (shouldDraft = false):
+{
+  "internalReasoning": "Chargeback detected, requires admin escalation",
+  "tags": ["chargeback"],
+  "category": "chargeback",
+  "reasoning": "Bank dispute - DO NOT respond to customer",
+  "shouldDraft": false,
+  "draft": null,
+  "actionSteps": [
+    "Tag conversation as 'chargeback'",
+    "Escalate to admin immediately",
+    "Gather order documentation for dispute",
+    "DO NOT contact customer directly"
+  ],
+  "orderInfo": {
+    "orderId": "#3891",
+    "orderDate": "2025-09-20",
+    "deliveryDate": "2025-09-28",
+    "isWithinReturnWindow": false
+  }
+}`
+      },
+      {
+        role: "user",
+        content: `You are now analyzing a customer support email. Follow the workflow exactly:
+
+EMAIL THREAD:
+${JSON.stringify(emailThread, null, 2)}
+
+CUSTOMER INFO:
+${conversation.customer ? `Name: ${conversation.customer.name}, Email: ${conversation.customer.primaryEmail}` : 'Unknown customer'}
+
+Remember:
+1. Use search_customer_and_orders to get order data
+2. Use get_tracking_info if needed
+3. Apply knowledge base policies
+4. Return ONLY pure JSON (no markdown, no code blocks)`
+      }
+    ];
+
+    let finalResult: any = null;
+    let toolCallCount = 0;
+    const MAX_TOOL_CALLS = 5;
+
+    // Tool calling loop
+    while (toolCallCount < MAX_TOOL_CALLS) {
+      console.log(`[Draft] Tool call iteration ${toolCallCount + 1}/${MAX_TOOL_CALLS}`);
+
+      // Use tools parameter for function calling phase
+      const completionParams: any = {
+        model: "gpt-5",
+        messages,
+        // Note: GPT-5 only supports default temperature (1)
+      };
+
+      // Only add tools if we haven't finished calling them
+      if (toolCallCount < MAX_TOOL_CALLS) {
+        completionParams.tools = tools;
+        completionParams.tool_choice = "auto";
+      } else {
+        // Force JSON output on final response
+        completionParams.response_format = { type: "json_object" };
+      }
+
+      const completion = await openai.chat.completions.create(completionParams);
+      const assistantMessage = completion.choices[0].message;
+      messages.push(assistantMessage);
+
+      // Check if AI wants to call a tool
+      if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+        toolCallCount++;
+        console.log(`[Draft] Executing ${assistantMessage.tool_calls.length} tool call(s)`);
+
+        // Execute each tool call
+        for (const toolCall of assistantMessage.tool_calls) {
+          const functionName = (toolCall as any).function.name;
+          const functionArgs = JSON.parse((toolCall as any).function.arguments);
+          console.log(`[Draft] Calling function: ${functionName}`, functionArgs);
+
+          let toolResult: any = null;
+
+          if (functionName === "search_customer_and_orders") {
+            try {
+              toolResult = await shopify.searchCustomerAndOrders(functionArgs.query);
+              console.log(`[Draft] Shopify search result:`, toolResult.searchType);
+            } catch (error) {
+              console.error(`[Draft] Shopify search error:`, error);
+              toolResult = { error: "Failed to search Shopify", details: String(error) };
+            }
+          } else if (functionName === "get_tracking_info") {
+            try {
+              // Register and fetch tracking from 17track
+              const registerResponse = await fetch("https://api.17track.net/track/v2.2/register", {
+                method: "POST",
+                headers: {
+                  "17token": process.env.SEVENTEENTRACK_API_KEY || "",
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify([{ number: functionArgs.tracking_number }]),
+              });
+
+              // Wait a moment then fetch tracking info
+              await new Promise(resolve => setTimeout(resolve, 1000));
+
+              const trackResponse = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
+                method: "POST",
+                headers: {
+                  "17token": process.env.SEVENTEENTRACK_API_KEY || "",
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify([{ number: functionArgs.tracking_number }]),
+              });
+
+              toolResult = await trackResponse.json();
+              console.log(`[Draft] 17track result received`);
+            } catch (error) {
+              console.error(`[Draft] 17track error:`, error);
+              toolResult = { error: "Failed to fetch tracking", details: String(error) };
+            }
+          }
+
+          // Add tool result to messages
+          messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(toolResult)
+          });
+        }
+
+        // Continue loop to get next response
+        continue;
+      } else {
+        // No more tool calls - AI is done, parse the final response
+        console.log(`[Draft] AI finished, parsing final response`);
+        try {
+          finalResult = JSON.parse(assistantMessage.content || "{}");
+          console.log(`[Draft] Successfully parsed JSON result`);
+        } catch (error) {
+          console.error(`[Draft] JSON parse error:`, error);
+          console.error(`[Draft] Raw content:`, assistantMessage.content);
+          // If not JSON, wrap it
+          finalResult = {
+            reasoning: assistantMessage.content,
+            error: "AI did not return valid JSON"
+          };
+        }
+        break;
+      }
+    }
+
+    // If we hit max iterations without getting a final result, make one more call with JSON mode
+    if (!finalResult && toolCallCount >= MAX_TOOL_CALLS) {
+      console.log(`[Draft] Max tool calls reached, requesting final JSON response`);
+      messages.push({
+        role: "user",
+        content: "Please provide the final response in the required JSON format."
+      });
+
+      const finalCompletion = await openai.chat.completions.create({
+        model: "gpt-5",
+        messages,
+        response_format: { type: "json_object" }
+      });
+
+      try {
+        finalResult = JSON.parse(finalCompletion.choices[0].message.content || "{}");
+      } catch (error) {
+        console.error(`[Draft] Final JSON parse error:`, error);
+        finalResult = {
+          reasoning: "Failed to generate proper response",
+          error: "Maximum iterations reached without valid JSON"
+        };
+      }
+    }
+
+    // Update conversation tags if new tags were added
+    if (finalResult.tags && finalResult.tags.length > 0) {
+      const uniqueTags = Array.from(new Set([...(conversation.tags || []), ...finalResult.tags]));
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { tags: uniqueTags },
+      });
+    }
+
+    res.json({
+      ...finalResult,
+      conversationId,
+      processingTime: new Date().toISOString(),
+      toolCallsMade: toolCallCount
+    });
+  } catch (error) {
+    console.error("Error generating draft:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to generate draft"
+    });
+  }
+});
+
 const port = process.env.PORT || 3001;
-app.listen(port, () => console.log("API listening on", port));
+
+// Start server immediately for fast startup
+app.listen(port, () => {
+  console.log(`✓ API server listening on http://localhost:${port}`);
+  console.log(`✓ Ready to accept requests`);
+
+  // Test database connection in background (don't block startup)
+  prisma.$connect()
+    .then(() => {
+      console.log("✓ Database connected successfully");
+    })
+    .catch((error) => {
+      console.error("✗ Warning: Database connection failed");
+      if (error instanceof Error) {
+        console.error(`  Error: ${error.message}`);
+      }
+      console.error("\nPlease check:");
+      console.error("  1. .env or .env.local file exists with DATABASE_URL");
+      console.error("  2. Database is accessible");
+      console.error("  3. Run 'npx prisma generate' and 'npx prisma db push'");
+    });
+});

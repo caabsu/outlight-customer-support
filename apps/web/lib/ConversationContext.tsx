@@ -55,6 +55,7 @@ type ConversationContextType = {
   goToPage: (page: number) => Promise<void>;
   nextPage: () => void;
   prevPage: () => void;
+  pageTransitioning: boolean;
 };
 
 const ConversationContext = createContext<ConversationContextType | undefined>(
@@ -75,6 +76,7 @@ export function ConversationProvider({
   const [showSent, setShowSent] = useState(false);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageTransitioning, setPageTransitioning] = useState(false);
 
   const fetchConversations = async (silent = false, retryCount = 0, suppressErrors = false, page = currentPage) => {
     try {
@@ -85,6 +87,7 @@ export function ConversationProvider({
         if (!suppressErrors && (retryCount === 0 || res.status !== 500)) {
           console.error(`API returned ${res.status}: ${res.statusText}`);
         }
+        setPageTransitioning(false); // Clear transitioning on error
         return;
       }
 
@@ -94,6 +97,7 @@ export function ConversationProvider({
         if (!suppressErrors) {
           console.error("Empty response from API");
         }
+        setPageTransitioning(false); // Clear transitioning on error
         return;
       }
 
@@ -105,6 +109,7 @@ export function ConversationProvider({
           console.error("Failed to parse JSON response:", parseError);
           console.error("Response text:", text.substring(0, 200));
         }
+        setPageTransitioning(false); // Clear transitioning on error
         return;
       }
 
@@ -115,11 +120,20 @@ export function ConversationProvider({
       setConversations(conversationsList);
       setPagination(paginationData);
 
+      // CRITICAL: Always sync currentPage with API response to prevent navigation bugs
+      // This ensures the local state matches what the server returned
+      if (paginationData) {
+        setCurrentPage(paginationData.page);
+      }
+
       // Only auto-select first conversation on initial load (when no selection exists)
       // Don't auto-select when navigating between pages
       if (conversationsList.length > 0 && !selectedId && conversations.length === 0) {
         setSelectedId(conversationsList[0].id);
       }
+
+      // Clear transitioning state on success
+      setPageTransitioning(false);
     } catch (error) {
       // Only log if not suppressed
       if (!suppressErrors) {
@@ -133,39 +147,40 @@ export function ConversationProvider({
           console.error("Failed to fetch conversations:", error);
         }
       }
+      setPageTransitioning(false); // Clear transitioning on error
     } finally {
       if (!silent) setLoading(false);
     }
   };
 
-  // Initial fetch with delay and retry to allow API server startup
+  // Initial fetch - optimized for instant load
   useEffect(() => {
     let retryTimer: NodeJS.Timeout;
     let mounted = true;
 
-    // Wait for API server to start (it can be slow on first load)
-    const timer = setTimeout(async () => {
+    // Fetch immediately (API server now starts instantly)
+    const initialFetch = async () => {
       if (!mounted) return;
+
+      // Try fetching immediately
       await fetchConversations(false, 0, true); // Suppress errors on first attempt
 
-      // If still no data after 3 seconds, retry
-      retryTimer = setTimeout(async () => {
-        if (!mounted) return;
-        await fetchConversations(false, 1, false); // Show errors on retry
+      // Only retry if we have no conversations (API might still be starting)
+      if (mounted && conversations.length === 0) {
+        retryTimer = setTimeout(async () => {
+          if (!mounted) return;
+          await fetchConversations(false, 1, false); // Show errors on retry
+        }, 500); // Quick retry instead of 3 seconds
+      }
+    };
 
-        // Force loading to false after final retry
-        setTimeout(() => {
-          if (mounted) setLoading(false);
-        }, 1000);
-      }, 3000);
-    }, 1000);
+    initialFetch();
 
     return () => {
       mounted = false;
-      clearTimeout(timer);
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, []);
+  }, []); // Empty dependency array - only run once on mount
 
 
   const selectedConversation =
@@ -234,19 +249,29 @@ export function ConversationProvider({
   };
 
   const goToPage = async (page: number) => {
-    setCurrentPage(page);
-    // Use silent mode to prevent full loading screen during page transitions
-    await fetchConversations(true, 0, false, page);
+    if (page === currentPage) return; // Already on this page
+
+    setPageTransitioning(true);
+
+    try {
+      // Use silent mode to prevent full loading screen during page transitions
+      // DON'T set currentPage here - let the API response sync it to avoid flickering
+      await fetchConversations(true, 0, false, page);
+    } catch (error) {
+      console.error("Error navigating to page:", error);
+      setPageTransitioning(false);
+    }
+    // Note: pageTransitioning is cleared in fetchConversations (on success or error)
   };
 
   const nextPage = () => {
-    if (pagination && currentPage < pagination.totalPages) {
+    if (pagination && currentPage < pagination.totalPages && !pageTransitioning) {
       goToPage(currentPage + 1);
     }
   };
 
   const prevPage = () => {
-    if (currentPage > 1) {
+    if (currentPage > 1 && !pageTransitioning) {
       goToPage(currentPage - 1);
     }
   };
@@ -271,6 +296,7 @@ export function ConversationProvider({
         goToPage,
         nextPage,
         prevPage,
+        pageTransitioning,
       }}
     >
       {children}

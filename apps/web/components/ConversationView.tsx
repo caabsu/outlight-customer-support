@@ -55,6 +55,7 @@ export default function ConversationView() {
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [summaryMinimized, setSummaryMinimized] = useState(false);
   const [activeInfoTooltip, setActiveInfoTooltip] = useState<string | null>(null);
+  const [navigatingUnreplied, setNavigatingUnreplied] = useState(false);
 
   // Shopify state
   const [shopifyCustomer, setShopifyCustomer] = useState<any>(null);
@@ -89,6 +90,19 @@ export default function ConversationView() {
   const [processingRefund, setProcessingRefund] = useState(false);
   const [refundConfirmation, setRefundConfirmation] = useState(false);
   const [selectedLineItems, setSelectedLineItems] = useState<Map<number, { quantity: number; restock: boolean }>>(new Map());
+
+  // 17track state
+  const [trackingData, setTrackingData] = useState<any>(null);
+  const [loadingTracking, setLoadingTracking] = useState(false);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
+
+  // AI Draft state
+  const [draftData, setDraftData] = useState<any>(null);
+  const [loadingDraft, setLoadingDraft] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [showDraftPopup, setShowDraftPopup] = useState(false);
+  const [draftMinimized, setDraftMinimized] = useState(false);
 
   // Fetch conversation history
   useEffect(() => {
@@ -219,6 +233,13 @@ export default function ConversationView() {
         }),
       });
       setReplyText("");
+
+      // Clear draft data when email is sent
+      setDraftData(null);
+      setShowDraftPopup(false);
+      setDraftMinimized(false);
+      setDraftError(null);
+
       // Refresh conversations to show the new message
       await refreshConversations();
     } catch (error) {
@@ -257,99 +278,242 @@ export default function ConversationView() {
   };
 
   const goToNextUnreplied = async () => {
-    // Filter to unreplied conversations (last message is inbound)
-    const unrepliedConversations = conversations.filter((conv) => {
-      // Exclude non-customer-support
-      if (conv.tags?.includes("non-customer-support")) return false;
+    if (navigatingUnreplied) return; // Prevent multiple clicks
 
-      // Check if last message is inbound (needs reply)
-      if (conv.messages.length === 0) return false;
-      const lastMessage = conv.messages[conv.messages.length - 1];
-      return lastMessage.direction === "inbound";
-    });
+    try {
+      // STEP 1: Check current page FIRST (instant, no API call!)
+      const unrepliedOnPage = conversations.filter((conv) => {
+        if (conv.tags?.includes("non-customer-support")) return false;
+        if (conv.messages.length === 0) return false;
+        const lastMessage = conv.messages[conv.messages.length - 1];
+        return lastMessage.direction === "inbound";
+      });
 
-    // Sort by lastMessageAt (oldest first - priority to older unreplied)
-    const sortedUnreplied = unrepliedConversations.sort((a, b) =>
-      new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
-    );
+      const sortedUnreplied = unrepliedOnPage.sort((a, b) =>
+        new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
+      );
 
-    if (sortedUnreplied.length === 0) {
-      // No unreplied on current page - check if we should navigate to another page
-      if (pagination && pagination.totalPages > 1) {
-        const nextPage = pagination.page < pagination.totalPages ? pagination.page + 1 : 1;
-        await goToPage(nextPage);
-        // After page loads, recursively call this function to find unreplied on new page
-        setTimeout(() => goToNextUnreplied(), 100);
+      if (selectedConversation) {
+        // Find current conversation in the sorted list
+        const currentIndex = sortedUnreplied.findIndex(conv => conv.id === selectedConversation.id);
+
+        // If there's a next unreplied on this page, select it INSTANTLY
+        if (currentIndex >= 0 && currentIndex < sortedUnreplied.length - 1) {
+          selectConversation(sortedUnreplied[currentIndex + 1].id);
+          return; // ⚡ INSTANT - no API call!
+        }
+      } else if (sortedUnreplied.length > 0) {
+        // No conversation selected - select first unreplied on page
+        selectConversation(sortedUnreplied[0].id);
+        return; // ⚡ INSTANT
+      }
+
+      // STEP 2: No next unreplied on current page - search other pages (API call)
+      setNavigatingUnreplied(true);
+
+      const response = await fetch(`/api/conversations/next-unreplied/${selectedConversation?.id || ''}`);
+
+      if (!response.ok) {
+        console.error("Failed to fetch next unreplied");
+        setNavigatingUnreplied(false);
         return;
       }
-      alert("No unreplied emails!");
-      return;
+
+      const nextConversation = await response.json();
+
+      if (!nextConversation || !nextConversation.id) {
+        alert("No more unreplied emails!");
+        setNavigatingUnreplied(false);
+        return;
+      }
+
+      // Double-check if on current page (safety fallback)
+      const isOnCurrentPage = conversations.some(conv => conv.id === nextConversation.id);
+
+      if (isOnCurrentPage) {
+        selectConversation(nextConversation.id);
+        setNavigatingUnreplied(false);
+      } else if (pagination) {
+        // Cross-page navigation - NOW show loading
+        setNavigatingUnreplied(true);
+        // Need to find which page has this conversation
+        // Optimize: check current page's date range to determine search direction
+        const nextConvDate = new Date(nextConversation.lastMessageAt).getTime();
+        const currentPageOldest = new Date(conversations[conversations.length - 1]?.lastMessageAt || 0).getTime();
+        const currentPageNewest = new Date(conversations[0]?.lastMessageAt || 0).getTime();
+
+        let foundPage = 0;
+
+        // Smart search: if next conversation is older than current page, search forward (later pages)
+        // If newer, search backward (earlier pages)
+        if (nextConvDate < currentPageOldest) {
+          // Search forward through later pages
+          for (let page = pagination.page + 1; page <= pagination.totalPages; page++) {
+            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            if (res.ok) {
+              const data = await res.json();
+              const convs = data.conversations || data;
+              if (convs.some((c: any) => c.id === nextConversation.id)) {
+                foundPage = page;
+                break;
+              }
+            }
+          }
+        } else if (nextConvDate > currentPageNewest) {
+          // Search backward through earlier pages
+          for (let page = pagination.page - 1; page >= 1; page--) {
+            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            if (res.ok) {
+              const data = await res.json();
+              const convs = data.conversations || data;
+              if (convs.some((c: any) => c.id === nextConversation.id)) {
+                foundPage = page;
+                break;
+              }
+            }
+          }
+        }
+
+        // If not found in smart search, do full search as fallback
+        if (foundPage === 0) {
+          for (let page = 1; page <= pagination.totalPages; page++) {
+            if (page === pagination.page) continue; // Skip current page (already checked)
+            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            if (res.ok) {
+              const data = await res.json();
+              const convs = data.conversations || data;
+              if (convs.some((c: any) => c.id === nextConversation.id)) {
+                foundPage = page;
+                break;
+              }
+            }
+          }
+        }
+
+        if (foundPage > 0 && foundPage !== pagination.page) {
+          // Navigate to the page with the conversation
+          await goToPage(foundPage);
+          // Wait for page to load, then select the conversation
+          setTimeout(() => {
+            selectConversation(nextConversation.id);
+            setNavigatingUnreplied(false);
+          }, 200);
+        } else {
+          // Fallback: just select it
+          selectConversation(nextConversation.id);
+          setNavigatingUnreplied(false);
+        }
+      } else {
+        // No pagination - just select it
+        selectConversation(nextConversation.id);
+        setNavigatingUnreplied(false);
+      }
+    } catch (error) {
+      console.error("Error navigating to next unreplied:", error);
+      setNavigatingUnreplied(false);
     }
-
-    // Find current conversation index
-    const currentIndex = selectedConversation
-      ? sortedUnreplied.findIndex(conv => conv.id === selectedConversation.id)
-      : -1;
-
-    // Check if we're at the end of current page's unreplied
-    const isAtEnd = currentIndex >= sortedUnreplied.length - 1;
-
-    if (isAtEnd && pagination && pagination.totalPages > 1) {
-      // Navigate to next page (or wrap to page 1 if on last page)
-      const nextPage = pagination.page < pagination.totalPages ? pagination.page + 1 : 1;
-      await goToPage(nextPage);
-      // After page loads, select first unreplied on new page
-      setTimeout(() => goToNextUnreplied(), 100);
-      return;
-    }
-
-    // Get next conversation (wrap around to start if at end on single page)
-    const nextIndex = isAtEnd ? 0 : currentIndex + 1;
-    const nextConv = sortedUnreplied[nextIndex];
-
-    // Instant navigation - no API call!
-    selectConversation(nextConv.id);
   };
 
   const goToOldestUnreplied = async () => {
-    // If pagination exists and we're not on the last page, navigate to last page first
-    if (pagination && pagination.totalPages > 1 && pagination.page !== pagination.totalPages) {
-      await goToPage(pagination.totalPages);
-      // After page loads, recursively call this function to select oldest unreplied on that page
-      setTimeout(() => goToOldestUnreplied(), 100);
-      return;
-    }
+    if (navigatingUnreplied) return; // Prevent multiple clicks
 
-    // Filter to unreplied conversations (last message is inbound)
-    const unrepliedConversations = conversations.filter((conv) => {
-      // Exclude non-customer-support
-      if (conv.tags?.includes("non-customer-support")) return false;
+    try {
+      // Get globally oldest unreplied from API
+      const response = await fetch(`/api/conversations/next-unreplied`);
 
-      // Check if last message is inbound (needs reply)
-      if (conv.messages.length === 0) return false;
-      const lastMessage = conv.messages[conv.messages.length - 1];
-      return lastMessage.direction === "inbound";
-    });
-
-    // Sort by lastMessageAt (oldest first)
-    const sortedUnreplied = unrepliedConversations.sort((a, b) =>
-      new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
-    );
-
-    if (sortedUnreplied.length === 0) {
-      // No unreplied on this page, try previous pages
-      if (pagination && pagination.page > 1) {
-        await goToPage(pagination.page - 1);
-        setTimeout(() => goToOldestUnreplied(), 100);
+      if (!response.ok) {
+        console.error("Failed to fetch oldest unreplied:", response.status, response.statusText);
+        alert("Failed to fetch oldest unreplied email. Please try again.");
         return;
       }
-      alert("No unreplied emails!");
-      return;
-    }
 
-    // Jump directly to the oldest unreplied email
-    const oldestConv = sortedUnreplied[0];
-    selectConversation(oldestConv.id);
+      const oldestConversation = await response.json();
+
+      if (!oldestConversation || !oldestConversation.id) {
+        alert("No unreplied emails!");
+        return;
+      }
+
+      // Check if it's on current page
+      const isOnCurrentPage = conversations.some(conv => conv.id === oldestConversation.id);
+
+      if (isOnCurrentPage) {
+        // INSTANT - already on current page
+        selectConversation(oldestConversation.id);
+      } else if (pagination) {
+        // Cross-page navigation - show loading
+        setNavigatingUnreplied(true);
+        // Need to find which page has this conversation
+        const oldestDate = new Date(oldestConversation.lastMessageAt).getTime();
+        const currentPageOldest = new Date(conversations[conversations.length - 1]?.lastMessageAt || 0).getTime();
+        const currentPageNewest = new Date(conversations[0]?.lastMessageAt || 0).getTime();
+
+        let foundPage = 0;
+
+        // Search strategy: oldest emails are usually on later pages
+        if (oldestDate < currentPageOldest) {
+          // Search forward through later pages (most likely)
+          for (let page = pagination.page + 1; page <= pagination.totalPages; page++) {
+            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            if (res.ok) {
+              const data = await res.json();
+              const convs = data.conversations || data;
+              if (convs.some((c: any) => c.id === oldestConversation.id)) {
+                foundPage = page;
+                break;
+              }
+            }
+          }
+        } else if (oldestDate > currentPageNewest) {
+          // Search backward through earlier pages
+          for (let page = pagination.page - 1; page >= 1; page--) {
+            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            if (res.ok) {
+              const data = await res.json();
+              const convs = data.conversations || data;
+              if (convs.some((c: any) => c.id === oldestConversation.id)) {
+                foundPage = page;
+                break;
+              }
+            }
+          }
+        }
+
+        // Full search fallback
+        if (foundPage === 0) {
+          for (let page = 1; page <= pagination.totalPages; page++) {
+            if (page === pagination.page) continue;
+            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            if (res.ok) {
+              const data = await res.json();
+              const convs = data.conversations || data;
+              if (convs.some((c: any) => c.id === oldestConversation.id)) {
+                foundPage = page;
+                break;
+              }
+            }
+          }
+        }
+
+        if (foundPage > 0 && foundPage !== pagination.page) {
+          // Navigate to the page with the conversation
+          await goToPage(foundPage);
+          setTimeout(() => {
+            selectConversation(oldestConversation.id);
+            setNavigatingUnreplied(false);
+          }, 200);
+        } else {
+          selectConversation(oldestConversation.id);
+          setNavigatingUnreplied(false);
+        }
+      } else {
+        selectConversation(oldestConversation.id);
+        setNavigatingUnreplied(false);
+      }
+    } catch (error) {
+      console.error("Error navigating to oldest unreplied:", error);
+      setNavigatingUnreplied(false);
+    }
   };
 
   // Helper: Calculate days and weeks since purchase
@@ -385,6 +549,75 @@ export default function ConversationView() {
       };
     }
     return null;
+  };
+
+  // Fetch detailed tracking from 17track
+  const fetchDetailedTracking = async (trackingNumber: string) => {
+    if (!trackingNumber) return;
+
+    setLoadingTracking(true);
+    setTrackingError(null);
+    setShowTrackingModal(true);
+
+    try {
+      const response = await fetch(`/api/tracking/${encodeURIComponent(trackingNumber)}`);
+
+      if (!response.ok) {
+        // Try to parse error response for friendly message
+        try {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to fetch tracking information");
+        } catch (parseError) {
+          throw new Error("Failed to fetch tracking information");
+        }
+      }
+
+      const data = await response.json();
+      setTrackingData(data);
+    } catch (error) {
+      console.error("Error fetching tracking info:", error);
+      setTrackingError(error instanceof Error ? error.message : "Failed to fetch tracking information");
+    } finally {
+      setLoadingTracking(false);
+    }
+  };
+
+  // Generate AI draft
+  const generateDraft = async () => {
+    if (!selectedConversation) return;
+
+    setLoadingDraft(true);
+    setDraftError(null);
+    setShowDraftPopup(true);
+    setDraftMinimized(false);
+    setDraftData(null);
+
+    try {
+      // Call API server directly to avoid Next.js proxy timeout
+      // In production, this would use the same domain, but in dev we bypass the proxy
+      const apiUrl = process.env.NODE_ENV === 'development'
+        ? `http://localhost:3001/conversations/${selectedConversation.id}/draft`
+        : `/api/conversations/${selectedConversation.id}/draft`;
+
+      const response = await fetch(apiUrl, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate draft");
+      }
+
+      const data = await response.json();
+      setDraftData(data);
+
+      // Refresh conversation to get updated tags
+      await refreshConversations();
+    } catch (error) {
+      console.error("Error generating draft:", error);
+      setDraftError(error instanceof Error ? error.message : "Failed to generate draft");
+    } finally {
+      setLoadingDraft(false);
+    }
   };
 
   // Search for Shopify customer by email or name
@@ -916,6 +1149,7 @@ export default function ConversationView() {
           </div>
         </div>
 
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
         {selectedConversation.messages.map((message) => (
@@ -972,148 +1206,6 @@ export default function ConversationView() {
         ))}
       </div>
 
-      {/* AI Actions Block - Minimal Design */}
-      <div className="border-t border-border p-4 shrink-0 bg-purple-500/5">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-0.5 h-5 bg-purple-500 rounded-full"></div>
-          <h3 className="text-sm font-sans font-semibold text-foreground" style={{ fontWeight: 600 }}>AI Assistant</h3>
-        </div>
-
-        <div className="grid grid-cols-4 gap-2">
-          {/* AI Action 1: Generate Summary */}
-          <div className="relative">
-            <button
-              onClick={handleGenerateSummary}
-              disabled={loadingSummary}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md hover:border-purple-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between gap-1"
-            >
-              <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>
-                {loadingSummary ? "..." : "Summary"}
-              </span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveInfoTooltip(activeInfoTooltip === 'summary' ? null : 'summary');
-                }}
-                className="text-purple-500 hover:text-purple-600 hover:scale-110 transition-all cursor-pointer p-1"
-                title="Info"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </span>
-            </button>
-            {activeInfoTooltip === 'summary' && (
-              <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-purple-500 text-white text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
-                Create an intelligent summary highlighting key points, issues, and next steps
-              </div>
-            )}
-          </div>
-
-          {/* AI Action 2: Draft Reply */}
-          <div className="relative">
-            <button
-              disabled
-              className="w-full px-3 py-2 bg-background border border-border rounded-md opacity-40 cursor-not-allowed flex items-center justify-between gap-1"
-            >
-              <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>Draft</span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveInfoTooltip(activeInfoTooltip === 'draft' ? null : 'draft');
-                }}
-                className="text-muted-foreground hover:scale-110 transition-all cursor-pointer p-1"
-                title="Info"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </span>
-            </button>
-            {activeInfoTooltip === 'draft' && (
-              <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-muted text-foreground text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
-                Generate context-aware reply suggestions (Coming Soon)
-              </div>
-            )}
-          </div>
-
-          {/* AI Action 3: Suggest Tags */}
-          <div className="relative">
-            <button
-              disabled
-              className="w-full px-3 py-2 bg-background border border-border rounded-md opacity-40 cursor-not-allowed flex items-center justify-between gap-1"
-            >
-              <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>Tags</span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveInfoTooltip(activeInfoTooltip === 'tags' ? null : 'tags');
-                }}
-                className="text-muted-foreground hover:scale-110 transition-all cursor-pointer p-1"
-                title="Info"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </span>
-            </button>
-            {activeInfoTooltip === 'tags' && (
-              <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-muted text-foreground text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
-                Automatically categorize with intelligent tag recommendations (Coming Soon)
-              </div>
-            )}
-          </div>
-
-          {/* AI Action 4: Find Similar */}
-          <div className="relative">
-            <button
-              disabled
-              className="w-full px-3 py-2 bg-background border border-border rounded-md opacity-40 cursor-not-allowed flex items-center justify-between gap-1"
-            >
-              <span className="text-xs font-sans text-foreground" style={{ fontWeight: 400 }}>Similar</span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveInfoTooltip(activeInfoTooltip === 'similar' ? null : 'similar');
-                }}
-                className="text-muted-foreground hover:scale-110 transition-all cursor-pointer p-1"
-                title="Info"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </span>
-            </button>
-            {activeInfoTooltip === 'similar' && (
-              <div className="absolute top-full left-0 right-0 mt-1 p-2 bg-muted text-foreground text-xs rounded-md shadow-lg z-10" style={{ fontWeight: 400 }}>
-                Discover similar conversations and past solutions (Coming Soon)
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* AI Summary Display */}
-        {aiSummary && (
-          <div className="mt-5 p-5 bg-purple-500/5 border border-purple-500/20 rounded-lg">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                <h4 className="text-sm font-sans font-bold text-purple-600">AI-Generated Summary</h4>
-              </div>
-              <button
-                onClick={() => setSummaryMinimized(!summaryMinimized)}
-                className="text-xs font-sans font-medium text-purple-500 hover:text-purple-600 transition-colors px-2 py-1"
-                title={summaryMinimized ? "Expand summary" : "Minimize summary"}
-              >
-                {summaryMinimized ? "Expand ▼" : "Minimize ▲"}
-              </button>
-            </div>
-            {!summaryMinimized && (
-              <p className="text-sm font-sans text-foreground leading-relaxed whitespace-pre-wrap">{aiSummary}</p>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Reply Section */}
       <div className="border-t border-border p-6 shrink-0">
@@ -1156,7 +1248,7 @@ export default function ConversationView() {
           </div>
         </div>
 
-        <div className="max-h-[200px] overflow-y-auto px-4 py-3 space-y-2">
+        <div className="h-[200px] overflow-y-auto px-4 py-3 space-y-2">
           {loadingHistory ? (
             <>
               {[1, 2].map((i) => (
@@ -1199,8 +1291,16 @@ export default function ConversationView() {
           {/* Next Unreplied Button */}
           <button
             onClick={goToNextUnreplied}
-            className="w-full px-4 py-3.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md group"
+            disabled={navigatingUnreplied}
+            className="w-full px-4 py-3.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md group disabled:opacity-60 disabled:cursor-not-allowed relative"
           >
+            {navigatingUnreplied && (
+              <div className="absolute inset-0 bg-blue-600/50 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <svg
@@ -1217,7 +1317,7 @@ export default function ConversationView() {
                     d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
                   />
                 </svg>
-                <span className="text-sm font-sans font-bold">Next Unreplied</span>
+                <span className="text-sm font-sans font-bold">{navigatingUnreplied ? 'Navigating...' : 'Next Unreplied'}</span>
               </div>
               <span className="text-xs font-sans font-medium opacity-80">→</span>
             </div>
@@ -1444,17 +1544,19 @@ export default function ConversationView() {
                                       </button>
                                     </div>
                                   </div>
-                                  {trackingInfo.trackingUrl && (
-                                    <a
-                                      href={trackingInfo.trackingUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="text-blue-600 hover:text-blue-800 underline text-xs block mt-2"
-                                    >
-                                      Track Package →
-                                    </a>
-                                  )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      fetchDetailedTracking(trackingInfo.trackingNumber);
+                                    }}
+                                    className="mt-2 w-full px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-md text-xs font-sans font-semibold shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    Track with 17track
+                                  </button>
                                 </div>
                               </div>
                             )}
@@ -1523,6 +1625,62 @@ export default function ConversationView() {
               <p className="text-sm font-sans text-muted-foreground">No Shopify customer found</p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* AI Assistant Section */}
+      <div className="border-b border-border">
+        <div className="px-6 py-4 bg-secondary/30">
+          <h3 className="font-sans font-bold text-foreground text-sm uppercase tracking-wide">AI Assistant</h3>
+        </div>
+
+        <div className="px-4 py-4 space-y-3">
+          {/* Summarize Button */}
+          <button
+            onClick={() => {/* TODO: Implement summarize */}}
+            disabled={!selectedConversation}
+            className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed text-left"
+          >
+            <span className="text-sm font-sans font-bold">Summarize</span>
+          </button>
+
+          {/* Draft Button */}
+          <button
+            onClick={() => {
+              if (draftMinimized && showDraftPopup) {
+                // If draft is minimized, maximize it
+                setDraftMinimized(false);
+              } else {
+                // Otherwise generate new draft
+                generateDraft();
+              }
+            }}
+            disabled={loadingDraft || !selectedConversation}
+            className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed relative text-left"
+          >
+            {loadingDraft && (
+              <div className="absolute inset-0 bg-purple-600/50 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-sans font-bold">{loadingDraft ? 'Generating...' : 'Draft'}</span>
+              {/* Minimized indicator */}
+              {showDraftPopup && draftMinimized && !loadingDraft && (
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse" title="Draft minimized - click to view"></div>
+              )}
+            </div>
+          </button>
+
+          {/* Placeholder for future buttons */}
+          <div className="h-12 border-2 border-dashed border-muted-foreground/20 rounded-lg flex items-center justify-center">
+            <span className="text-xs font-sans text-muted-foreground italic">More AI tools coming soon</span>
+          </div>
+          <div className="h-12 border-2 border-dashed border-muted-foreground/20 rounded-lg flex items-center justify-center">
+            <span className="text-xs font-sans text-muted-foreground italic">More AI tools coming soon</span>
+          </div>
         </div>
       </div>
 
@@ -2147,6 +2305,401 @@ export default function ConversationView() {
               )}
             </button>
           </div>
+        </div>
+      </div>
+    )}
+
+    {/* 17track Tracking Modal */}
+    {showTrackingModal && (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="bg-white border border-slate-300 w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-slate-300 flex items-center justify-between shrink-0 bg-gradient-to-r from-indigo-600 to-purple-600">
+            <div className="flex items-center gap-3">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <h2 className="text-base font-sans font-semibold text-white">
+                Package Tracking
+              </h2>
+            </div>
+            <button
+              onClick={() => {
+                setShowTrackingModal(false);
+                setTrackingData(null);
+                setTrackingError(null);
+              }}
+              className="text-white/80 hover:text-white transition-colors text-lg font-bold"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-white">
+            {loadingTracking && (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mb-4"></div>
+                <p className="text-sm font-sans text-slate-600">Fetching tracking information...</p>
+              </div>
+            )}
+
+            {trackingError && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-sans font-semibold text-yellow-900">Tracking Issue</p>
+                    <p className="text-sm font-sans text-yellow-800 mt-1">{trackingError}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!loadingTracking && !trackingError && trackingData && (
+              <div className="space-y-6">
+                {/* Tracking Summary */}
+                {trackingData.data && trackingData.data.accepted && trackingData.data.accepted.length > 0 && (
+                  <div className="border border-slate-300 bg-slate-50">
+                    <div className="px-4 py-3 border-b border-slate-300 bg-slate-100">
+                      <h3 className="text-xs font-sans font-bold text-slate-900 uppercase tracking-wide">Tracking Details</h3>
+                    </div>
+                    <div className="p-4 space-y-3">
+                      {trackingData.data.accepted.map((track: any, index: number) => (
+                        <div key={index}>
+                          <div className="grid grid-cols-2 gap-4 text-sm font-sans">
+                            <div>
+                              <span className="text-slate-600">Tracking Number:</span>
+                              <p className="font-mono font-semibold text-slate-900 mt-1">{track.number}</p>
+                            </div>
+                            {track.track_info && (
+                              <>
+                                {track.track_info.latest_status && (
+                                  <div>
+                                    <span className="text-slate-600">Status:</span>
+                                    <p className="font-semibold text-slate-900 mt-1">
+                                      {track.track_info.latest_status.status || 'In Transit'}
+                                    </p>
+                                  </div>
+                                )}
+                                {track.track_info.shipping_info && (
+                                  <>
+                                    {track.track_info.shipping_info.shipper_address && (
+                                      <div>
+                                        <span className="text-slate-600">From:</span>
+                                        <p className="font-semibold text-slate-900 mt-1">
+                                          {track.track_info.shipping_info.shipper_address.country || 'Unknown'}
+                                        </p>
+                                      </div>
+                                    )}
+                                    {track.track_info.shipping_info.recipient_address && (
+                                      <div>
+                                        <span className="text-slate-600">To:</span>
+                                        <p className="font-semibold text-slate-900 mt-1">
+                                          {track.track_info.shipping_info.recipient_address.country || 'Unknown'}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </div>
+
+                          {/* Tracking Timeline */}
+                          {track.track_info && track.track_info.tracking && track.track_info.tracking.providers && (
+                            <div className="mt-6">
+                              <h4 className="text-xs font-sans font-bold text-slate-900 uppercase tracking-wide mb-4">Tracking History</h4>
+                              <div className="space-y-3">
+                                {track.track_info.tracking.providers.map((provider: any, pIndex: number) => (
+                                  <div key={pIndex}>
+                                    {provider.events && provider.events.map((event: any, eIndex: number) => (
+                                      <div key={eIndex} className="flex gap-4 pb-4 border-b border-slate-200 last:border-0">
+                                        <div className="flex flex-col items-center">
+                                          <div className="w-3 h-3 rounded-full bg-indigo-600 mt-1"></div>
+                                          {eIndex < (provider.events?.length || 0) - 1 && (
+                                            <div className="w-0.5 h-full bg-slate-300 my-1"></div>
+                                          )}
+                                        </div>
+                                        <div className="flex-1 pb-2">
+                                          <p className="text-sm font-sans font-semibold text-slate-900">
+                                            {event.description || event.stage || 'Package Update'}
+                                          </p>
+                                          {event.location && (
+                                            <p className="text-xs font-sans text-slate-600 mt-1">
+                                              {event.location}
+                                            </p>
+                                          )}
+                                          {event.time_iso && (
+                                            <p className="text-xs font-sans text-slate-500 mt-1">
+                                              {new Date(event.time_iso).toLocaleString()}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* No tracking data available */}
+                {(!trackingData.data || !trackingData.data.accepted || trackingData.data.accepted.length === 0) && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-sans font-semibold text-yellow-900">No Tracking Information</p>
+                        <p className="text-sm font-sans text-yellow-700 mt-1">
+                          Tracking information is not yet available. Please try again later.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-slate-300 shrink-0 flex items-center justify-end gap-3 bg-slate-50">
+            <button
+              onClick={() => {
+                setShowTrackingModal(false);
+                setTrackingData(null);
+                setTrackingError(null);
+              }}
+              className="px-5 py-2.5 border border-slate-300 text-slate-900 text-sm font-sans font-semibold hover:bg-slate-100 transition-colors"
+            >
+              Close
+            </button>
+            {trackingData && trackingData.data && trackingData.data.accepted && trackingData.data.accepted[0] && (
+              <a
+                href={`https://t.17track.net/en#nums=${trackingData.data.accepted[0].number}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-sans font-semibold transition-colors flex items-center gap-2"
+              >
+                View on 17track
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* AI Draft Popup Modal */}
+    {showDraftPopup && !draftMinimized && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="bg-white border border-slate-200 shadow-2xl w-[900px] max-h-[85vh] flex flex-col rounded-xl overflow-hidden">
+          {/* Header */}
+          <div className="px-8 py-5 bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 border-b border-slate-200 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-md">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-sans font-bold text-slate-900 text-base">
+                  AI Draft Assistant
+                </h3>
+                {draftData?.tags && draftData.tags.length > 0 && (
+                  <div className="flex items-center gap-2 mt-1">
+                    {draftData.tags.slice(0, 3).map((tag: string) => (
+                      <span key={tag} className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-sans font-medium rounded-md">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setDraftMinimized(true)}
+              className="p-2 hover:bg-white/50 rounded-lg transition-colors group"
+              title="Minimize"
+            >
+              <svg className="w-5 h-5 text-slate-500 group-hover:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Content */}
+          {!draftMinimized && (
+            <div className="px-6 py-6 overflow-y-auto flex-1">
+              {loadingDraft && (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent mb-4"></div>
+                  <p className="text-sm font-sans text-purple-700">Analyzing email and generating draft...</p>
+                </div>
+              )}
+
+              {draftError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-red-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-sans font-semibold text-red-900">Error Generating Draft</p>
+                      <p className="text-sm font-sans text-red-700 mt-1">{draftError}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!loadingDraft && !draftError && draftData && (
+                <div className="space-y-4">
+                  {/* Category and Tags */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-3 py-1 bg-purple-600 text-white text-xs font-sans font-semibold rounded-full">
+                      {draftData.category}
+                    </span>
+                    {draftData.tags?.map((tag: string) => (
+                      <span key={tag} className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-sans font-semibold rounded-full border border-purple-300">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* AI Reasoning */}
+                  {draftData.reasoning && (
+                    <div className="bg-white border border-purple-200 rounded-lg p-4">
+                      <h4 className="text-xs font-sans font-bold text-purple-900 uppercase tracking-wide mb-2 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        AI Reasoning
+                      </h4>
+                      <p className="text-sm font-sans text-gray-700 whitespace-pre-wrap">{draftData.reasoning}</p>
+                    </div>
+                  )}
+
+                  {/* Order Information */}
+                  {draftData.orderInfo && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h4 className="text-xs font-sans font-bold text-blue-900 uppercase tracking-wide mb-2">Order Information</h4>
+                      <div className="grid grid-cols-2 gap-2 text-sm font-sans">
+                        {draftData.orderInfo.orderId && (
+                          <div>
+                            <span className="text-blue-600">Order ID:</span>
+                            <p className="font-semibold text-blue-900">{draftData.orderInfo.orderId}</p>
+                          </div>
+                        )}
+                        {draftData.orderInfo.orderDate && (
+                          <div>
+                            <span className="text-blue-600">Order Date:</span>
+                            <p className="font-semibold text-blue-900">{draftData.orderInfo.orderDate}</p>
+                          </div>
+                        )}
+                        {draftData.orderInfo.deliveryDate && (
+                          <div>
+                            <span className="text-blue-600">Delivery Date:</span>
+                            <p className="font-semibold text-blue-900">{draftData.orderInfo.deliveryDate}</p>
+                          </div>
+                        )}
+                        {draftData.orderInfo.isWithinReturnWindow !== undefined && (
+                          <div>
+                            <span className="text-blue-600">Return Window:</span>
+                            <p className={`font-semibold ${draftData.orderInfo.isWithinReturnWindow ? 'text-green-600' : 'text-red-600'}`}>
+                              {draftData.orderInfo.isWithinReturnWindow ? 'Within 30 days ✓' : 'Expired ✗'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Draft Email or Action Steps */}
+                  {draftData.shouldDraft && draftData.draft ? (
+                    <div className="bg-white border-2 border-purple-300 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-sans font-bold text-purple-900 uppercase tracking-wide flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19v-8.93a2 2 0 01.89-1.664l7-4.666a2 2 0 012.22 0l7 4.666A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-1.14.76a2 2 0 01-2.22 0l-1.14-.76" />
+                          </svg>
+                          Email Draft
+                        </h4>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(draftData.draft);
+                            alert('Draft copied to clipboard!');
+                          }}
+                          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-sans font-semibold rounded transition-colors"
+                        >
+                          Copy Draft
+                        </button>
+                      </div>
+                      <div className="bg-gray-50 rounded p-4 font-sans text-sm text-gray-800 whitespace-pre-wrap border border-gray-200">
+                        {draftData.draft}
+                      </div>
+                    </div>
+                  ) : draftData.actionSteps && draftData.actionSteps.length > 0 ? (
+                    <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+                      <h4 className="text-xs font-sans font-bold text-yellow-900 uppercase tracking-wide mb-3 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                        Action Steps for Agent
+                      </h4>
+                      <ol className="space-y-2">
+                        {draftData.actionSteps.map((step: string, index: number) => (
+                          <li key={index} className="flex items-start gap-3">
+                            <span className="flex-shrink-0 w-6 h-6 bg-yellow-600 text-white rounded-full flex items-center justify-center text-xs font-sans font-bold">
+                              {index + 1}
+                            </span>
+                            <p className="text-sm font-sans text-yellow-900 pt-0.5">{step}</p>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                      <p className="text-sm font-sans text-gray-600 italic">No draft or action steps generated.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Footer with Delete button */}
+          {!loadingDraft && draftData && (
+            <div className="px-8 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end shrink-0">
+              <button
+                onClick={() => {
+                  if (confirm('Are you sure you want to delete this draft? This cannot be undone.')) {
+                    setShowDraftPopup(false);
+                    setDraftMinimized(false);
+                    setDraftData(null);
+                    setDraftError(null);
+                  }
+                }}
+                className="px-4 py-2 bg-white border border-slate-300 hover:bg-red-50 hover:border-red-300 text-slate-700 hover:text-red-700 rounded-lg transition-all font-sans text-sm font-medium flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete Draft
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )}

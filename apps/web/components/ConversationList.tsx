@@ -25,7 +25,7 @@ type Conversation = {
 };
 
 export default function ConversationList() {
-  const { conversations, selectedConversation, selectConversation, loading, refreshing, refreshProgress, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived, showSent, pagination, nextPage, prevPage } =
+  const { conversations, selectedConversation, selectConversation, loading, refreshing, refreshProgress, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived, showSent, pagination, nextPage, prevPage, pageTransitioning } =
     useConversations();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showStarred, setShowStarred] = useState(false);
@@ -204,14 +204,6 @@ export default function ConversationList() {
       });
     }
   };
-
-  if (loading) {
-    return (
-      <div className={`${isCollapsed ? 'w-12' : 'w-96'} border-r border-border bg-background flex items-center justify-center transition-all duration-300 shrink-0`}>
-        <p className="text-muted-foreground text-sm">{isCollapsed ? '...' : 'Loading...'}</p>
-      </div>
-    );
-  }
 
   return (
     <div className={`${isCollapsed ? 'w-12' : 'w-96'} border-r border-border bg-background flex flex-col relative transition-all duration-300 shrink-0`} style={{ fontFamily: "Roboto, sans-serif" }}>
@@ -413,11 +405,21 @@ export default function ConversationList() {
 
       {/* Pagination Indicator */}
       {pagination && pagination.total > 0 && (
-        <div className="px-4 py-3 border-b border-border bg-secondary/20">
+        <div className="px-4 py-3 border-b border-border bg-secondary/20 relative">
+          {pageTransitioning && (
+            <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center z-10">
+              <div className="flex items-center gap-2 text-primary">
+                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span className="text-xs font-sans font-medium">Loading...</span>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-center gap-3">
             <button
               onClick={prevPage}
-              disabled={pagination.page === 1}
+              disabled={pagination.page === 1 || pageTransitioning}
               className="p-1.5 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               title="Previous page"
             >
@@ -439,7 +441,7 @@ export default function ConversationList() {
 
             <button
               onClick={nextPage}
-              disabled={pagination.page === pagination.totalPages}
+              disabled={pagination.page === pagination.totalPages || pageTransitioning}
               className="p-1.5 rounded hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               title="Next page"
             >
