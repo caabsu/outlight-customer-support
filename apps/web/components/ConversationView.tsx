@@ -55,6 +55,7 @@ export default function ConversationView() {
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [summaryMinimized, setSummaryMinimized] = useState(false);
   const [activeInfoTooltip, setActiveInfoTooltip] = useState<string | null>(null);
+  const [navigatingUnreplied, setNavigatingUnreplied] = useState(false);
 
   // Shopify state
   const [shopifyCustomer, setShopifyCustomer] = useState<any>(null);
@@ -257,26 +258,30 @@ export default function ConversationView() {
   };
 
   const goToNextUnreplied = async () => {
-    if (!selectedConversation) {
-      // No conversation selected - just select first unreplied on current page
-      const unrepliedConversations = conversations.filter((conv) => {
-        if (conv.tags?.includes("non-customer-support")) return false;
-        if (conv.messages.length === 0) return false;
-        const lastMessage = conv.messages[conv.messages.length - 1];
-        return lastMessage.direction === "inbound";
-      });
+    if (navigatingUnreplied) return; // Prevent multiple clicks
 
-      const sortedUnreplied = unrepliedConversations.sort((a, b) =>
-        new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
-      );
-
-      if (sortedUnreplied.length > 0) {
-        selectConversation(sortedUnreplied[0].id);
-      }
-      return;
-    }
+    setNavigatingUnreplied(true);
 
     try {
+      if (!selectedConversation) {
+        // No conversation selected - just select first unreplied on current page
+        const unrepliedConversations = conversations.filter((conv) => {
+          if (conv.tags?.includes("non-customer-support")) return false;
+          if (conv.messages.length === 0) return false;
+          const lastMessage = conv.messages[conv.messages.length - 1];
+          return lastMessage.direction === "inbound";
+        });
+
+        const sortedUnreplied = unrepliedConversations.sort((a, b) =>
+          new Date(a.lastMessageAt).getTime() - new Date(b.lastMessageAt).getTime()
+        );
+
+        if (sortedUnreplied.length > 0) {
+          selectConversation(sortedUnreplied[0].id);
+        }
+        return;
+      }
+
       // Use API to get next unreplied conversation (works across all pages)
       const response = await fetch(`/api/conversations/next-unreplied/${selectedConversation.id}`);
 
@@ -359,7 +364,7 @@ export default function ConversationView() {
           // Wait for page to load, then select the conversation
           setTimeout(() => {
             selectConversation(nextConversation.id);
-          }, 150);
+          }, 200);
         } else {
           // Fallback: just select it
           selectConversation(nextConversation.id);
@@ -370,6 +375,11 @@ export default function ConversationView() {
       }
     } catch (error) {
       console.error("Error navigating to next unreplied:", error);
+    } finally {
+      // Clear loading state after navigation completes
+      setTimeout(() => {
+        setNavigatingUnreplied(false);
+      }, 300);
     }
   };
 
@@ -1261,8 +1271,16 @@ export default function ConversationView() {
           {/* Next Unreplied Button */}
           <button
             onClick={goToNextUnreplied}
-            className="w-full px-4 py-3.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md group"
+            disabled={navigatingUnreplied}
+            className="w-full px-4 py-3.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg transition-all shadow-sm hover:shadow-md group disabled:opacity-60 disabled:cursor-not-allowed relative"
           >
+            {navigatingUnreplied && (
+              <div className="absolute inset-0 bg-blue-600/50 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 animate-spin text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <svg
@@ -1279,7 +1297,7 @@ export default function ConversationView() {
                     d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
                   />
                 </svg>
-                <span className="text-sm font-sans font-bold">Next Unreplied</span>
+                <span className="text-sm font-sans font-bold">{navigatingUnreplied ? 'Navigating...' : 'Next Unreplied'}</span>
               </div>
               <span className="text-xs font-sans font-medium opacity-80">→</span>
             </div>

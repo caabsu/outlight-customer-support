@@ -55,6 +55,7 @@ type ConversationContextType = {
   goToPage: (page: number) => Promise<void>;
   nextPage: () => void;
   prevPage: () => void;
+  pageTransitioning: boolean;
 };
 
 const ConversationContext = createContext<ConversationContextType | undefined>(
@@ -75,6 +76,7 @@ export function ConversationProvider({
   const [showSent, setShowSent] = useState(false);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageTransitioning, setPageTransitioning] = useState(false);
 
   const fetchConversations = async (silent = false, retryCount = 0, suppressErrors = false, page = currentPage) => {
     try {
@@ -240,19 +242,30 @@ export function ConversationProvider({
   };
 
   const goToPage = async (page: number) => {
+    if (page === currentPage) return; // Already on this page
+
+    setPageTransitioning(true);
     setCurrentPage(page);
-    // Use silent mode to prevent full loading screen during page transitions
-    await fetchConversations(true, 0, false, page);
+
+    try {
+      // Use silent mode to prevent full loading screen during page transitions
+      await fetchConversations(true, 0, false, page);
+    } finally {
+      // Small delay to ensure smooth transition
+      setTimeout(() => {
+        setPageTransitioning(false);
+      }, 100);
+    }
   };
 
   const nextPage = () => {
-    if (pagination && currentPage < pagination.totalPages) {
+    if (pagination && currentPage < pagination.totalPages && !pageTransitioning) {
       goToPage(currentPage + 1);
     }
   };
 
   const prevPage = () => {
-    if (currentPage > 1) {
+    if (currentPage > 1 && !pageTransitioning) {
       goToPage(currentPage - 1);
     }
   };
@@ -277,6 +290,7 @@ export function ConversationProvider({
         goToPage,
         nextPage,
         prevPage,
+        pageTransitioning,
       }}
     >
       {children}
