@@ -99,7 +99,7 @@ export default function ConversationView() {
 
   // AI Draft state - stored per conversation ID
   const [draftsByConversationId, setDraftsByConversationId] = useState<Record<string, any>>({});
-  const [loadingDraft, setLoadingDraft] = useState(false);
+  const [loadingDraftByConversationId, setLoadingDraftByConversationId] = useState<Record<string, boolean>>({});
   const [draftError, setDraftError] = useState<string | null>(null);
   const [showDraftPopup, setShowDraftPopup] = useState(false);
   const [draftMinimized, setDraftMinimized] = useState(false);
@@ -110,8 +110,9 @@ export default function ConversationView() {
     toolSpecific: true
   });
 
-  // Get current conversation's draft
+  // Get current conversation's draft and loading state
   const draftData = selectedConversation?.id ? draftsByConversationId[selectedConversation.id] : null;
+  const loadingDraft = selectedConversation?.id ? loadingDraftByConversationId[selectedConversation.id] || false : false;
 
   // Fetch conversation history
   useEffect(() => {
@@ -610,7 +611,13 @@ export default function ConversationView() {
   const generateDraft = async () => {
     if (!selectedConversation) return;
 
-    setLoadingDraft(true);
+    const conversationId = selectedConversation.id;
+
+    // Set loading state for this specific conversation
+    setLoadingDraftByConversationId(prev => ({
+      ...prev,
+      [conversationId]: true
+    }));
     setDraftError(null);
     setShowDraftPopup(true);
     setDraftMinimized(false);
@@ -618,15 +625,15 @@ export default function ConversationView() {
     // Clear current conversation's draft while loading
     setDraftsByConversationId(prev => ({
       ...prev,
-      [selectedConversation.id]: null
+      [conversationId]: null
     }));
 
     try {
       // Call API server directly to avoid Next.js proxy timeout
       // In production, this would use the same domain, but in dev we bypass the proxy
       const apiUrl = process.env.NODE_ENV === 'development'
-        ? `http://localhost:3001/conversations/${selectedConversation.id}/draft`
-        : `/api/conversations/${selectedConversation.id}/draft`;
+        ? `http://localhost:3001/conversations/${conversationId}/draft`
+        : `/api/conversations/${conversationId}/draft`;
 
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -641,7 +648,7 @@ export default function ConversationView() {
       // Store draft by conversation ID
       setDraftsByConversationId(prev => ({
         ...prev,
-        [selectedConversation.id]: data
+        [conversationId]: data
       }));
 
       // Refresh conversation to get updated tags
@@ -650,7 +657,11 @@ export default function ConversationView() {
       console.error("Error generating draft:", error);
       setDraftError(error instanceof Error ? error.message : "Failed to generate draft");
     } finally {
-      setLoadingDraft(false);
+      // Clear loading state for this specific conversation
+      setLoadingDraftByConversationId(prev => ({
+        ...prev,
+        [conversationId]: false
+      }));
     }
   };
 

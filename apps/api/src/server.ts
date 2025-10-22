@@ -1688,9 +1688,9 @@ Remember:
 
       // Use tools parameter for function calling phase
       const completionParams: any = {
-        model: "gpt-5",
+        model: "gpt-5-mini-2025-08-07", // Faster, more cost-efficient version of GPT-5
         messages,
-        // Note: GPT-5 only supports default temperature (1)
+        // Note: GPT-5 mini supports default temperature (1)
       };
 
       // Only add tools if we haven't finished calling them
@@ -1797,7 +1797,7 @@ Remember:
       });
 
       const finalCompletion = await openai.chat.completions.create({
-        model: "gpt-5",
+        model: "gpt-5-mini-2025-08-07", // Faster, more cost-efficient version of GPT-5
         messages,
         response_format: { type: "json_object" }
       });
