@@ -74,6 +74,19 @@ export default function ConversationView() {
   const [composerAttachments, setComposerAttachments] = useState<File[]>([]);
   const [sendingEmail, setSendingEmail] = useState(false);
 
+  // Refund state
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundOrder, setRefundOrder] = useState<any>(null);
+  const [refundType, setRefundType] = useState<'preset' | 'percentage' | 'dollar' | 'full'>('preset');
+  const [refundPreset, setRefundPreset] = useState<20 | 50>(20);
+  const [refundCustomPercentage, setRefundCustomPercentage] = useState("");
+  const [refundCustomDollar, setRefundCustomDollar] = useState("");
+  const [refundReason, setRefundReason] = useState("");
+  const [refundNotifyCustomer, setRefundNotifyCustomer] = useState(true);
+  const [refundRestock, setRefundRestock] = useState(false);
+  const [processingRefund, setProcessingRefund] = useState(false);
+  const [refundConfirmation, setRefundConfirmation] = useState(false);
+
   // Fetch conversation history
   useEffect(() => {
     if (selectedConversation?.id) {
@@ -431,6 +444,110 @@ export default function ConversationView() {
       alert("Failed to send email. Please try again.");
     } finally {
       setSendingEmail(false);
+    }
+  };
+
+  // Open refund modal
+  const openRefundModal = (order: any) => {
+    setRefundOrder(order);
+    setRefundType('preset');
+    setRefundPreset(20);
+    setRefundCustomPercentage("");
+    setRefundCustomDollar("");
+    setRefundReason("");
+    setRefundNotifyCustomer(true);
+    setRefundRestock(false);
+    setRefundConfirmation(false);
+    setShowRefundModal(true);
+  };
+
+  // Calculate refund amount
+  const calculateRefundAmount = (): number => {
+    if (!refundOrder) return 0;
+
+    const orderTotal = parseFloat(refundOrder.total_price);
+
+    switch (refundType) {
+      case 'full':
+        return orderTotal;
+      case 'preset':
+        return orderTotal * (refundPreset / 100);
+      case 'percentage':
+        const percentage = parseFloat(refundCustomPercentage) || 0;
+        return orderTotal * (percentage / 100);
+      case 'dollar':
+        const dollarAmount = parseFloat(refundCustomDollar) || 0;
+        return Math.min(dollarAmount, orderTotal);
+      default:
+        return 0;
+    }
+  };
+
+  // Process refund
+  const handleProcessRefund = async () => {
+    if (!refundOrder) return;
+
+    const refundAmount = calculateRefundAmount();
+
+    if (refundAmount <= 0) {
+      alert("Please enter a valid refund amount");
+      return;
+    }
+
+    if (!refundConfirmation) {
+      setRefundConfirmation(true);
+      return;
+    }
+
+    setProcessingRefund(true);
+
+    try {
+      // Create refund line items (full refund of all items for now)
+      const refundLineItems = refundOrder.line_items.map((item: any) => ({
+        line_item_id: item.id,
+        quantity: item.quantity,
+        restock_type: refundRestock ? 'return' : 'no_restock',
+      }));
+
+      const response = await fetch(`/api/shopify/order/${refundOrder.id}/refund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          refundLineItems,
+          amount: refundAmount.toFixed(2),
+          reason: refundReason || 'Customer request',
+          notify: refundNotifyCustomer,
+          note: refundReason,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to process refund');
+      }
+
+      const refundData = await response.json();
+
+      alert(`Refund processed successfully! Refund ID: ${refundData.id}`);
+
+      // Refresh Shopify orders
+      if (shopifyCustomer) {
+        const ordersResponse = await fetch(`/api/shopify/customer/${shopifyCustomer.id}/orders`);
+        if (ordersResponse.ok) {
+          const orders = await ordersResponse.json();
+          setShopifyOrders(orders);
+        }
+      }
+
+      setShowRefundModal(false);
+      setRefundOrder(null);
+      setSelectedOrder(null);
+    } catch (error) {
+      console.error('Failed to process refund:', error);
+      alert(`Failed to process refund: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setProcessingRefund(false);
+      setRefundConfirmation(false);
     }
   };
 
@@ -1183,7 +1300,7 @@ export default function ConversationView() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  alert('Refund functionality coming soon!');
+                                  openRefundModal(order);
                                 }}
                                 className="w-full px-3 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-sans font-bold rounded transition-colors"
                               >
@@ -1412,6 +1529,312 @@ export default function ConversationView() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
                   Send Email
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Refund Modal */}
+    {showRefundModal && refundOrder && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-background border border-border rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-gradient-to-r from-red-500 to-red-600">
+            <h2 className="text-lg font-sans font-bold text-white flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+              </svg>
+              Process Refund - {refundOrder.name}
+            </h2>
+            <button
+              onClick={() => setShowRefundModal(false)}
+              className="text-white hover:text-gray-200 transition-colors text-xl"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-5">
+            {/* Order Summary */}
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
+              <h3 className="text-sm font-sans font-bold text-purple-900 mb-3">Order Summary</h3>
+              <div className="space-y-2 text-xs font-sans text-purple-700">
+                <div className="flex justify-between">
+                  <span>Order Total:</span>
+                  <span className="font-bold">${parseFloat(refundOrder.total_price).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Tax:</span>
+                  <span>${parseFloat(refundOrder.total_tax).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Status:</span>
+                  <span className="font-semibold">{refundOrder.financial_status}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Refund Amount Selection */}
+            <div>
+              <h3 className="text-sm font-sans font-bold text-foreground mb-3">Select Refund Amount</h3>
+
+              {/* Preset Options */}
+              <div className="space-y-3 mb-4">
+                <label className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                  refundType === 'preset' && refundPreset === 20
+                    ? 'border-red-500 bg-red-50'
+                    : 'border-border hover:border-red-300'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      name="refundType"
+                      checked={refundType === 'preset' && refundPreset === 20}
+                      onChange={() => {
+                        setRefundType('preset');
+                        setRefundPreset(20);
+                      }}
+                      className="w-4 h-4 text-red-600"
+                    />
+                    <div>
+                      <p className="text-sm font-sans font-semibold text-foreground">20% Refund</p>
+                      <p className="text-xs font-sans text-muted-foreground">Partial refund - 20% of order value</p>
+                    </div>
+                  </div>
+                  <span className="text-lg font-sans font-bold text-red-600">
+                    ${(parseFloat(refundOrder.total_price) * 0.20).toFixed(2)}
+                  </span>
+                </label>
+
+                <label className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                  refundType === 'preset' && refundPreset === 50
+                    ? 'border-red-500 bg-red-50'
+                    : 'border-border hover:border-red-300'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      name="refundType"
+                      checked={refundType === 'preset' && refundPreset === 50}
+                      onChange={() => {
+                        setRefundType('preset');
+                        setRefundPreset(50);
+                      }}
+                      className="w-4 h-4 text-red-600"
+                    />
+                    <div>
+                      <p className="text-sm font-sans font-semibold text-foreground">50% Refund</p>
+                      <p className="text-xs font-sans text-muted-foreground">Half refund - 50% of order value</p>
+                    </div>
+                  </div>
+                  <span className="text-lg font-sans font-bold text-red-600">
+                    ${(parseFloat(refundOrder.total_price) * 0.50).toFixed(2)}
+                  </span>
+                </label>
+
+                <label className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                  refundType === 'full'
+                    ? 'border-red-500 bg-red-50'
+                    : 'border-border hover:border-red-300'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      name="refundType"
+                      checked={refundType === 'full'}
+                      onChange={() => setRefundType('full')}
+                      className="w-4 h-4 text-red-600"
+                    />
+                    <div>
+                      <p className="text-sm font-sans font-semibold text-foreground">Full Refund</p>
+                      <p className="text-xs font-sans text-muted-foreground">Complete refund - 100% of order value</p>
+                    </div>
+                  </div>
+                  <span className="text-lg font-sans font-bold text-red-600">
+                    ${parseFloat(refundOrder.total_price).toFixed(2)}
+                  </span>
+                </label>
+              </div>
+
+              {/* Custom Percentage */}
+              <div className="border-t border-border pt-4 mb-3">
+                <label className={`flex items-center gap-3 mb-2`}>
+                  <input
+                    type="radio"
+                    name="refundType"
+                    checked={refundType === 'percentage'}
+                    onChange={() => setRefundType('percentage')}
+                    className="w-4 h-4 text-red-600"
+                  />
+                  <span className="text-sm font-sans font-semibold text-foreground">Custom Percentage</span>
+                </label>
+                <div className="ml-7 flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={refundCustomPercentage}
+                    onChange={(e) => {
+                      setRefundCustomPercentage(e.target.value);
+                      setRefundType('percentage');
+                    }}
+                    onFocus={() => setRefundType('percentage')}
+                    placeholder="0"
+                    min="0"
+                    max="100"
+                    className="w-24 px-3 py-2 text-sm font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-foreground"
+                  />
+                  <span className="text-sm font-sans text-foreground">%</span>
+                  <span className="text-sm font-sans text-muted-foreground">
+                    = ${(parseFloat(refundOrder.total_price) * (parseFloat(refundCustomPercentage) || 0) / 100).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Custom Dollar Amount */}
+              <div className="border-t border-border pt-4">
+                <label className={`flex items-center gap-3 mb-2`}>
+                  <input
+                    type="radio"
+                    name="refundType"
+                    checked={refundType === 'dollar'}
+                    onChange={() => setRefundType('dollar')}
+                    className="w-4 h-4 text-red-600"
+                  />
+                  <span className="text-sm font-sans font-semibold text-foreground">Custom Dollar Amount</span>
+                </label>
+                <div className="ml-7 flex items-center gap-2">
+                  <span className="text-sm font-sans text-foreground">$</span>
+                  <input
+                    type="number"
+                    value={refundCustomDollar}
+                    onChange={(e) => {
+                      setRefundCustomDollar(e.target.value);
+                      setRefundType('dollar');
+                    }}
+                    onFocus={() => setRefundType('dollar')}
+                    placeholder="0.00"
+                    min="0"
+                    max={parseFloat(refundOrder.total_price)}
+                    step="0.01"
+                    className="w-32 px-3 py-2 text-sm font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-foreground"
+                  />
+                  <span className="text-xs font-sans text-muted-foreground">
+                    (Max: ${parseFloat(refundOrder.total_price).toFixed(2)})
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Refund Calculation Display */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-sans font-semibold text-green-900">Total Refund Amount:</span>
+                <span className="text-2xl font-sans font-bold text-green-600">
+                  ${calculateRefundAmount().toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Refund Reason */}
+            <div>
+              <label className="block text-sm font-sans font-semibold text-foreground mb-2">
+                Refund Reason (Optional)
+              </label>
+              <textarea
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                placeholder="Enter reason for refund..."
+                rows={3}
+                className="w-full px-4 py-3 font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-foreground resize-none"
+              />
+            </div>
+
+            {/* Options */}
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 p-3 bg-muted rounded-lg cursor-pointer hover:bg-accent transition-colors">
+                <input
+                  type="checkbox"
+                  checked={refundNotifyCustomer}
+                  onChange={(e) => setRefundNotifyCustomer(e.target.checked)}
+                  className="w-4 h-4 text-red-600 rounded"
+                />
+                <div>
+                  <p className="text-sm font-sans font-semibold text-foreground">Notify Customer</p>
+                  <p className="text-xs font-sans text-muted-foreground">Send refund confirmation email to customer</p>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3 bg-muted rounded-lg cursor-pointer hover:bg-accent transition-colors">
+                <input
+                  type="checkbox"
+                  checked={refundRestock}
+                  onChange={(e) => setRefundRestock(e.target.checked)}
+                  className="w-4 h-4 text-red-600 rounded"
+                />
+                <div>
+                  <p className="text-sm font-sans font-semibold text-foreground">Restock Items</p>
+                  <p className="text-xs font-sans text-muted-foreground">Return items to inventory</p>
+                </div>
+              </label>
+            </div>
+
+            {/* Confirmation Warning */}
+            {refundConfirmation && (
+              <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <svg className="w-6 h-6 text-yellow-600 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <div>
+                    <h4 className="text-sm font-sans font-bold text-yellow-900 mb-1">Confirm Refund</h4>
+                    <p className="text-xs font-sans text-yellow-800 mb-2">
+                      You are about to refund <strong>${calculateRefundAmount().toFixed(2)}</strong> to the customer.
+                      This action cannot be undone.
+                    </p>
+                    <p className="text-xs font-sans text-yellow-800">
+                      Click "Process Refund" again to confirm.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-border shrink-0 flex items-center justify-between bg-secondary/30">
+            <button
+              onClick={() => setShowRefundModal(false)}
+              disabled={processingRefund}
+              className="px-4 py-2 bg-muted text-foreground rounded-lg text-sm font-sans font-medium hover:bg-accent transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleProcessRefund}
+              disabled={processingRefund || calculateRefundAmount() <= 0}
+              className="px-6 py-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg text-sm font-sans font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {processingRefund ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                  Processing...
+                </>
+              ) : refundConfirmation ? (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Confirm Refund
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                  </svg>
+                  Process Refund
                 </>
               )}
             </button>
