@@ -3056,18 +3056,34 @@ export default function ConversationView() {
                 Regenerate Draft
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (confirm('Are you sure you want to delete this draft? This cannot be undone.')) {
                     setShowDraftPopup(false);
                     setDraftMinimized(false);
                     setDraftError(null);
                     // Delete draft for current conversation
                     if (selectedConversation?.id) {
+                      // Delete from frontend state
                       setDraftsByConversationId(prev => {
                         const newDrafts = { ...prev };
                         delete newDrafts[selectedConversation.id];
                         return newDrafts;
                       });
+
+                      // Delete from database
+                      try {
+                        const apiUrl = process.env.NODE_ENV === 'development'
+                          ? `http://localhost:3001/conversations/${selectedConversation.id}/draft`
+                          : `/api/conversations/${selectedConversation.id}/draft`;
+
+                        await fetch(apiUrl, {
+                          method: "DELETE"
+                        });
+                        console.log(`Deleted draft from database for conversation ${selectedConversation.id}`);
+                      } catch (error) {
+                        console.error("Failed to delete draft from database:", error);
+                        // Don't show error to user since frontend state is already updated
+                      }
                     }
                   }
                 }}

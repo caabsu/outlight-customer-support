@@ -1803,6 +1803,30 @@ Remember:
   }
 });
 
+// Delete draft endpoint
+app.delete("/conversations/:id/draft", async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.id;
+    console.log(`[Draft] Deleting draft for conversation ${conversationId}`);
+
+    await prisma.draftResponse.delete({
+      where: { conversationId }
+    });
+
+    console.log(`[Draft] Successfully deleted draft for conversation ${conversationId}`);
+    res.json({ success: true, message: "Draft deleted successfully" });
+  } catch (error) {
+    // Draft might not exist, which is fine
+    if ((error as any).code === 'P2025') {
+      console.log(`[Draft] No draft found to delete for conversation ${req.params.id}`);
+      res.json({ success: true, message: "No draft found to delete" });
+    } else {
+      console.error("Error deleting draft:", error);
+      res.status(500).json({ error: "Failed to delete draft" });
+    }
+  }
+});
+
 const port = process.env.PORT || 3001;
 
 // Start server immediately for fast startup
