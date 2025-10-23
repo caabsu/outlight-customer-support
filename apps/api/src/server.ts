@@ -1768,7 +1768,7 @@ Remember:
           reasoning: finalResult.reasoning || null,
           shouldDraft: finalResult.shouldDraft || false,
           draft: finalResult.draft || null,
-          actionSteps: finalResult.actionSteps ? (Array.isArray(finalResult.actionSteps) ? finalResult.actionSteps.join("\n") : finalResult.actionSteps) : null,
+          actionSteps: finalResult.actionSteps || null,
           orderInfo: finalResult.orderInfo || null
         },
         update: {
@@ -1778,7 +1778,7 @@ Remember:
           reasoning: finalResult.reasoning || null,
           shouldDraft: finalResult.shouldDraft || false,
           draft: finalResult.draft || null,
-          actionSteps: finalResult.actionSteps ? (Array.isArray(finalResult.actionSteps) ? finalResult.actionSteps.join("\n") : finalResult.actionSteps) : null,
+          actionSteps: finalResult.actionSteps || null,
           orderInfo: finalResult.orderInfo || null
         }
       });

@@ -96,7 +96,7 @@ model DraftResponse {
   reasoning          String?
   shouldDraft        Boolean      @default(false)
   draft              String?
-  actionSteps        String?
+  actionSteps        Json?
   orderInfo          Json?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt

@@ -3007,7 +3007,7 @@ export default function ConversationView() {
                         {draftData.draft}
                       </div>
                     </div>
-                  ) : draftData.actionSteps && draftData.actionSteps.length > 0 ? (
+                  ) : draftData.actionSteps && (Array.isArray(draftData.actionSteps) ? draftData.actionSteps.length > 0 : true) ? (
                     <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
                       <h4 className="text-xs font-sans font-bold text-yellow-900 uppercase tracking-wide mb-3 flex items-center gap-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3016,7 +3016,12 @@ export default function ConversationView() {
                         Action Steps for Agent
                       </h4>
                       <ol className="space-y-2">
-                        {draftData.actionSteps.map((step: string, index: number) => (
+                        {(Array.isArray(draftData.actionSteps)
+                          ? draftData.actionSteps
+                          : typeof draftData.actionSteps === 'string'
+                            ? draftData.actionSteps.split('\n').filter(s => s.trim())
+                            : []
+                        ).map((step: string, index: number) => (
                           <li key={index} className="flex items-start gap-3">
                             <span className="flex-shrink-0 w-6 h-6 bg-yellow-600 text-white rounded-full flex items-center justify-center text-xs font-sans font-bold">
                               {index + 1}
