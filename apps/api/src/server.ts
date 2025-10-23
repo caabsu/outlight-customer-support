@@ -1374,6 +1374,15 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
 
       if (existingDraft) {
         console.log(`[Draft] Returning existing draft for conversation ${conversationId}`);
+
+        // Handle old data format: convert string actionSteps to array if needed
+        let actionSteps = existingDraft.actionSteps;
+        if (actionSteps && typeof actionSteps === 'string') {
+          // Old format: string with newlines - convert to array
+          actionSteps = (actionSteps as string).split('\n').filter(s => s.trim());
+          console.log(`[Draft] Converted old string actionSteps to array format`);
+        }
+
         return res.json({
           internalReasoning: existingDraft.internalReasoning,
           tags: existingDraft.tags,
@@ -1381,7 +1390,7 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
           reasoning: existingDraft.reasoning,
           shouldDraft: existingDraft.shouldDraft,
           draft: existingDraft.draft,
-          actionSteps: existingDraft.actionSteps,
+          actionSteps: actionSteps,
           orderInfo: existingDraft.orderInfo,
           conversationId,
           fromDatabase: true,

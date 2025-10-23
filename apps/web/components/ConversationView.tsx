@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useConversations } from "@/lib/ConversationContext";
 import { useRouter } from "next/navigation";
 
@@ -148,6 +148,9 @@ export default function ConversationView() {
   const draftData = selectedConversation?.id ? draftsByConversationId[selectedConversation.id] : null;
   const loadingDraft = selectedConversation?.id ? loadingDraftByConversationId[selectedConversation.id] || false : false;
 
+  // Track which conversations we've already attempted to auto-load drafts for
+  const autoLoadAttemptedRef = useRef<Set<string>>(new Set());
+
   // Fetch conversation history
   useEffect(() => {
     if (selectedConversation?.id) {
@@ -188,6 +191,12 @@ export default function ConversationView() {
 
     // Don't auto-load if draft is currently being generated
     if (loadingDraftByConversationId[selectedConversation.id]) return;
+
+    // Check if we've already attempted to auto-load this conversation
+    if (autoLoadAttemptedRef.current.has(selectedConversation.id)) return;
+
+    // Mark this conversation as attempted
+    autoLoadAttemptedRef.current.add(selectedConversation.id);
 
     // Fetch draft from database
     const apiUrl = process.env.NODE_ENV === 'development'
