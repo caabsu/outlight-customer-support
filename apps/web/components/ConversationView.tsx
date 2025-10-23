@@ -1554,15 +1554,19 @@ export default function ConversationView() {
           </div>
         </div>
 
-        <div className="px-4 py-3 bg-white space-y-2 max-h-[400px] overflow-y-auto">
+        <div className="px-4 py-3 bg-white h-[400px] overflow-y-auto flex flex-col">
           {loadingShopify ? (
-            <div className="p-4 text-center">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500 mx-auto mb-2"></div>
-              <p className="text-xs font-sans text-gray-600">Loading...</p>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500 mx-auto mb-2"></div>
+                <p className="text-xs font-sans text-gray-600">Loading...</p>
+              </div>
             </div>
           ) : shopifyError ? (
-            <div className="p-3 bg-gray-50 rounded text-center">
-              <p className="text-xs font-sans text-gray-700">{shopifyError}</p>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="p-3 bg-gray-50 rounded text-center">
+                <p className="text-xs font-sans text-gray-700">{shopifyError}</p>
+              </div>
             </div>
           ) : shopifyCustomer ? (
             <>
@@ -1754,8 +1758,10 @@ export default function ConversationView() {
               )}
             </>
           ) : (
-            <div className="p-3 bg-gray-50 rounded text-center">
-              <p className="text-xs font-sans text-gray-600">No Shopify customer found</p>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="p-3 bg-gray-50 rounded text-center">
+                <p className="text-xs font-sans text-gray-600">No Shopify customer found</p>
+              </div>
             </div>
           )}
         </div>
