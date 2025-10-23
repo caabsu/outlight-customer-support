@@ -11,58 +11,62 @@ type ConversationHistory = {
   messages: { direction: string }[];
 };
 
-// Aggressively sanitize email HTML to enforce consistent styling
+// Sanitize email HTML while preserving Gmail-like display
 function sanitizeEmailHtml(html: string): string {
   if (!html) return html;
 
   let sanitized = html;
 
-  // Remove all <style> tags and their content (embedded CSS)
+  // Remove only <style> tags (external CSS can break layout)
   sanitized = sanitized.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
 
-  // Remove all class attributes (single and double quotes)
+  // Remove class attributes (they reference removed styles)
   sanitized = sanitized.replace(/\sclass\s*=\s*"[^"]*"/gi, '');
   sanitized = sanitized.replace(/\sclass\s*=\s*'[^']*'/gi, '');
 
-  // Remove all inline style attributes completely (single and double quotes)
-  sanitized = sanitized.replace(/\sstyle\s*=\s*"[^"]*"/gi, '');
-  sanitized = sanitized.replace(/\sstyle\s*=\s*'[^']*'/gi, '');
+  // Gmail-like approach: Keep inline styles but override problematic ones with CSS
+  // Don't remove inline styles - they contain important formatting like text-align, color, etc.
 
-  // DON'T remove width/height from tables and images (needed for layout)
-  // Only remove from text elements that break layout
-  sanitized = sanitized.replace(/<(span|div|p|h1|h2|h3|h4|h5|h6)[^>]*\s(width|height)\s*=\s*"[^"]*"/gi, '<$1');
-  sanitized = sanitized.replace(/<(span|div|p|h1|h2|h3|h4|h5|h6)[^>]*\s(width|height)\s*=\s*'[^']*'/gi, '<$1');
-
-  // Remove any <font> tags but keep their content
-  sanitized = sanitized.replace(/<font[^>]*>/gi, '');
-  sanitized = sanitized.replace(/<\/font>/gi, '');
-
-  // Wrap in a div with CSS to force content to fit width (no horizontal scroll)
-  return `<div style="max-width: 100%; overflow-x: hidden; overflow-y: visible;">
+  // Wrap with CSS that constrains width while preserving original formatting
+  return `<div class="gmail-email-body" style="width: 100%; overflow: hidden;">
     <style>
-      .email-html-container table {
+      /* Constrain tables to container width */
+      .email-html-container .gmail-email-body table {
         max-width: 100% !important;
-        width: 100% !important;
-        table-layout: fixed !important;
-        word-wrap: break-word !important;
+        box-sizing: border-box !important;
       }
-      .email-html-container td, .email-html-container th {
-        word-wrap: break-word !important;
-        word-break: break-word !important;
-        overflow-wrap: break-word !important;
-      }
-      .email-html-container img {
+
+      /* Make images responsive */
+      .email-html-container .gmail-email-body img {
         max-width: 100% !important;
         height: auto !important;
+        box-sizing: border-box !important;
       }
-      .email-html-container * {
+
+      /* Constrain any element with explicit width */
+      .email-html-container .gmail-email-body div[style*="width"],
+      .email-html-container .gmail-email-body table[style*="width"] {
         max-width: 100% !important;
+        box-sizing: border-box !important;
+      }
+
+      /* Allow text to wrap naturally */
+      .email-html-container .gmail-email-body td,
+      .email-html-container .gmail-email-body th,
+      .email-html-container .gmail-email-body p,
+      .email-html-container .gmail-email-body div {
         word-wrap: break-word !important;
-        word-break: break-word !important;
         overflow-wrap: break-word !important;
       }
-      .email-html-container a {
-        word-break: break-all !important;
+
+      /* Break long URLs but preserve normal text breaking */
+      .email-html-container .gmail-email-body a {
+        word-break: break-word !important;
+      }
+
+      /* Prevent horizontal overflow */
+      .email-html-container .gmail-email-body * {
+        box-sizing: border-box !important;
       }
     </style>
     ${sanitized}
@@ -1342,14 +1346,12 @@ export default function ConversationView() {
                     width: '100%',
                     backgroundColor: '#ffffff',
                     color: '#000000',
-                    borderColor: '#e5e7eb',
-                    wordBreak: 'break-word',
-                    overflowWrap: 'break-word'
+                    borderColor: '#e5e7eb'
                   }}
                   dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(message.bodyHtml) }}
                 />
               ) : (
-                <p className="text-sm font-sans whitespace-pre-wrap break-words overflow-hidden" style={{ fontWeight: 400, color: '#000000', maxWidth: '100%' }}>
+                <p className="text-sm font-sans whitespace-pre-wrap overflow-hidden" style={{ fontWeight: 400, color: '#000000', maxWidth: '100%', wordWrap: 'break-word' }}>
                   {message.bodyText}
                 </p>
               )}
