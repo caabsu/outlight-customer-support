@@ -37,12 +37,33 @@ function sanitizeEmailHtml(html: string): string {
   sanitized = sanitized.replace(/<font[^>]*>/gi, '');
   sanitized = sanitized.replace(/<\/font>/gi, '');
 
-  // Wrap in a div with CSS to handle overflow properly
-  return `<div style="max-width: 100%; overflow-x: auto;">
+  // Wrap in a div with CSS to force content to fit width (no horizontal scroll)
+  return `<div style="max-width: 100%; overflow-x: hidden; overflow-y: visible;">
     <style>
-      .email-html-container table { max-width: 100%; table-layout: auto; }
-      .email-html-container img { max-width: 100%; height: auto; }
-      .email-html-container * { max-width: 100%; word-wrap: break-word; }
+      .email-html-container table {
+        max-width: 100% !important;
+        width: 100% !important;
+        table-layout: fixed !important;
+        word-wrap: break-word !important;
+      }
+      .email-html-container td, .email-html-container th {
+        word-wrap: break-word !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+      }
+      .email-html-container img {
+        max-width: 100% !important;
+        height: auto !important;
+      }
+      .email-html-container * {
+        max-width: 100% !important;
+        word-wrap: break-word !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+      }
+      .email-html-container a {
+        word-break: break-all !important;
+      }
     </style>
     ${sanitized}
   </div>`;
@@ -1280,7 +1301,7 @@ export default function ConversationView() {
 
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto overflow-x-auto p-6 space-y-6">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
         {selectedConversation.messages.map((message) => (
           <div
             key={message.id}
@@ -1312,7 +1333,7 @@ export default function ConversationView() {
             <div className="email-content">
               {message.bodyHtml ? (
                 <div
-                  className="email-html-container font-sans p-4 rounded border overflow-auto"
+                  className="email-html-container font-sans p-4 rounded border overflow-y-auto overflow-x-hidden"
                   style={{
                     fontWeight: 400,
                     fontSize: '14px',
@@ -1328,7 +1349,7 @@ export default function ConversationView() {
                   dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(message.bodyHtml) }}
                 />
               ) : (
-                <p className="text-sm font-sans whitespace-pre-wrap break-words" style={{ fontWeight: 400, color: '#000000' }}>
+                <p className="text-sm font-sans whitespace-pre-wrap break-words overflow-hidden" style={{ fontWeight: 400, color: '#000000', maxWidth: '100%' }}>
                   {message.bodyText}
                 </p>
               )}
