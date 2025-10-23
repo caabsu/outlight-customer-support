@@ -1387,7 +1387,7 @@ export default function ConversationView() {
     </div>
 
     {/* Right Sidebar */}
-    <div className="w-80 border-l border-border bg-background flex flex-col shrink-0 overflow-hidden">
+    <div className="w-80 border-l border-gray-200 bg-gray-50 flex flex-col shrink-0 overflow-hidden">
       {/* Past Conversations Section */}
       <div className="border-b border-gray-200">
         <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
