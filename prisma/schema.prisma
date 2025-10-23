@@ -27,25 +27,26 @@ model Customer {
 }
 
 model Conversation {
-  id                    String    @id @default(uuid())
-  gmailThreadId         String    @unique
+  id                    String         @id @default(uuid())
+  gmailThreadId         String         @unique
   subject               String?
-  customer              Customer  @relation(fields: [customerId], references: [id])
+  customer              Customer       @relation(fields: [customerId], references: [id])
   customerId            String
-  status                String    @default("open")
-  assignedUser          User?     @relation("UserConversations", fields: [assignedUserId], references: [id])
+  status                String         @default("open")
+  assignedUser          User?          @relation("UserConversations", fields: [assignedUserId], references: [id])
   assignedUserId        String?
   firstMessageAt        DateTime?
   lastMessageAt         DateTime?
   lastHistoryId         BigInt?
-  unreadAgent           Boolean   @default(true)
-  createdAt             DateTime  @default(now())
-  starred               Boolean   @default(false)
-  archived              Boolean   @default(false)
-  tags                  String[]  @default([])
+  unreadAgent           Boolean        @default(true)
+  createdAt             DateTime       @default(now())
+  starred               Boolean        @default(false)
+  archived              Boolean        @default(false)
+  tags                  String[]       @default([])
   aiSummary             String?
   aiSummaryGeneratedAt  DateTime?
   messages              Message[]
+  draftResponse         DraftResponse?
 }
 
 model Message {
@@ -83,4 +84,20 @@ model KnowledgeBase {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model DraftResponse {
+  id                 String       @id @default(uuid())
+  conversation       Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId     String       @unique
+  internalReasoning  String?
+  tags               String[]     @default([])
+  category           String?
+  reasoning          String?
+  shouldDraft        Boolean      @default(false)
+  draft              String?
+  actionSteps        Json?
+  orderInfo          Json?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 }

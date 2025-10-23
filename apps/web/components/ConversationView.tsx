@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useConversations } from "@/lib/ConversationContext";
 import { useRouter } from "next/navigation";
 
@@ -11,33 +11,66 @@ type ConversationHistory = {
   messages: { direction: string }[];
 };
 
-// Aggressively sanitize email HTML to enforce consistent styling
+// Sanitize email HTML while preserving Gmail-like display
 function sanitizeEmailHtml(html: string): string {
   if (!html) return html;
 
   let sanitized = html;
 
-  // Remove all <style> tags and their content (embedded CSS)
+  // Remove only <style> tags (external CSS can break layout)
   sanitized = sanitized.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
 
-  // Remove all class attributes (single and double quotes)
+  // Remove class attributes (they reference removed styles)
   sanitized = sanitized.replace(/\sclass\s*=\s*"[^"]*"/gi, '');
   sanitized = sanitized.replace(/\sclass\s*=\s*'[^']*'/gi, '');
 
-  // Remove all inline style attributes completely (single and double quotes)
-  sanitized = sanitized.replace(/\sstyle\s*=\s*"[^"]*"/gi, '');
-  sanitized = sanitized.replace(/\sstyle\s*=\s*'[^']*'/gi, '');
+  // Gmail-like approach: Keep inline styles but override problematic ones with CSS
+  // Don't remove inline styles - they contain important formatting like text-align, color, etc.
 
-  // DON'T remove width/height from tables and images (needed for layout)
-  // Only remove from text elements that break layout
-  sanitized = sanitized.replace(/<(span|div|p|h1|h2|h3|h4|h5|h6)[^>]*\s(width|height)\s*=\s*"[^"]*"/gi, '<$1');
-  sanitized = sanitized.replace(/<(span|div|p|h1|h2|h3|h4|h5|h6)[^>]*\s(width|height)\s*=\s*'[^']*'/gi, '<$1');
+  // Wrap with CSS that constrains width while preserving original formatting
+  return `<div class="gmail-email-body" style="width: 100%; overflow: hidden;">
+    <style>
+      /* Constrain tables to container width */
+      .email-html-container .gmail-email-body table {
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+      }
 
-  // Remove any <font> tags but keep their content
-  sanitized = sanitized.replace(/<font[^>]*>/gi, '');
-  sanitized = sanitized.replace(/<\/font>/gi, '');
+      /* Make images responsive */
+      .email-html-container .gmail-email-body img {
+        max-width: 100% !important;
+        height: auto !important;
+        box-sizing: border-box !important;
+      }
 
-  return sanitized;
+      /* Constrain any element with explicit width */
+      .email-html-container .gmail-email-body div[style*="width"],
+      .email-html-container .gmail-email-body table[style*="width"] {
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+      }
+
+      /* Allow text to wrap naturally */
+      .email-html-container .gmail-email-body td,
+      .email-html-container .gmail-email-body th,
+      .email-html-container .gmail-email-body p,
+      .email-html-container .gmail-email-body div {
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+      }
+
+      /* Break long URLs but preserve normal text breaking */
+      .email-html-container .gmail-email-body a {
+        word-break: break-word !important;
+      }
+
+      /* Prevent horizontal overflow */
+      .email-html-container .gmail-email-body * {
+        box-sizing: border-box !important;
+      }
+    </style>
+    ${sanitized}
+  </div>`;
 }
 
 export default function ConversationView() {
@@ -115,6 +148,9 @@ export default function ConversationView() {
   const draftData = selectedConversation?.id ? draftsByConversationId[selectedConversation.id] : null;
   const loadingDraft = selectedConversation?.id ? loadingDraftByConversationId[selectedConversation.id] || false : false;
 
+  // Track which conversations we've already attempted to auto-load drafts for
+  const autoLoadAttemptedRef = useRef<Set<string>>(new Set());
+
   // Fetch conversation history
   useEffect(() => {
     if (selectedConversation?.id) {
@@ -144,6 +180,51 @@ export default function ConversationView() {
     setShowKBTab(false);
     setShowSummarizeKBTab(false);
     setDraftError(null);
+  }, [selectedConversation?.id]);
+
+  // Auto-load existing draft from database when conversation is selected
+  useEffect(() => {
+    if (!selectedConversation?.id) return;
+
+    // Check if we already have the draft in state
+    if (draftsByConversationId[selectedConversation.id]) return;
+
+    // Don't auto-load if draft is currently being generated
+    if (loadingDraftByConversationId[selectedConversation.id]) return;
+
+    // Check if we've already attempted to auto-load this conversation
+    if (autoLoadAttemptedRef.current.has(selectedConversation.id)) return;
+
+    // Mark this conversation as attempted
+    autoLoadAttemptedRef.current.add(selectedConversation.id);
+
+    // Fetch draft from database
+    const apiUrl = process.env.NODE_ENV === 'development'
+      ? `http://localhost:3001/conversations/${selectedConversation.id}/draft`
+      : `/api/conversations/${selectedConversation.id}/draft`;
+
+    fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ forceRegenerate: false })
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch draft");
+        return res.json();
+      })
+      .then((data) => {
+        // Only save to state if this is a cached draft from database
+        if (data.fromDatabase) {
+          setDraftsByConversationId(prev => ({
+            ...prev,
+            [selectedConversation.id]: data
+          }));
+        }
+      })
+      .catch((err) => {
+        // Silently fail - draft might not exist yet, which is fine
+        console.log(`No existing draft for conversation ${selectedConversation.id}`);
+      });
   }, [selectedConversation?.id]);
 
   // Fetch Shopify customer data
@@ -1279,7 +1360,7 @@ export default function ConversationView() {
                   dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(message.bodyHtml) }}
                 />
               ) : (
-                <p className="text-sm font-sans whitespace-pre-wrap" style={{ fontWeight: 400, color: '#000000' }}>
+                <p className="text-sm font-sans whitespace-pre-wrap overflow-hidden" style={{ fontWeight: 400, color: '#000000', maxWidth: '100%', wordWrap: 'break-word' }}>
                   {message.bodyText}
                 </p>
               )}
@@ -1315,7 +1396,7 @@ export default function ConversationView() {
     </div>
 
     {/* Right Sidebar */}
-    <div className="w-80 border-l border-border bg-background flex flex-col shrink-0 overflow-hidden">
+    <div className="w-80 border-l border-gray-200 bg-gray-50 flex flex-col shrink-0 overflow-hidden">
       {/* Past Conversations Section */}
       <div className="border-b border-gray-200">
         <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
@@ -1482,15 +1563,19 @@ export default function ConversationView() {
           </div>
         </div>
 
-        <div className="px-4 py-3 bg-white space-y-2 max-h-[400px] overflow-y-auto">
+        <div className="px-4 py-3 bg-white h-[400px] overflow-y-auto flex flex-col">
           {loadingShopify ? (
-            <div className="p-4 text-center">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500 mx-auto mb-2"></div>
-              <p className="text-xs font-sans text-gray-600">Loading...</p>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500 mx-auto mb-2"></div>
+                <p className="text-xs font-sans text-gray-600">Loading...</p>
+              </div>
             </div>
           ) : shopifyError ? (
-            <div className="p-3 bg-gray-50 rounded text-center">
-              <p className="text-xs font-sans text-gray-700">{shopifyError}</p>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="p-3 bg-gray-50 rounded text-center">
+                <p className="text-xs font-sans text-gray-700">{shopifyError}</p>
+              </div>
             </div>
           ) : shopifyCustomer ? (
             <>
@@ -1682,8 +1767,10 @@ export default function ConversationView() {
               )}
             </>
           ) : (
-            <div className="p-3 bg-gray-50 rounded text-center">
-              <p className="text-xs font-sans text-gray-600">No Shopify customer found</p>
+            <div className="flex-1 flex items-center justify-center">
+              <div className="p-3 bg-gray-50 rounded text-center">
+                <p className="text-xs font-sans text-gray-600">No Shopify customer found</p>
+              </div>
             </div>
           )}
         </div>
@@ -2929,7 +3016,7 @@ export default function ConversationView() {
                         {draftData.draft}
                       </div>
                     </div>
-                  ) : draftData.actionSteps && draftData.actionSteps.length > 0 ? (
+                  ) : draftData.actionSteps && (Array.isArray(draftData.actionSteps) ? draftData.actionSteps.length > 0 : true) ? (
                     <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
                       <h4 className="text-xs font-sans font-bold text-yellow-900 uppercase tracking-wide mb-3 flex items-center gap-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2938,7 +3025,12 @@ export default function ConversationView() {
                         Action Steps for Agent
                       </h4>
                       <ol className="space-y-2">
-                        {draftData.actionSteps.map((step: string, index: number) => (
+                        {(Array.isArray(draftData.actionSteps)
+                          ? draftData.actionSteps
+                          : typeof draftData.actionSteps === 'string'
+                            ? draftData.actionSteps.split('\n').filter(s => s.trim())
+                            : []
+                        ).map((step: string, index: number) => (
                           <li key={index} className="flex items-start gap-3">
                             <span className="flex-shrink-0 w-6 h-6 bg-yellow-600 text-white rounded-full flex items-center justify-center text-xs font-sans font-bold">
                               {index + 1}
@@ -2973,18 +3065,34 @@ export default function ConversationView() {
                 Regenerate Draft
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (confirm('Are you sure you want to delete this draft? This cannot be undone.')) {
                     setShowDraftPopup(false);
                     setDraftMinimized(false);
                     setDraftError(null);
                     // Delete draft for current conversation
                     if (selectedConversation?.id) {
+                      // Delete from frontend state
                       setDraftsByConversationId(prev => {
                         const newDrafts = { ...prev };
                         delete newDrafts[selectedConversation.id];
                         return newDrafts;
                       });
+
+                      // Delete from database
+                      try {
+                        const apiUrl = process.env.NODE_ENV === 'development'
+                          ? `http://localhost:3001/conversations/${selectedConversation.id}/draft`
+                          : `/api/conversations/${selectedConversation.id}/draft`;
+
+                        await fetch(apiUrl, {
+                          method: "DELETE"
+                        });
+                        console.log(`Deleted draft from database for conversation ${selectedConversation.id}`);
+                      } catch (error) {
+                        console.error("Failed to delete draft from database:", error);
+                        // Don't show error to user since frontend state is already updated
+                      }
                     }
                   }
                 }}
