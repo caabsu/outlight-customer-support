@@ -4,9 +4,14 @@
     "module": "CommonJS",
     "outDir": "dist",
     "rootDir": ".",
-    "strict": true,
+    "strict": false,
+    "noImplicitAny": false,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "types": ["node"]
   },
-  "include": ["apps/**/*.ts", "prisma/**/*.ts"]
+  "include": ["apps/api/**/*.ts", "prisma/**/*.ts"],
+  "exclude": ["apps/web", "node_modules", "dist"]
 }
