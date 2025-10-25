@@ -7,8 +7,10 @@
         "dev": "ts-node apps/api/src/server.ts",
         "dev:web": "cd apps/web && npm run dev",
         "dev:all": "concurrently \"npm run dev\" \"npm run dev:web\" --names \"API,WEB\" --prefix-colors \"cyan,magenta\"",
-        "build": "cd apps/web && npm install && npm run build",
-        "start": "cd apps/web && npm start",
+        "build": "tsc && npx prisma generate",
+        "build:web": "cd apps/web && npm install && npm run build",
+        "start": "npx prisma migrate deploy && node dist/apps/api/src/server.js",
+        "start:web": "cd apps/web && npm start",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "repository": {
@@ -28,7 +30,6 @@
         "@types/express": "^5.0.3",
         "@types/node": "^24.9.1",
         "concurrently": "^9.2.1",
-        "prisma": "^6.17.1",
         "ts-node": "^10.9.2",
         "typescript": "^5.9.3"
     },
@@ -41,6 +42,7 @@
         "googleapis": "^164.1.0",
         "openai": "^6.6.0",
         "pg": "^8.16.3",
+        "prisma": "^6.17.1",
         "zod": "^4.1.12"
     }
 }
