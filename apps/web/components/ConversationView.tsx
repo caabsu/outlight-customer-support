@@ -3029,7 +3029,7 @@ export default function ConversationView() {
                         {(Array.isArray(draftData.actionSteps)
                           ? draftData.actionSteps
                           : typeof draftData.actionSteps === 'string'
-                            ? draftData.actionSteps.split('\n').filter(s => s.trim())
+                            ? draftData.actionSteps.split('\n').filter((s: string) => s.trim())
                             : []
                         ).map((step: string, index: number) => (
                           <li key={index} className="flex items-start gap-3">
