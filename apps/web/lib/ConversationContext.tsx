@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 
-type Message = {
+export type Message = {
   id: string;
   fromEmail: string;
   toEmails: string[];
@@ -13,7 +13,7 @@ type Message = {
   replyToEmail: string | null;
 };
 
-type Conversation = {
+export type Conversation = {
   id: string;
   subject: string;
   customerId: string;
