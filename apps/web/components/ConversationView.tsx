@@ -1222,7 +1222,7 @@ export default function ConversationView() {
             </p>
             <p className="flex items-center gap-2 justify-center">
               <span className="text-primary">→</span>
-              Click "Next" to jump to unreplied emails
+              Click &quot;Next&quot; to jump to unreplied emails
             </p>
             <p className="flex items-center gap-2 justify-center">
               <span className="text-primary">→</span>
@@ -2615,7 +2615,7 @@ export default function ConversationView() {
                       This action cannot be undone.
                     </p>
                     <p className="text-sm font-sans text-amber-800">
-                      Click "Process Refund" again to confirm.
+                      Click &quot;Process Refund&quot; again to confirm.
                     </p>
                   </div>
                 </div>

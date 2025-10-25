@@ -180,6 +180,7 @@ export function ConversationProvider({
       mounted = false;
       if (retryTimer) clearTimeout(retryTimer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - only run once on mount
 
 
