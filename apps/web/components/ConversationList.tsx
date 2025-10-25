@@ -1,28 +1,7 @@
 "use client";
 
-import { useConversations } from "@/lib/ConversationContext";
+import { useConversations, type Conversation } from "@/lib/ConversationContext";
 import { useState } from "react";
-
-type Conversation = {
-  id: string;
-  subject: string;
-  customerId: string;
-  status: string;
-  lastMessageAt: string;
-  unreadAgent: boolean;
-  starred: boolean;
-  archived: boolean;
-  tags: string[];
-  customer: {
-    name: string | null;
-    primaryEmail: string;
-  };
-  messages: {
-    bodyText: string | null;
-    fromEmail: string;
-    direction: string;
-  }[];
-};
 
 export default function ConversationList() {
   const { conversations, selectedConversation, selectConversation, loading, refreshing, refreshProgress, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived, showSent, pagination, nextPage, prevPage, pageTransitioning } =

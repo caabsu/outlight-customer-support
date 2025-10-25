@@ -48,10 +48,6 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<"24h" | "7d" | "30d" | "90d">("7d");
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, [period]);
-
   const fetchAnalytics = async () => {
     setLoading(true);
     try {
@@ -64,6 +60,11 @@ export default function AnalyticsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period]);
 
   const formatHours = (hours: number) => {
     if (hours < 1) {

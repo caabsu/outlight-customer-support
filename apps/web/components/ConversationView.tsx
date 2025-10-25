@@ -225,6 +225,7 @@ export default function ConversationView() {
         // Silently fail - draft might not exist yet, which is fine
         console.log(`No existing draft for conversation ${selectedConversation.id}`);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConversation?.id]);
 
   // Fetch Shopify customer data
@@ -1221,7 +1222,7 @@ export default function ConversationView() {
             </p>
             <p className="flex items-center gap-2 justify-center">
               <span className="text-primary">→</span>
-              Click "Next" to jump to unreplied emails
+              Click &quot;Next&quot; to jump to unreplied emails
             </p>
             <p className="flex items-center gap-2 justify-center">
               <span className="text-primary">→</span>
@@ -2614,7 +2615,7 @@ export default function ConversationView() {
                       This action cannot be undone.
                     </p>
                     <p className="text-sm font-sans text-amber-800">
-                      Click "Process Refund" again to confirm.
+                      Click &quot;Process Refund&quot; again to confirm.
                     </p>
                   </div>
                 </div>
@@ -3028,7 +3029,7 @@ export default function ConversationView() {
                         {(Array.isArray(draftData.actionSteps)
                           ? draftData.actionSteps
                           : typeof draftData.actionSteps === 'string'
-                            ? draftData.actionSteps.split('\n').filter(s => s.trim())
+                            ? draftData.actionSteps.split('\n').filter((s: string) => s.trim())
                             : []
                         ).map((step: string, index: number) => (
                           <li key={index} className="flex items-start gap-3">

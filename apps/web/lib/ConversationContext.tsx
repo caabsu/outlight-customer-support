@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 
-type Message = {
+export type Message = {
   id: string;
   fromEmail: string;
   toEmails: string[];
@@ -13,7 +13,7 @@ type Message = {
   replyToEmail: string | null;
 };
 
-type Conversation = {
+export type Conversation = {
   id: string;
   subject: string;
   customerId: string;
@@ -180,6 +180,7 @@ export function ConversationProvider({
       mounted = false;
       if (retryTimer) clearTimeout(retryTimer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - only run once on mount
 
 
