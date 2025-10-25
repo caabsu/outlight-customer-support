@@ -1,15 +1,17 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
-  // Disable static optimization to prevent static page generation errors
-  experimental: {
-    staticGenerationRetryCount: 0,
-  },
+  // Fix for monorepo - tell Next.js where the root is
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   async rewrites() {
+    // Use environment variable for API URL, fallback to localhost for development
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
     return [
       {
         source: "/api/:path*",
-        destination: "http://localhost:3001/:path*",
+        destination: `${apiUrl}/:path*`,
       },
     ];
   },
