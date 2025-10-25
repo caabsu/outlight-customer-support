@@ -225,6 +225,7 @@ export default function ConversationView() {
         // Silently fail - draft might not exist yet, which is fine
         console.log(`No existing draft for conversation ${selectedConversation.id}`);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConversation?.id]);
 
   // Fetch Shopify customer data
