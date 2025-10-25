@@ -9,7 +9,7 @@ export default function Dashboard() {
           <h1 className="text-4xl font-serif text-foreground">
             outlight
           </h1>
-          <p className="text-muted-foreground mt-2 font-sans">Customer Support Platform</p>
+          <p className="text-muted-foreground mt-2 font-sans">Internal Support Tool</p>
         </div>
       </header>
 
@@ -21,9 +21,9 @@ export default function Dashboard() {
             Welcome to <span className="font-serif">outlight</span>
           </h2>
           <p className="text-xl font-sans text-muted-foreground leading-relaxed">
-            Streamline your customer support with intelligent email management,
-            automated tagging, and powerful insights. Everything you need to
-            provide exceptional customer service, all in one place.
+            Internal customer support tool for the Outlight lighting brand.
+            Manage email conversations, track customer orders, and provide
+            exceptional service to our lighting customers, all in one place.
           </p>
         </div>
 
@@ -198,7 +198,7 @@ export default function Dashboard() {
       {/* Footer */}
       <footer className="border-t border-border py-8">
         <div className="container mx-auto px-6 text-center text-sm text-muted-foreground font-sans">
-          <p>&copy; 2025 <span className="font-serif">outlight</span>. Built for exceptional customer support.</p>
+          <p>&copy; 2025 <span className="font-serif">outlight</span>. Internal tool for our lighting support team.</p>
         </div>
       </footer>
     </div>

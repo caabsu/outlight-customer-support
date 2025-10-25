@@ -74,7 +74,26 @@ function sanitizeEmailHtml(html: string): string {
 }
 
 export default function ConversationView() {
-  const { conversations, selectedConversation, selectConversation, refreshConversations, updateConversationOptimistic, pagination, goToPage } = useConversations();
+  const {
+    conversations,
+    selectedConversation,
+    selectConversation,
+    refreshConversations,
+    updateConversationOptimistic,
+    pagination,
+    goToPage,
+    showEmailComposer,
+    openEmailComposer,
+    closeEmailComposer,
+    composerTo,
+    setComposerTo,
+    composerSubject,
+    setComposerSubject,
+    composerBody,
+    setComposerBody,
+    composerAttachments,
+    setComposerAttachments
+  } = useConversations();
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
@@ -100,13 +119,6 @@ export default function ConversationView() {
   const [shopifySearchQuery, setShopifySearchQuery] = useState("");
   const [searchingShopify, setSearchingShopify] = useState(false);
   const [detectingEmail, setDetectingEmail] = useState(false);
-
-  // Email composer state
-  const [showEmailComposer, setShowEmailComposer] = useState(false);
-  const [composerTo, setComposerTo] = useState("");
-  const [composerSubject, setComposerSubject] = useState("");
-  const [composerBody, setComposerBody] = useState("");
-  const [composerAttachments, setComposerAttachments] = useState<File[]>([]);
   const [sendingEmail, setSendingEmail] = useState(false);
 
   // Refund state
@@ -881,16 +893,6 @@ export default function ConversationView() {
     }
   };
 
-  // Open email composer
-  const openEmailComposer = (to?: string, subject?: string) => {
-    // Start with empty fields unless explicitly provided
-    setComposerTo(to || "");
-    setComposerSubject(subject || "");
-    setComposerBody("");
-    setComposerAttachments([]);
-    setShowEmailComposer(true);
-  };
-
   // Handle file attachments
   const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -928,7 +930,7 @@ export default function ConversationView() {
       });
 
       if (response.ok) {
-        setShowEmailComposer(false);
+        closeEmailComposer();
         setComposerTo("");
         setComposerSubject("");
         setComposerBody("");
@@ -2037,22 +2039,6 @@ export default function ConversationView() {
           </div>
         </div>
       </div>
-
-      {/* Spacer - leaves room at bottom above compose email */}
-      <div className="flex-1 min-h-[60px]"></div>
-
-      {/* Compose Email Button */}
-      <div className="border-t border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100 p-4">
-        <button
-          onClick={() => openEmailComposer()}
-          className="w-full px-3 py-2.5 bg-teal-500 hover:bg-teal-600 text-white rounded-md transition-colors text-sm font-sans font-semibold flex items-center justify-center gap-2 shadow-sm"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          <span>Compose Email</span>
-        </button>
-      </div>
     </div>
 
     {/* View All Past Conversations Modal */}
@@ -2119,7 +2105,7 @@ export default function ConversationView() {
               Compose Email
             </h2>
             <button
-              onClick={() => setShowEmailComposer(false)}
+              onClick={() => closeEmailComposer()}
               className="text-white hover:text-gray-200 transition-colors text-xl"
             >
               ✕
@@ -2210,7 +2196,7 @@ export default function ConversationView() {
           {/* Footer */}
           <div className="px-6 py-4 border-t border-border shrink-0 flex items-center justify-between bg-secondary/30">
             <button
-              onClick={() => setShowEmailComposer(false)}
+              onClick={() => closeEmailComposer()}
               className="px-4 py-2 bg-muted text-foreground rounded-lg text-sm font-sans font-medium hover:bg-accent transition-colors"
             >
               Cancel
