@@ -9,7 +9,7 @@
         "dev:all": "concurrently \"npm run dev\" \"npm run dev:web\" --names \"API,WEB\" --prefix-colors \"cyan,magenta\"",
         "build": "tsc && npx prisma generate",
         "build:web": "cd apps/web && npm install && npm run build",
-        "start": "npx prisma migrate deploy && node dist/apps/api/src/server.js",
+        "start": "node dist/apps/api/src/server.js",
         "start:web": "cd apps/web && npm start",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
