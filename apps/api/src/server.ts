@@ -916,6 +916,127 @@ ${emailBody}`;
   }
 });
 
+/**
+ * AI Writing Assistant for Knowledge Base
+ * POST /ai/write-kb
+ * Body: { prompt: string, category: string, existingContent?: string }
+ */
+app.post("/ai/write-kb", async (req: Request, res: Response) => {
+  try {
+    const { prompt, category, existingContent } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({ error: "prompt is required" });
+    }
+
+    // System prompt tailored for KB writing
+    const systemPrompt = `You are a professional knowledge base content writer for Outlight, a lighting products company. Your role is to create clear, accurate, and helpful knowledge base articles for customer support.
+
+WRITING GUIDELINES:
+1. Write in a professional but friendly tone
+2. Be specific and actionable
+3. Include relevant examples when helpful
+4. Format with clear paragraphs and bullet points
+5. Focus on accuracy and completeness
+6. Consider the category: ${category}
+
+CATEGORY GUIDANCE:
+- General: Information useful across all customer support scenarios
+- Summary: Guidelines for summarizing customer emails
+- Draft Reply: Templates and policies for drafting responses
+- Suggest Tags: Rules for categorizing and tagging conversations
+- Find Similar: Criteria for identifying similar conversations
+
+OUTPUT:
+Return ONLY the knowledge base content itself - no meta-commentary, no "here is...", no quotes around it. Just the content that will be saved to the knowledge base.`;
+
+    let userMessage = `Write knowledge base content based on this request:\n\n${prompt}`;
+
+    if (existingContent) {
+      userMessage += `\n\nExisting content to build upon or reference:\n${existingContent}`;
+    }
+
+    // Call OpenAI API
+    const response = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    });
+
+    const content = response.choices[0].message.content?.trim() || '';
+
+    res.json({ content });
+  } catch (error) {
+    console.error("Error in AI write-kb:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to generate content"
+    });
+  }
+});
+
+/**
+ * AI Editing Assistant for Knowledge Base
+ * POST /ai/edit-kb
+ * Body: { content: string, title: string, category: string, instructions?: string }
+ */
+app.post("/ai/edit-kb", async (req: Request, res: Response) => {
+  try {
+    const { content, title, category, instructions } = req.body;
+
+    if (!content) {
+      return res.status(400).json({ error: "content is required" });
+    }
+
+    const editingInstructions = instructions || "Improve clarity, grammar, and professional tone";
+
+    // System prompt tailored for KB editing
+    const systemPrompt = `You are a professional editor for Outlight's customer support knowledge base. Your role is to improve existing knowledge base content while maintaining accuracy and intent.
+
+EDITING PRINCIPLES:
+1. Preserve the original meaning and facts
+2. Improve clarity and readability
+3. Fix grammar, spelling, and punctuation errors
+4. Enhance professional tone while staying friendly
+5. Improve structure and formatting
+6. Remove redundancy and verbosity
+7. Ensure consistency with Outlight's brand (lighting products company)
+
+CONTEXT:
+- Title: ${title || 'Untitled'}
+- Category: ${category}
+- Editing goal: ${editingInstructions}
+
+OUTPUT:
+Return ONLY the improved knowledge base content - no meta-commentary, no explanations of changes, no "here is the edited version". Just the edited content itself.`;
+
+    const userMessage = `Edit this knowledge base content:\n\n${content}`;
+
+    // Call OpenAI API
+    const response = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage }
+      ],
+      temperature: 0.3,  // Lower temperature for editing to stay closer to original
+      max_tokens: 1500
+    });
+
+    const improvedContent = response.choices[0].message.content?.trim() || '';
+
+    res.json({ content: improvedContent });
+  } catch (error) {
+    console.error("Error in AI edit-kb:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to edit content"
+    });
+  }
+});
+
 // ============================================================================
 // SHOPIFY API ENDPOINTS
 // ============================================================================
