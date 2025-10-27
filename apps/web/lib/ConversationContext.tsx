@@ -56,6 +56,17 @@ type ConversationContextType = {
   nextPage: () => void;
   prevPage: () => void;
   pageTransitioning: boolean;
+  showEmailComposer: boolean;
+  openEmailComposer: (to?: string, subject?: string) => void;
+  closeEmailComposer: () => void;
+  composerTo: string;
+  setComposerTo: (to: string) => void;
+  composerSubject: string;
+  setComposerSubject: (subject: string) => void;
+  composerBody: string;
+  setComposerBody: (body: string) => void;
+  composerAttachments: File[];
+  setComposerAttachments: (files: File[]) => void;
 };
 
 const ConversationContext = createContext<ConversationContextType | undefined>(
@@ -77,6 +88,13 @@ export function ConversationProvider({
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageTransitioning, setPageTransitioning] = useState(false);
+
+  // Email composer state
+  const [showEmailComposer, setShowEmailComposer] = useState(false);
+  const [composerTo, setComposerTo] = useState("");
+  const [composerSubject, setComposerSubject] = useState("");
+  const [composerBody, setComposerBody] = useState("");
+  const [composerAttachments, setComposerAttachments] = useState<File[]>([]);
 
   const fetchConversations = async (silent = false, retryCount = 0, suppressErrors = false, page = currentPage) => {
     try {
@@ -277,6 +295,19 @@ export function ConversationProvider({
     }
   };
 
+  // Email composer functions
+  const openEmailComposer = (to?: string, subject?: string) => {
+    setComposerTo(to || "");
+    setComposerSubject(subject || "");
+    setComposerBody("");
+    setComposerAttachments([]);
+    setShowEmailComposer(true);
+  };
+
+  const closeEmailComposer = () => {
+    setShowEmailComposer(false);
+  };
+
   return (
     <ConversationContext.Provider
       value={{
@@ -298,6 +329,17 @@ export function ConversationProvider({
         nextPage,
         prevPage,
         pageTransitioning,
+        showEmailComposer,
+        openEmailComposer,
+        closeEmailComposer,
+        composerTo,
+        setComposerTo,
+        composerSubject,
+        setComposerSubject,
+        composerBody,
+        setComposerBody,
+        composerAttachments,
+        setComposerAttachments,
       }}
     >
       {children}

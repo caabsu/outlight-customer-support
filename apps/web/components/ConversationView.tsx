@@ -74,7 +74,26 @@ function sanitizeEmailHtml(html: string): string {
 }
 
 export default function ConversationView() {
-  const { conversations, selectedConversation, selectConversation, refreshConversations, updateConversationOptimistic, pagination, goToPage } = useConversations();
+  const {
+    conversations,
+    selectedConversation,
+    selectConversation,
+    refreshConversations,
+    updateConversationOptimistic,
+    pagination,
+    goToPage,
+    showEmailComposer,
+    openEmailComposer,
+    closeEmailComposer,
+    composerTo,
+    setComposerTo,
+    composerSubject,
+    setComposerSubject,
+    composerBody,
+    setComposerBody,
+    composerAttachments,
+    setComposerAttachments
+  } = useConversations();
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
@@ -100,13 +119,6 @@ export default function ConversationView() {
   const [shopifySearchQuery, setShopifySearchQuery] = useState("");
   const [searchingShopify, setSearchingShopify] = useState(false);
   const [detectingEmail, setDetectingEmail] = useState(false);
-
-  // Email composer state
-  const [showEmailComposer, setShowEmailComposer] = useState(false);
-  const [composerTo, setComposerTo] = useState("");
-  const [composerSubject, setComposerSubject] = useState("");
-  const [composerBody, setComposerBody] = useState("");
-  const [composerAttachments, setComposerAttachments] = useState<File[]>([]);
   const [sendingEmail, setSendingEmail] = useState(false);
 
   // Refund state
@@ -143,6 +155,11 @@ export default function ConversationView() {
     general: true,
     toolSpecific: true
   });
+  const [editingDraft, setEditingDraft] = useState(false);
+  const [editedDraftText, setEditedDraftText] = useState("");
+
+  // Sidebar resize state
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(320); // 320px = 20rem = w-80
 
   // Get current conversation's draft and loading state
   const draftData = selectedConversation?.id ? draftsByConversationId[selectedConversation.id] : null;
@@ -881,16 +898,6 @@ export default function ConversationView() {
     }
   };
 
-  // Open email composer
-  const openEmailComposer = (to?: string, subject?: string) => {
-    // Start with empty fields unless explicitly provided
-    setComposerTo(to || "");
-    setComposerSubject(subject || "");
-    setComposerBody("");
-    setComposerAttachments([]);
-    setShowEmailComposer(true);
-  };
-
   // Handle file attachments
   const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -928,7 +935,7 @@ export default function ConversationView() {
       });
 
       if (response.ok) {
-        setShowEmailComposer(false);
+        closeEmailComposer();
         setComposerTo("");
         setComposerSubject("");
         setComposerBody("");
@@ -1396,8 +1403,38 @@ export default function ConversationView() {
       </div>
     </div>
 
+    {/* Right Sidebar Resize Handle */}
+    <div
+      onMouseDown={(e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startWidth = rightSidebarWidth;
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+          const delta = startX - moveEvent.clientX; // Reversed delta for right sidebar
+          const newWidth = Math.max(280, Math.min(600, startWidth + delta)); // Min 280px, Max 600px
+          setRightSidebarWidth(newWidth);
+        };
+
+        const handleMouseUp = () => {
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+      }}
+      className="w-1 hover:w-2 bg-border hover:bg-primary cursor-col-resize shrink-0 transition-all group relative"
+    >
+      <div className="absolute inset-y-0 -left-1 -right-1"></div>
+    </div>
+
     {/* Right Sidebar */}
-    <div className="w-80 border-l border-gray-200 bg-gray-50 flex flex-col shrink-0 overflow-hidden">
+    <div style={{ width: `${rightSidebarWidth}px` }} className="border-l border-gray-200 bg-gray-50 flex flex-col shrink-0 overflow-y-auto">
       {/* Past Conversations Section */}
       <div className="border-b border-gray-200">
         <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
@@ -2037,22 +2074,6 @@ export default function ConversationView() {
           </div>
         </div>
       </div>
-
-      {/* Spacer - leaves room at bottom above compose email */}
-      <div className="flex-1 min-h-[60px]"></div>
-
-      {/* Compose Email Button */}
-      <div className="border-t border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100 p-4">
-        <button
-          onClick={() => openEmailComposer()}
-          className="w-full px-3 py-2.5 bg-teal-500 hover:bg-teal-600 text-white rounded-md transition-colors text-sm font-sans font-semibold flex items-center justify-center gap-2 shadow-sm"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          <span>Compose Email</span>
-        </button>
-      </div>
     </div>
 
     {/* View All Past Conversations Modal */}
@@ -2119,7 +2140,7 @@ export default function ConversationView() {
               Compose Email
             </h2>
             <button
-              onClick={() => setShowEmailComposer(false)}
+              onClick={() => closeEmailComposer()}
               className="text-white hover:text-gray-200 transition-colors text-xl"
             >
               ✕
@@ -2210,7 +2231,7 @@ export default function ConversationView() {
           {/* Footer */}
           <div className="px-6 py-4 border-t border-border shrink-0 flex items-center justify-between bg-secondary/30">
             <button
-              onClick={() => setShowEmailComposer(false)}
+              onClick={() => closeEmailComposer()}
               className="px-4 py-2 bg-muted text-foreground rounded-lg text-sm font-sans font-medium hover:bg-accent transition-colors"
             >
               Cancel
@@ -3003,19 +3024,70 @@ export default function ConversationView() {
                           </svg>
                           Email Draft
                         </h4>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(draftData.draft);
-                            alert('Draft copied to clipboard!');
-                          }}
-                          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-sans font-semibold rounded transition-colors"
-                        >
-                          Copy Draft
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {editingDraft ? (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setDraftsByConversationId(prev => ({
+                                    ...prev,
+                                    [selectedConversation!.id]: {
+                                      ...prev[selectedConversation!.id],
+                                      draft: editedDraftText
+                                    }
+                                  }));
+                                  setEditingDraft(false);
+                                }}
+                                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-sans font-semibold rounded transition-colors"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingDraft(false);
+                                  setEditedDraftText("");
+                                }}
+                                className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white text-xs font-sans font-semibold rounded transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setEditedDraftText(draftData.draft);
+                                  setEditingDraft(true);
+                                }}
+                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-sans font-semibold rounded transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setReplyText(draftData.draft);
+                                  setShowDraftPopup(false);
+                                }}
+                                className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-sans font-semibold rounded transition-colors"
+                              >
+                                Use Draft
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="bg-gray-50 rounded p-4 font-sans text-sm text-gray-800 whitespace-pre-wrap border border-gray-200">
-                        {draftData.draft}
-                      </div>
+                      {editingDraft ? (
+                        <textarea
+                          value={editedDraftText}
+                          onChange={(e) => setEditedDraftText(e.target.value)}
+                          className="w-full bg-gray-50 rounded p-4 font-sans text-sm text-gray-800 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent min-h-[200px]"
+                          placeholder="Edit your draft..."
+                        />
+                      ) : (
+                        <div className="bg-gray-50 rounded p-4 font-sans text-sm text-gray-800 whitespace-pre-wrap border border-gray-200">
+                          {draftData.draft}
+                        </div>
+                      )}
                     </div>
                   ) : draftData.actionSteps && (Array.isArray(draftData.actionSteps) ? draftData.actionSteps.length > 0 : true) ? (
                     <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">

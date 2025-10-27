@@ -18,28 +18,24 @@ export default function KnowledgeBasePage() {
   const router = useRouter();
   const [entries, setEntries] = useState<KnowledgeEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [editingEntry, setEditingEntry] = useState<KnowledgeEntry | null>(null);
-  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
+  const [selectedEntry, setSelectedEntry] = useState<KnowledgeEntry | null>(null);
+  const [isNewDocument, setIsNewDocument] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Form state
+  // Editor state
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("general");
   const [tags, setTags] = useState("");
   const [active, setActive] = useState(true);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  const toggleExpanded = (id: string) => {
-    setExpandedEntries((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
-    });
-  };
+  // AI Assistant state
+  const [showAIWriter, setShowAIWriter] = useState(false);
+  const [showAIEditor, setShowAIEditor] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState("");
 
   useEffect(() => {
     fetchEntries();
@@ -58,9 +54,41 @@ export default function KnowledgeBasePage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSelectEntry = (entry: KnowledgeEntry) => {
+    if (hasUnsavedChanges && !confirm("You have unsaved changes. Continue?")) {
+      return;
+    }
+    setSelectedEntry(entry);
+    setTitle(entry.title);
+    setContent(entry.content);
+    setCategory(entry.category);
+    setTags(entry.tags.join(", "));
+    setActive(entry.active);
+    setIsNewDocument(false);
+    setHasUnsavedChanges(false);
+    setShowAIWriter(false);
+    setShowAIEditor(false);
+    setAiSuggestion("");
+  };
 
+  const handleNewDocument = () => {
+    if (hasUnsavedChanges && !confirm("You have unsaved changes. Continue?")) {
+      return;
+    }
+    setSelectedEntry(null);
+    setTitle("");
+    setContent("");
+    setCategory("general");
+    setTags("");
+    setActive(true);
+    setIsNewDocument(true);
+    setHasUnsavedChanges(false);
+    setShowAIWriter(false);
+    setShowAIEditor(false);
+    setAiSuggestion("");
+  };
+
+  const handleSave = async () => {
     const tagsArray = tags.split(",").map(t => t.trim()).filter(t => t);
 
     const payload = {
@@ -72,335 +100,508 @@ export default function KnowledgeBasePage() {
     };
 
     try {
-      if (editingEntry) {
-        // Update existing entry
-        await fetch(`/api/knowledge-base/${editingEntry.id}`, {
+      if (selectedEntry && !isNewDocument) {
+        await fetch(`/api/knowledge-base/${selectedEntry.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
       } else {
-        // Create new entry
-        await fetch("/api/knowledge-base", {
+        const res = await fetch("/api/knowledge-base", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
+        const newEntry = await res.json();
+        setSelectedEntry(newEntry);
+        setIsNewDocument(false);
       }
 
-      // Reset form
+      setHasUnsavedChanges(false);
+      fetchEntries();
+    } catch (error) {
+      console.error("Failed to save entry:", error);
+      alert("Failed to save. Please try again.");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedEntry) return;
+    if (!confirm(`Delete "${selectedEntry.title}"? This cannot be undone.`)) return;
+
+    try {
+      await fetch(`/api/knowledge-base/${selectedEntry.id}`, {
+        method: "DELETE"
+      });
+      setSelectedEntry(null);
       setTitle("");
       setContent("");
       setCategory("general");
       setTags("");
       setActive(true);
-      setShowAddForm(false);
-      setEditingEntry(null);
-
-      // Refresh list
-      fetchEntries();
-    } catch (error) {
-      console.error("Failed to save entry:", error);
-    }
-  };
-
-  const handleEdit = (entry: KnowledgeEntry) => {
-    setEditingEntry(entry);
-    setTitle(entry.title);
-    setContent(entry.content);
-    setCategory(entry.category);
-    setTags(entry.tags.join(", "));
-    setActive(entry.active);
-    setShowAddForm(true);
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this entry?")) return;
-
-    try {
-      await fetch(`/api/knowledge-base/${id}`, {
-        method: "DELETE"
-      });
+      setIsNewDocument(false);
+      setHasUnsavedChanges(false);
       fetchEntries();
     } catch (error) {
       console.error("Failed to delete entry:", error);
+      alert("Failed to delete. Please try again.");
     }
   };
 
-  const handleToggleActive = async (entry: KnowledgeEntry) => {
+  const handleAIWrite = async () => {
+    if (!aiPrompt.trim()) {
+      alert("Please enter a description of what you want to write.");
+      return;
+    }
+
+    setAiGenerating(true);
+    setAiSuggestion("");
+
     try {
-      await fetch(`/api/knowledge-base/${entry.id}`, {
-        method: "PATCH",
+      const response = await fetch("/api/ai/write-kb", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active: !entry.active })
+        body: JSON.stringify({
+          prompt: aiPrompt,
+          category: category,
+          existingContent: content
+        })
       });
-      fetchEntries();
+
+      if (!response.ok) throw new Error("AI request failed");
+
+      const data = await response.json();
+      setAiSuggestion(data.content || data.suggestion);
     } catch (error) {
-      console.error("Failed to toggle entry:", error);
+      console.error("AI writing failed:", error);
+      alert("AI writing failed. Please try again.");
+    } finally {
+      setAiGenerating(false);
     }
   };
 
-  const getCategoryBadgeColor = (cat: string) => {
+  const handleAIEdit = async () => {
+    if (!content.trim()) {
+      alert("Please enter some content to edit.");
+      return;
+    }
+
+    setAiGenerating(true);
+    setAiSuggestion("");
+
+    try {
+      const response = await fetch("/api/ai/edit-kb", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: content,
+          title: title,
+          category: category,
+          instructions: aiPrompt || "Improve clarity, grammar, and professional tone"
+        })
+      });
+
+      if (!response.ok) throw new Error("AI request failed");
+
+      const data = await response.json();
+      setAiSuggestion(data.content || data.suggestion);
+    } catch (error) {
+      console.error("AI editing failed:", error);
+      alert("AI editing failed. Please try again.");
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const applyAISuggestion = () => {
+    setContent(aiSuggestion);
+    setHasUnsavedChanges(true);
+    setAiSuggestion("");
+    setShowAIWriter(false);
+    setShowAIEditor(false);
+    setAiPrompt("");
+  };
+
+  const filteredEntries = entries.filter(entry =>
+    entry.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    entry.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    entry.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const getCategoryLabel = (cat: string) => {
+    const labels: Record<string, string> = {
+      general: "General",
+      summary: "Summary",
+      "draft-reply": "Draft Reply",
+      "suggest-tags": "Suggest Tags",
+      "find-similar": "Find Similar"
+    };
+    return labels[cat] || cat;
+  };
+
+  const getCategoryColor = (cat: string) => {
     const colors: Record<string, string> = {
-      general: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-      summary: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-      "draft-reply": "bg-green-500/10 text-green-500 border-green-500/20",
-      "suggest-tags": "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-      "find-similar": "bg-pink-500/10 text-pink-500 border-pink-500/20"
+      general: "bg-blue-500",
+      summary: "bg-purple-500",
+      "draft-reply": "bg-green-500",
+      "suggest-tags": "bg-yellow-500",
+      "find-similar": "bg-pink-500"
     };
     return colors[cat] || colors.general;
   };
 
   return (
-    <div className="flex h-screen bg-background">
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="p-6 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() => router.push("/emails")}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
-            >
-              ← Back to Emails
-            </button>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-sans font-bold text-foreground">Knowledge Base</h1>
-              <p className="text-sm font-sans text-muted-foreground mt-1">
-                Manage AI context and instructions
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                setEditingEntry(null);
-                setTitle("");
-                setContent("");
-                setCategory("general");
-                setTags("");
-                setActive(true);
-                setShowAddForm(!showAddForm);
-              }}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-sans font-medium hover:bg-primary/90 transition-colors"
-            >
-              {showAddForm ? "Cancel" : "+ Add Entry"}
-            </button>
+    <div className="flex h-screen bg-slate-50">
+      {/* Left Sidebar - Document List */}
+      <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
+        {/* Sidebar Header */}
+        <div className="p-4 border-b border-slate-200">
+          <button
+            onClick={() => router.push("/emails")}
+            className="flex items-center gap-2 px-2 py-1 text-xs text-slate-500 hover:text-slate-700 transition-colors mb-3"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Emails
+          </button>
+          <h1 className="text-sm font-semibold text-slate-900 mb-1">Knowledge Base</h1>
+          <p className="text-xs text-slate-500">AI context & instructions</p>
+        </div>
+
+        {/* Search */}
+        <div className="p-3 border-b border-slate-200">
+          <div className="relative">
+            <svg className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search documents..."
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            />
           </div>
         </div>
 
-        {/* Add/Edit Form */}
-        {showAddForm && (
-          <div className="p-6 border-b border-border bg-secondary/30">
-            <h2 className="text-lg font-sans font-semibold text-foreground mb-4">
-              {editingEntry ? "Edit Entry" : "Add New Entry"}
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-sans font-medium text-foreground mb-2">
-                    Title *
-                  </label>
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 font-sans bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="e.g., Return Policy"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-sans font-medium text-foreground mb-2">
-                    Category *
-                  </label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full px-3 py-2 font-sans bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  >
-                    <option value="general">General (All AI Actions)</option>
-                    <option value="summary">Summary Only</option>
-                    <option value="draft-reply">Draft Reply Only</option>
-                    <option value="suggest-tags">Suggest Tags Only</option>
-                    <option value="find-similar">Find Similar Only</option>
-                  </select>
-                </div>
-              </div>
+        {/* New Document Button */}
+        <div className="p-3 border-b border-slate-200">
+          <button
+            onClick={handleNewDocument}
+            className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-2"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New Document
+          </button>
+        </div>
 
-              <div>
-                <label className="block text-sm font-sans font-medium text-foreground mb-2">
-                  Content *
-                </label>
-                <textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  required
-                  rows={4}
-                  className="w-full px-3 py-2 font-sans bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
-                  placeholder="Enter the knowledge content that AI should use..."
+        {/* Documents List */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="p-4 text-xs text-slate-500 text-center">Loading...</div>
+          ) : filteredEntries.length === 0 ? (
+            <div className="p-4 text-xs text-slate-500 text-center">
+              {searchQuery ? "No matching documents" : "No documents yet"}
+            </div>
+          ) : (
+            <div className="p-2 space-y-1">
+              {filteredEntries.map((entry) => (
+                <button
+                  key={entry.id}
+                  onClick={() => handleSelectEntry(entry)}
+                  className={`w-full text-left px-3 py-2.5 rounded-md transition-colors ${
+                    selectedEntry?.id === entry.id
+                      ? "bg-blue-50 border border-blue-200"
+                      : "hover:bg-slate-50 border border-transparent"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <h3 className="text-xs font-medium text-slate-900 line-clamp-1">
+                      {entry.title}
+                    </h3>
+                    {!entry.active && (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">
+                        Inactive
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <div className={`w-1.5 h-1.5 rounded-full ${getCategoryColor(entry.category)}`}></div>
+                    <span className="text-[10px] text-slate-500">
+                      {getCategoryLabel(entry.category)}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 line-clamp-2">
+                    {entry.content}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Main Editor Area */}
+      <div className="flex-1 flex flex-col bg-white">
+        {!selectedEntry && !isNewDocument ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <svg className="w-16 h-16 mx-auto text-slate-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <h2 className="text-sm font-medium text-slate-900 mb-1">No document selected</h2>
+              <p className="text-xs text-slate-500 mb-4">Select a document or create a new one</p>
+              <button
+                onClick={handleNewDocument}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors"
+              >
+                Create New Document
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Editor Header */}
+            <div className="px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    setHasUnsavedChanges(true);
+                  }}
+                  placeholder="Document title..."
+                  className="text-sm font-semibold text-slate-900 bg-transparent border-none focus:outline-none w-96"
                 />
+                {hasUnsavedChanges && (
+                  <span className="text-[10px] px-2 py-1 bg-amber-100 text-amber-700 rounded">
+                    Unsaved changes
+                  </span>
+                )}
               </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setShowAIWriter(true);
+                    setShowAIEditor(false);
+                  }}
+                  className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  AI Writer
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAIEditor(true);
+                    setShowAIWriter(false);
+                  }}
+                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  AI Editor
+                </button>
+                {selectedEntry && !isNewDocument && (
+                  <button
+                    onClick={handleDelete}
+                    className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium rounded-md transition-colors"
+                  >
+                    Delete
+                  </button>
+                )}
+                <button
+                  onClick={handleSave}
+                  disabled={!hasUnsavedChanges && !isNewDocument}
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isNewDocument ? "Create" : "Save"}
+                </button>
+              </div>
+            </div>
 
-              <div>
-                <label className="block text-sm font-sans font-medium text-foreground mb-2">
-                  Tags (comma-separated)
-                </label>
+            {/* AI Assistant Panel */}
+            {(showAIWriter || showAIEditor) && (
+              <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-purple-50 to-indigo-50">
+                <div className="flex items-start gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                      </svg>
+                      <h3 className="text-xs font-semibold text-slate-900">
+                        {showAIWriter ? "AI Writing Assistant" : "AI Editing Assistant"}
+                      </h3>
+                    </div>
+                    <p className="text-[11px] text-slate-600 mb-3">
+                      {showAIWriter
+                        ? "Describe what you want to write and AI will generate professional content for your knowledge base."
+                        : "AI will analyze and improve your content for clarity, grammar, and professional tone."
+                      }
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        placeholder={showAIWriter ? "e.g., Write a policy for 30-day returns on lighting products" : "e.g., Make it more concise and professional"}
+                        className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            showAIWriter ? handleAIWrite() : handleAIEdit();
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={showAIWriter ? handleAIWrite : handleAIEdit}
+                        disabled={aiGenerating}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {aiGenerating ? (
+                          <>
+                            <svg className="animate-spin w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            {showAIWriter ? "Generate" : "Improve"}
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowAIWriter(false);
+                          setShowAIEditor(false);
+                          setAiPrompt("");
+                          setAiSuggestion("");
+                        }}
+                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-md transition-colors"
+                      >
+                        Close
+                      </button>
+                    </div>
+
+                    {/* AI Suggestion */}
+                    {aiSuggestion && (
+                      <div className="mt-3 p-3 bg-white border border-purple-200 rounded-md">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-semibold text-slate-900">AI Suggestion</h4>
+                          <button
+                            onClick={applyAISuggestion}
+                            className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-medium rounded transition-colors"
+                          >
+                            Apply to Document
+                          </button>
+                        </div>
+                        <div className="text-[11px] text-slate-700 whitespace-pre-wrap font-mono bg-slate-50 p-3 rounded border border-slate-200 max-h-48 overflow-y-auto">
+                          {aiSuggestion}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Editor Toolbar */}
+            <div className="px-6 py-2 border-b border-slate-200 flex items-center gap-4 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <label className="text-[11px] font-medium text-slate-700">Category:</label>
+                <select
+                  value={category}
+                  onChange={(e) => {
+                    setCategory(e.target.value);
+                    setHasUnsavedChanges(true);
+                  }}
+                  className="px-2 py-1 text-[11px] bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="general">General (All AI)</option>
+                  <option value="summary">Summary Only</option>
+                  <option value="draft-reply">Draft Reply Only</option>
+                  <option value="suggest-tags">Suggest Tags Only</option>
+                  <option value="find-similar">Find Similar Only</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-[11px] font-medium text-slate-700">Tags:</label>
                 <input
                   type="text"
                   value={tags}
-                  onChange={(e) => setTags(e.target.value)}
-                  className="w-full px-3 py-2 font-sans bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  placeholder="e.g., returns, refunds, policy"
+                  onChange={(e) => {
+                    setTags(e.target.value);
+                    setHasUnsavedChanges(true);
+                  }}
+                  placeholder="comma, separated, tags"
+                  className="px-2 py-1 text-[11px] bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
                 />
               </div>
-
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   id="active"
                   checked={active}
-                  onChange={(e) => setActive(e.target.checked)}
-                  className="w-4 h-4"
+                  onChange={(e) => {
+                    setActive(e.target.checked);
+                    setHasUnsavedChanges(true);
+                  }}
+                  className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
-                <label htmlFor="active" className="text-sm font-sans text-foreground">
-                  Active (AI will use this entry)
+                <label htmlFor="active" className="text-[11px] font-medium text-slate-700">
+                  Active (AI will use this)
                 </label>
               </div>
+            </div>
 
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-sans font-medium hover:bg-primary/90 transition-colors"
-                >
-                  {editingEntry ? "Update Entry" : "Add Entry"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddForm(false);
-                    setEditingEntry(null);
-                    setTitle("");
-                    setContent("");
-                    setCategory("general");
-                    setTags("");
-                    setActive(true);
-                  }}
-                  className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-sans font-medium hover:bg-accent transition-colors"
-                >
-                  Cancel
-                </button>
+            {/* Main Content Editor */}
+            <div className="flex-1 overflow-y-auto">
+              <textarea
+                value={content}
+                onChange={(e) => {
+                  setContent(e.target.value);
+                  setHasUnsavedChanges(true);
+                }}
+                placeholder="Write your knowledge base content here...
+
+For best results:
+• Be specific and clear
+• Include relevant examples
+• Use professional language
+• Format with line breaks for readability"
+                className="w-full h-full px-6 py-4 text-[13px] leading-relaxed text-slate-800 bg-white resize-none focus:outline-none font-mono"
+                style={{
+                  fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+                  lineHeight: "1.6"
+                }}
+              />
+            </div>
+
+            {/* Footer Info */}
+            <div className="px-6 py-2 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-4 text-[10px] text-slate-500">
+                {selectedEntry && !isNewDocument && (
+                  <>
+                    <span>Created: {new Date(selectedEntry.createdAt).toLocaleDateString()}</span>
+                    <span>Updated: {new Date(selectedEntry.updatedAt).toLocaleDateString()}</span>
+                  </>
+                )}
               </div>
-            </form>
-          </div>
+              <div className="text-[10px] text-slate-500">
+                {content.length} characters • {content.split(/\s+/).filter(w => w).length} words
+              </div>
+            </div>
+          </>
         )}
-
-        {/* Entries List */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {loading ? (
-            <div className="text-center text-muted-foreground font-sans">Loading...</div>
-          ) : entries.length === 0 ? (
-            <div className="text-center text-muted-foreground font-sans">
-              No knowledge base entries yet. Add your first entry to get started!
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {entries.map((entry) => {
-                const isExpanded = expandedEntries.has(entry.id);
-                const contentPreview = entry.content.split('\n')[0].substring(0, 80) + (entry.content.length > 80 ? '...' : '');
-
-                return (
-                  <div
-                    key={entry.id}
-                    className="bg-background border border-border rounded-lg hover:border-primary/50 transition-colors overflow-hidden"
-                  >
-                    {/* Collapsed View */}
-                    <div className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="text-base font-sans font-semibold text-foreground truncate">
-                              {entry.title}
-                            </h3>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-sans border whitespace-nowrap ${getCategoryBadgeColor(entry.category)}`}>
-                              {entry.category}
-                            </span>
-                            {!entry.active && (
-                              <span className="px-2 py-0.5 rounded-full text-xs font-sans bg-muted text-muted-foreground border border-border whitespace-nowrap">
-                                Inactive
-                              </span>
-                            )}
-                          </div>
-                          {!isExpanded && (
-                            <p className="text-sm font-sans text-muted-foreground truncate">
-                              {contentPreview}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex gap-2 shrink-0">
-                          <button
-                            onClick={() => toggleExpanded(entry.id)}
-                            className="px-3 py-1 bg-primary/10 text-primary rounded text-xs font-sans hover:bg-primary/20 transition-colors whitespace-nowrap"
-                          >
-                            {isExpanded ? "Collapse" : "Expand"}
-                          </button>
-                          <button
-                            onClick={() => handleToggleActive(entry)}
-                            className="px-3 py-1 bg-secondary text-secondary-foreground rounded text-xs font-sans hover:bg-accent transition-colors whitespace-nowrap"
-                          >
-                            {entry.active ? "Deactivate" : "Activate"}
-                          </button>
-                          <button
-                            onClick={() => handleEdit(entry)}
-                            className="px-3 py-1 bg-secondary text-secondary-foreground rounded text-xs font-sans hover:bg-accent transition-colors"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(entry.id)}
-                            className="px-3 py-1 bg-warning/10 text-warning rounded text-xs font-sans hover:bg-warning/20 transition-colors"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Expanded View */}
-                    {isExpanded && (
-                      <div className="px-4 pb-4 border-t border-border/50 pt-3">
-                        <div className="mb-3">
-                          <h4 className="text-xs font-sans font-semibold text-muted-foreground uppercase mb-2">Content</h4>
-                          <p className="text-sm font-sans text-foreground whitespace-pre-wrap bg-secondary/30 p-3 rounded border border-border max-h-96 overflow-y-auto">
-                            {entry.content}
-                          </p>
-                        </div>
-                        {entry.tags.length > 0 && (
-                          <div className="mb-3">
-                            <h4 className="text-xs font-sans font-semibold text-muted-foreground uppercase mb-2">Tags</h4>
-                            <div className="flex flex-wrap gap-1">
-                              {entry.tags.map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="px-2 py-0.5 bg-muted text-muted-foreground text-xs font-sans rounded"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        <div className="text-xs font-sans text-muted-foreground">
-                          Created {new Date(entry.createdAt).toLocaleDateString()} • Updated {new Date(entry.updatedAt).toLocaleDateString()}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

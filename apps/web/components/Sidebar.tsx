@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 
 export default function Sidebar() {
   const [activeView, setActiveView] = useState<"inbox" | "sent">("inbox");
-  const { showArchived, setShowArchived, showSent, setShowSent } = useConversations();
+  const { showArchived, setShowArchived, showSent, setShowSent, openEmailComposer } = useConversations();
   const pathname = usePathname();
 
   const handleViewChange = (view: "inbox" | "sent" | "archived") => {
@@ -30,12 +30,25 @@ export default function Sidebar() {
   const isKnowledgeBaseActive = pathname === "/knowledge-base";
 
   return (
-    <div className="w-64 border-r border-border bg-background flex flex-col" style={{ fontFamily: "Roboto, sans-serif" }}>
+    <div className="w-full h-full border-r border-border bg-background flex flex-col" style={{ fontFamily: "Roboto, sans-serif" }}>
       {/* Logo/Header */}
       <Link href="/" className="p-6 border-b border-border hover:bg-accent/30 transition-colors cursor-pointer">
         <h1 className="text-2xl font-serif text-foreground">outlight</h1>
         <p className="text-sm font-sans text-muted-foreground mt-1">Customer Support</p>
       </Link>
+
+      {/* Compose Email Button */}
+      <div className="p-4 border-b border-border">
+        <button
+          onClick={() => openEmailComposer()}
+          className="w-full px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors text-sm font-sans font-semibold flex items-center justify-center gap-2 shadow-sm"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          <span>Compose Email</span>
+        </button>
+      </div>
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2">
