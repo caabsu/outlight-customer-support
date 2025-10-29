@@ -3104,6 +3104,10 @@ export default function ConversationView() {
                               </button>
                               <button
                                 onClick={() => {
+                                  // Set both the state and the contentEditable innerHTML
+                                  if (replyEditorRef.current) {
+                                    replyEditorRef.current.innerHTML = draftData.draft;
+                                  }
                                   setReplyText(draftData.draft);
                                   setShowDraftPopup(false);
                                 }}
