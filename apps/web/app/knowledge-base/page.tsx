@@ -280,7 +280,7 @@ export default function KnowledgeBasePage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search documents..."
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-8 pr-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
         </div>
@@ -451,7 +451,7 @@ export default function KnowledgeBasePage() {
                         value={aiPrompt}
                         onChange={(e) => setAiPrompt(e.target.value)}
                         placeholder={showAIWriter ? "e.g., Write a policy for 30-day returns on lighting products" : "e.g., Make it more concise and professional"}
-                        className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className="flex-1 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             showAIWriter ? handleAIWrite() : handleAIEdit();
@@ -504,7 +504,7 @@ export default function KnowledgeBasePage() {
                             Apply to Document
                           </button>
                         </div>
-                        <div className="text-[11px] text-slate-700 whitespace-pre-wrap font-mono bg-slate-50 p-3 rounded border border-slate-200 max-h-48 overflow-y-auto">
+                        <div className="text-[11px] text-slate-800 whitespace-pre-wrap font-mono bg-slate-50 p-3 rounded border border-slate-200 max-h-48 overflow-y-auto">
                           {aiSuggestion}
                         </div>
                       </div>
@@ -524,7 +524,7 @@ export default function KnowledgeBasePage() {
                     setCategory(e.target.value);
                     setHasUnsavedChanges(true);
                   }}
-                  className="px-2 py-1 text-[11px] bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="px-2 py-1 text-[11px] text-slate-900 bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
                   <option value="general">General (All AI)</option>
                   <option value="summary">Summary Only</option>
@@ -543,7 +543,7 @@ export default function KnowledgeBasePage() {
                     setHasUnsavedChanges(true);
                   }}
                   placeholder="comma, separated, tags"
-                  className="px-2 py-1 text-[11px] bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
+                  className="px-2 py-1 text-[11px] text-slate-900 placeholder:text-slate-400 bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -578,7 +578,7 @@ For best results:
 • Include relevant examples
 • Use professional language
 • Format with line breaks for readability"
-                className="w-full h-full px-6 py-4 text-[13px] leading-relaxed text-slate-800 bg-white resize-none focus:outline-none font-mono"
+                className="w-full h-full px-6 py-4 text-[13px] leading-relaxed text-slate-900 placeholder:text-slate-400 bg-white resize-none focus:outline-none font-mono"
                 style={{
                   fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
                   lineHeight: "1.6"
