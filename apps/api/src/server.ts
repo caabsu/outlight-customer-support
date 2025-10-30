@@ -1775,18 +1775,14 @@ Step 5: GENERATE RESPONSE
 ✅ USE TOOLS FIRST: Always gather data before drafting
 ✅ FOLLOW POLICIES: Apply knowledge base rules exactly
 ✅ LINK POLICY - CRITICAL ENFORCEMENT:
-   ONLY include links if they match these EXACT patterns:
-   - Tracking: https://t.17track.net/en#nums={TRACKING_NUMBER}
-   - Returns Portal: https://outlight.us/apps/returns-portal
-   - Product Pages: https://outlight.us/products/{PRODUCT-HANDLE}
+   ❌ NEVER hardcode or invent URLs
+   ❌ NEVER guess URL patterns or formats
+   ❌ ONLY use URLs that appear EXACTLY as written in the knowledge base articles
+   ❌ If a URL is not explicitly mentioned in the knowledge base, DO NOT use it
+   ❌ If you need tracking links, ONLY use the format specified in knowledge base
+   ❌ NEVER include generic domain links, contact pages, or other URLs not in KB
 
-   ❌ NEVER include:
-   - Generic domain links (outlight.com, outlight.us homepage)
-   - Contact pages, support pages, or any other URLs
-   - External links of any kind
-   - If unsure, DO NOT include the link
-
-   ✅ If you need to reference the website, use text only: "visit our website"
+   ✅ If you need to reference something without a KB-approved URL, use text only: "visit our website" or "contact support"
 ✅ DATE MATH: For returns, count 30 days from DELIVERY date
 ✅ PERSONALIZE: Use customer's first name in drafts
 ✅ BE SPECIFIC: Include exact order numbers (#1234), dates (YYYY-MM-DD)
@@ -1992,34 +1988,48 @@ Remember:
     // URL VALIDATION AND SANITIZATION
     // ========================================================================
     // Remove any unauthorized URLs from the draft response
+    // ONLY allow URLs that are explicitly mentioned in the knowledge base
     if (finalResult.draft) {
-      const allowedUrlPatterns = [
-        /https:\/\/t\.17track\.net\/en#nums=[A-Z0-9]+/gi,
-        /https:\/\/outlight\.us\/apps\/returns-portal/gi,
-        /https:\/\/outlight\.us\/products\/[a-z0-9\-]+/gi
-      ];
+      // Get all URLs from knowledge base
+      const kbEntries = await prisma.knowledgeBase.findMany({
+        where: { active: true },
+        select: { content: true }
+      });
+
+      // Extract all unique URLs from knowledge base
+      const urlRegex = /https?:\/\/[^\s<>"']+/gi;
+      const allowedUrls = new Set<string>();
+
+      kbEntries.forEach(entry => {
+        const urls = entry.content.match(urlRegex) || [];
+        urls.forEach(url => allowedUrls.add(url.trim()));
+      });
+
+      console.log(`[Draft] Knowledge base contains ${allowedUrls.size} approved URLs`);
 
       // Find all URLs in the draft
-      const urlRegex = /https?:\/\/[^\s<>"']+/gi;
       const foundUrls = finalResult.draft.match(urlRegex) || [];
 
-      console.log(`[Draft] Found ${foundUrls.length} URLs in draft, validating...`);
+      console.log(`[Draft] Found ${foundUrls.length} URLs in draft, validating against knowledge base...`);
 
       for (const url of foundUrls) {
-        const isAllowed = allowedUrlPatterns.some(pattern => pattern.test(url));
+        const trimmedUrl = url.trim();
+
+        // Check if this EXACT URL appears in the knowledge base
+        const isAllowed = allowedUrls.has(trimmedUrl);
 
         if (!isAllowed) {
-          console.log(`[Draft] ⚠️  REMOVING unauthorized URL: ${url}`);
+          console.log(`[Draft] ⚠️  REMOVING unauthorized URL: ${trimmedUrl} (not found in knowledge base)`);
           // Remove the URL from the draft
-          finalResult.draft = finalResult.draft.replace(url, '[URL removed - not in approved list]');
+          finalResult.draft = finalResult.draft.replace(url, '[URL removed - not in knowledge base]');
 
           // Add warning to internal reasoning
           if (!finalResult.internalReasoning) {
             finalResult.internalReasoning = "";
           }
-          finalResult.internalReasoning += `\n\n⚠️  SYSTEM WARNING: Removed unauthorized URL: ${url}. Only approved URLs are allowed: 17track, returns portal, and product pages.`;
+          finalResult.internalReasoning += `\n\n⚠️  SYSTEM WARNING: Removed unauthorized URL: ${trimmedUrl}. This URL does not appear in the knowledge base. Only use URLs that are explicitly mentioned in knowledge base articles.`;
         } else {
-          console.log(`[Draft] ✅ Approved URL: ${url}`);
+          console.log(`[Draft] ✅ Approved URL (found in KB): ${trimmedUrl}`);
         }
       }
     }
