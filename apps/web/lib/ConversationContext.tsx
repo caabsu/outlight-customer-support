@@ -43,7 +43,6 @@ type ConversationContextType = {
   selectConversation: (id: string) => void;
   refreshConversations: () => Promise<void>;
   pollAndRefresh: () => Promise<void>;
-  freshSync: () => Promise<void>;
   updateConversationOptimistic: (id: string, updates: Partial<Conversation>) => void;
   loading: boolean;
   refreshing: boolean;
@@ -264,66 +263,6 @@ export function ConversationProvider({
     }
   };
 
-  const freshSync = async () => {
-    if (!confirm("⚠️ WARNING: This will delete ALL conversations, messages, and customer data from the database and re-fetch everything from Gmail. This cannot be undone. Continue?")) {
-      return;
-    }
-
-    try {
-      setRefreshing(true);
-      setRefreshProgress(10);
-
-      console.log("[Fresh Sync] Starting fresh sync...");
-
-      // Call fresh sync endpoint with extended timeout (this can take a while)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
-
-      try {
-        setRefreshProgress(20);
-        const syncRes = await fetch("/api/gmail/fresh-sync", {
-          method: "POST",
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        setRefreshProgress(70);
-
-        if (!syncRes.ok) {
-          const error = await syncRes.json();
-          throw new Error(error.error || "Fresh sync failed");
-        }
-
-        const result = await syncRes.json();
-        console.log("[Fresh Sync] Complete:", result);
-
-        alert(`✅ Fresh sync complete!\n\nFetched: ${result.synced.uniqueThreads} email threads\nInbox: ${result.synced.inboxThreads}\nSent: ${result.synced.sentThreads}\n\nFinal counts:\nConversations: ${result.final.conversations}\nMessages: ${result.final.messages}\nCustomers: ${result.final.customers}\n\nTime: ${(result.totalTimeMs / 1000).toFixed(1)}s`);
-
-      } catch (err) {
-        clearTimeout(timeoutId);
-        if (err instanceof Error && err.name === 'AbortError') {
-          throw new Error("Fresh sync timed out after 5 minutes");
-        }
-        throw err;
-      }
-
-      setRefreshProgress(90);
-      // Refresh conversations from database
-      await fetchConversations(true, 1, false);
-      setRefreshProgress(100);
-
-    } catch (error) {
-      console.error("Failed to perform fresh sync:", error);
-      alert(`❌ Fresh sync failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-    } finally {
-      // Small delay to show 100% before hiding
-      setTimeout(() => {
-        setRefreshing(false);
-        setRefreshProgress(0);
-      }, 500);
-    }
-  };
-
   const refreshConversations = async () => {
     await fetchConversations(false, 1, false); // Don't suppress errors for manual refresh
   };
@@ -377,7 +316,6 @@ export function ConversationProvider({
         selectConversation,
         refreshConversations,
         pollAndRefresh,
-        freshSync,
         updateConversationOptimistic,
         loading,
         refreshing,

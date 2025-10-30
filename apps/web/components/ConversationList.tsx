@@ -4,7 +4,7 @@ import { useConversations, type Conversation } from "@/lib/ConversationContext";
 import { useState } from "react";
 
 export default function ConversationList() {
-  const { conversations, selectedConversation, selectConversation, loading, refreshing, refreshProgress, refreshConversations, pollAndRefresh, freshSync, updateConversationOptimistic, showArchived, showSent, pagination, nextPage, prevPage, pageTransitioning } =
+  const { conversations, selectedConversation, selectConversation, loading, refreshing, refreshProgress, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived, showSent, pagination, nextPage, prevPage, pageTransitioning } =
     useConversations();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showStarred, setShowStarred] = useState(false);
@@ -246,24 +246,14 @@ export default function ConversationList() {
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => pollAndRefresh()}
-              className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs font-sans font-medium hover:bg-accent transition-colors border border-border"
-              title="Check for new emails"
-              disabled={loading || refreshing}
-            >
-              ↻
-            </button>
-            <button
-              onClick={() => freshSync()}
-              className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-sans font-medium hover:bg-red-600 transition-colors border border-red-600"
-              title="Fresh Sync - Delete all data and re-fetch from Gmail"
-              disabled={loading || refreshing}
-            >
-              🔄 Fresh Sync
-            </button>
-          </div>
+          <button
+            onClick={() => pollAndRefresh()}
+            className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs font-sans font-medium hover:bg-accent transition-colors border border-border"
+            title="Check for new emails - Fetches ALL emails from Gmail"
+            disabled={loading || refreshing}
+          >
+            ↻
+          </button>
         </div>
 
         {/* Quick Filter Buttons */}

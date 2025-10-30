@@ -68,57 +68,44 @@ export async function getAuthedClient() {
 export async function pollOnce(_req: Request, res: Response) {
   const gmail = await getAuthedClient();
 
-  const existing = await prisma.conversation.findFirst();
-  if (!existing) {
-    console.log("[Gmail Poll] Initial sync - fetching ALL emails with pagination");
+  console.log("[Gmail Poll] Fetching ALL emails from Gmail with pagination...");
 
-    // Initial sync: fetch ALL emails from inbox and sent with pagination
-    const inboxThreads = await fetchAllThreads(gmail, "in:inbox");
-    const sentThreads = await fetchAllThreads(gmail, "in:sent");
-
-    const allThreads = [
-      ...inboxThreads,
-      ...sentThreads
-    ];
-
-    console.log(`[Gmail Poll] Initial sync found ${inboxThreads.length} inbox + ${sentThreads.length} sent = ${allThreads.length} total threads`);
-
-    // Process initial threads in parallel for much faster first-time sync
-    // Use Set to avoid processing same thread twice (if it's both inbox and sent)
-    const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
-    console.log(`[Gmail Poll] Processing ${uniqueThreadIds.size} unique threads`);
-
-    await Promise.all(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
-
-    return res.json({
-      ingestedThreads: uniqueThreadIds.size,
-      inboxThreads: inboxThreads.length,
-      sentThreads: sentThreads.length
-    });
-  }
-
-  console.log("[Gmail Poll] Regular poll - fetching recent emails from last 2 days");
-
-  // Regular poll: fetch both inbox and sent from last 2 days
-  const inboxThreads = await fetchAllThreads(gmail, "in:inbox newer_than:2d");
-  const sentThreads = await fetchAllThreads(gmail, "in:sent newer_than:2d");
+  // ALWAYS fetch ALL emails from inbox and sent (no time filters)
+  // The upsert logic prevents duplicates, so this is safe and ensures we catch everything
+  const inboxThreads = await fetchAllThreads(gmail, "in:inbox");
+  const sentThreads = await fetchAllThreads(gmail, "in:sent");
 
   const allThreads = [
     ...inboxThreads,
     ...sentThreads
   ];
 
-  console.log(`[Gmail Poll] Regular poll found ${inboxThreads.length} inbox + ${sentThreads.length} sent = ${allThreads.length} total threads`);
+  console.log(`[Gmail Poll] Found ${inboxThreads.length} inbox + ${sentThreads.length} sent = ${allThreads.length} total threads`);
 
   // Process threads in parallel for much faster performance
-  // Use Set to avoid processing same thread twice
+  // Use Set to avoid processing same thread twice (if it's both inbox and sent)
   const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
+  console.log(`[Gmail Poll] Processing ${uniqueThreadIds.size} unique threads`);
+
+  // Count how many are new vs existing
+  const existingCount = await prisma.conversation.count({
+    where: {
+      gmailThreadId: {
+        in: Array.from(uniqueThreadIds)
+      }
+    }
+  });
+
+  console.log(`[Gmail Poll] ${existingCount} threads already in database, ${uniqueThreadIds.size - existingCount} are new`);
+
   await Promise.all(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
 
   res.json({
-    updatedThreads: uniqueThreadIds.size,
+    totalThreads: uniqueThreadIds.size,
     inboxThreads: inboxThreads.length,
-    sentThreads: sentThreads.length
+    sentThreads: sentThreads.length,
+    existingThreads: existingCount,
+    newThreads: uniqueThreadIds.size - existingCount
   });
 }
 
