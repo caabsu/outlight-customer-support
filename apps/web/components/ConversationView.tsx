@@ -8,7 +8,7 @@ type ConversationHistory = {
   id: string;
   subject: string;
   lastMessageAt: string;
-  messages: { direction: string }[];
+  messages: { direction: string; bodyText?: string | null; bodyHtml?: string | null }[];
 };
 
 // Sanitize email HTML while preserving Gmail-like display
@@ -108,6 +108,7 @@ export default function ConversationView() {
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [summaryMinimized, setSummaryMinimized] = useState(false);
+  const [expandedPreviews, setExpandedPreviews] = useState<Set<string>>(new Set());
   const [activeInfoTooltip, setActiveInfoTooltip] = useState<string | null>(null);
   const [navigatingUnreplied, setNavigatingUnreplied] = useState(false);
 
@@ -1464,53 +1465,159 @@ export default function ConversationView() {
 
     {/* Right Sidebar */}
     <div style={{ width: `${rightSidebarWidth}px` }} className="border-l border-gray-200 bg-gray-50 flex flex-col shrink-0 overflow-y-auto">
-      {/* Past Conversations Section */}
+      {/* Related Conversations Section */}
       <div className="border-b border-gray-200">
-        <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
+        <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-gray-50 border-b border-slate-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
-              <h3 className="font-sans font-semibold text-blue-900 text-sm">Past Conversations</h3>
+              <h3 className="font-sans font-semibold text-slate-800 text-sm">Related Conversations</h3>
             </div>
             <button
               onClick={() => setShowAllHistory(true)}
-              className="text-xs font-sans font-medium text-blue-600 hover:text-blue-800 transition-colors"
+              className="text-xs font-sans font-medium text-slate-600 hover:text-slate-800 transition-colors flex items-center gap-1"
             >
-              View All →
+              <span>View All</span>
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </button>
           </div>
         </div>
 
-        <div className="h-[160px] overflow-y-auto px-4 py-3 bg-white space-y-1.5">
+        <div className="max-h-[320px] overflow-y-auto px-3 py-3 bg-white space-y-2">
           {loadingHistory ? (
             <>
               {[1, 2].map((i) => (
-                <div key={i} className="w-full p-2.5 bg-gray-50 animate-pulse rounded">
-                  <div className="h-3 bg-gray-200 rounded w-3/4 mb-1.5"></div>
-                  <div className="h-2 bg-gray-200 rounded w-1/2"></div>
+                <div key={i} className="w-full p-3 bg-slate-50 animate-pulse rounded-lg border border-slate-100">
+                  <div className="h-3 bg-slate-200 rounded w-3/4 mb-2"></div>
+                  <div className="h-2 bg-slate-200 rounded w-1/2"></div>
                 </div>
               ))}
             </>
           ) : history.length > 0 ? (
-            history.slice(0, 3).map((conv) => (
-              <button
-                key={conv.id}
-                onClick={() => selectConversation(conv.id)}
-                className="w-full text-left p-2.5 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-all cursor-pointer rounded"
-              >
-                <p className="text-xs font-sans font-medium text-gray-900 mb-0.5 truncate">
-                  {conv.subject}
-                </p>
-                <p className="text-[10px] font-sans text-gray-600 truncate">
-                  {new Date(conv.lastMessageAt).toLocaleDateString()} • {conv.messages.length} messages
-                </p>
-              </button>
-            ))
+            history.slice(0, 4).map((conv) => {
+              const isExpanded = expandedPreviews.has(conv.id);
+              const lastMessage = conv.messages && conv.messages.length > 0 ? conv.messages[conv.messages.length - 1] : null;
+              const messagePreview = lastMessage
+                ? (lastMessage.bodyText?.substring(0, 150) || lastMessage.bodyHtml?.replace(/<[^>]*>/g, '').substring(0, 150) || 'No content available')
+                : 'No messages';
+
+              return (
+                <div
+                  key={conv.id}
+                  className="w-full bg-white border border-slate-200 hover:border-slate-300 rounded-lg transition-all overflow-hidden shadow-sm"
+                >
+                  {/* Main conversation info */}
+                  <div className="p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <button
+                        onClick={() => {
+                          console.log('Navigating to conversation:', conv.id);
+                          selectConversation(conv.id);
+                        }}
+                        className="flex-1 text-left group"
+                      >
+                        <p className="text-xs font-sans font-semibold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 mb-1">
+                          {conv.subject || 'No Subject'}
+                        </p>
+                        <p className="text-[10px] font-sans text-slate-500 flex items-center gap-2">
+                          <span>{new Date(conv.lastMessageAt).toLocaleDateString()}</span>
+                          <span>•</span>
+                          <span>{conv.messages?.length || 0} messages</span>
+                        </p>
+                      </button>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => {
+                          const newSet = new Set(expandedPreviews);
+                          if (isExpanded) {
+                            newSet.delete(conv.id);
+                          } else {
+                            newSet.add(conv.id);
+                          }
+                          setExpandedPreviews(newSet);
+                        }}
+                        className="flex-1 px-2 py-1.5 text-[10px] font-sans font-medium text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded transition-colors flex items-center justify-center gap-1"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        <span>{isExpanded ? 'Hide' : 'Preview'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          console.log('Opening conversation:', conv.id);
+                          selectConversation(conv.id);
+                        }}
+                        className="flex-1 px-2 py-1.5 text-[10px] font-sans font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded transition-colors flex items-center justify-center gap-1"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        <span>Open</span>
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          try {
+                            // Mark conversation as archived (resolved)
+                            const updateResponse = await fetch(`/api/conversations/${conv.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ archived: true }),
+                            });
+
+                            if (!updateResponse.ok) {
+                              throw new Error('Failed to mark as resolved');
+                            }
+
+                            // Remove from history list immediately for instant feedback
+                            setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== conv.id));
+
+                            // Refresh conversations list in the background
+                            await refreshConversations();
+                          } catch (error) {
+                            console.error('Failed to mark as resolved:', error);
+                            // Optionally: Show error message to user
+                            alert('Failed to mark conversation as resolved. Please try again.');
+                          }
+                        }}
+                        className="px-2 py-1.5 text-[10px] font-sans font-medium text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 rounded transition-colors flex items-center gap-1"
+                        title="Mark as Resolved"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>Resolve</span>
+                      </button>
+                    </div>
+
+                    {/* Preview section */}
+                    {isExpanded && (
+                      <div className="pt-2 border-t border-slate-100 animate-in fade-in duration-200">
+                        <p className="text-[10px] font-sans text-slate-600 leading-relaxed whitespace-pre-wrap">
+                          {messagePreview}{messagePreview.length >= 150 ? '...' : ''}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
           ) : (
             <div className="p-6 text-center">
-              <p className="text-xs font-sans text-gray-500">No past conversations</p>
+              <svg className="w-10 h-10 text-slate-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+              </svg>
+              <p className="text-xs font-sans text-slate-500">No related conversations</p>
             </div>
           )}
         </div>
@@ -2105,12 +2212,12 @@ export default function ConversationView() {
       </div>
     </div>
 
-    {/* View All Past Conversations Modal */}
+    {/* View All Related Conversations Modal */}
     {showAllHistory && (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-background border border-border rounded-lg w-[600px] max-h-[80vh] flex flex-col shadow-xl">
           <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
-            <h2 className="text-lg font-sans font-bold text-foreground">All Past Conversations</h2>
+            <h2 className="text-lg font-sans font-bold text-foreground">All Related Conversations</h2>
             <button
               onClick={() => setShowAllHistory(false)}
               className="text-muted-foreground hover:text-foreground transition-colors text-xl"
@@ -2148,7 +2255,7 @@ export default function ConversationView() {
               ))
             ) : (
               <div className="p-8 text-center">
-                <p className="text-sm font-sans text-muted-foreground">No past conversations found</p>
+                <p className="text-sm font-sans text-muted-foreground">No related conversations found</p>
               </div>
             )}
           </div>

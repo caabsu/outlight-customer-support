@@ -1596,30 +1596,42 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
       });
 
       if (existingDraft) {
-        console.log(`[Draft] Returning existing draft for conversation ${conversationId}`);
+        // Detect old drafts with URL filtering artifacts and force regeneration
+        const hasOldUrlFiltering = existingDraft.draft && (
+          existingDraft.draft.includes('[URL removed') ||
+          existingDraft.draft.includes('[url removed') ||
+          existingDraft.draft.includes('not in knowledge base')
+        );
 
-        // Handle old data format: convert string actionSteps to array if needed
-        let actionSteps = existingDraft.actionSteps;
-        if (actionSteps && typeof actionSteps === 'string') {
-          // Old format: string with newlines - convert to array
-          actionSteps = (actionSteps as string).split('\n').filter(s => s.trim());
-          console.log(`[Draft] Converted old string actionSteps to array format`);
+        if (hasOldUrlFiltering) {
+          console.log(`[Draft] Detected old draft with URL filtering artifacts, forcing regeneration`);
+          // Skip cache and continue to generate new draft
+        } else {
+          console.log(`[Draft] Returning existing draft for conversation ${conversationId}`);
+
+          // Handle old data format: convert string actionSteps to array if needed
+          let actionSteps = existingDraft.actionSteps;
+          if (actionSteps && typeof actionSteps === 'string') {
+            // Old format: string with newlines - convert to array
+            actionSteps = (actionSteps as string).split('\n').filter(s => s.trim());
+            console.log(`[Draft] Converted old string actionSteps to array format`);
+          }
+
+          return res.json({
+            internalReasoning: existingDraft.internalReasoning,
+            tags: existingDraft.tags,
+            category: existingDraft.category,
+            reasoning: existingDraft.reasoning,
+            shouldDraft: existingDraft.shouldDraft,
+            draft: existingDraft.draft,
+            actionSteps: actionSteps,
+            orderInfo: existingDraft.orderInfo,
+            conversationId,
+            fromDatabase: true,
+            createdAt: existingDraft.createdAt,
+            updatedAt: existingDraft.updatedAt
+          });
         }
-
-        return res.json({
-          internalReasoning: existingDraft.internalReasoning,
-          tags: existingDraft.tags,
-          category: existingDraft.category,
-          reasoning: existingDraft.reasoning,
-          shouldDraft: existingDraft.shouldDraft,
-          draft: existingDraft.draft,
-          actionSteps: actionSteps,
-          orderInfo: existingDraft.orderInfo,
-          conversationId,
-          fromDatabase: true,
-          createdAt: existingDraft.createdAt,
-          updatedAt: existingDraft.updatedAt
-        });
       }
     }
 
@@ -1678,6 +1690,10 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
       subject: msg.subject || conversation.subject,
       body: msg.bodyPlain || msg.bodyHtml,
     }));
+
+    // Identify the LATEST inbound message (the one we need to respond to)
+    const inboundMessages = emailThread.filter(msg => msg.direction === "inbound");
+    const latestInboundMessage = inboundMessages.length > 0 ? inboundMessages[inboundMessages.length - 1] : null;
 
     // Define tools for AI to use
     const tools = [
@@ -1741,8 +1757,10 @@ You have access to these tools:
 ⚡ WORKFLOW - EXECUTE IN THIS EXACT ORDER
 ═══════════════════════════════════════════════════════════
 
-Step 1: READ THE EMAIL COMPLETELY
-- Understand the customer's issue, tone, and urgency
+Step 1: READ THE EMAIL THREAD AND IDENTIFY LATEST MESSAGE
+- ⚠️  CRITICAL: Your draft must RESPOND TO THE LATEST INBOUND MESSAGE (the most recent customer email)
+- Read the full thread for context, but your response addresses the LATEST message
+- Understand the customer's issue, tone, and urgency in their MOST RECENT message
 - Extract: customer email, order numbers, tracking numbers, dates mentioned
 
 Step 2: GATHER DATA USING TOOLS
@@ -1833,19 +1851,37 @@ When providing action steps (shouldDraft = false):
       },
       {
         role: "user",
-        content: `You are now analyzing a customer support email. Follow the workflow exactly:
+        content: `You are now analyzing a customer support email thread. Follow the workflow exactly:
 
-EMAIL THREAD:
+${latestInboundMessage ? `
+═══════════════════════════════════════════════════════════
+🎯 LATEST MESSAGE TO RESPOND TO (MOST RECENT FROM CUSTOMER):
+═══════════════════════════════════════════════════════════
+From: ${latestInboundMessage.from}
+Date: ${latestInboundMessage.date}
+Subject: ${latestInboundMessage.subject}
+
+${latestInboundMessage.body}
+
+⚠️  YOUR DRAFT MUST RESPOND TO THIS LATEST MESSAGE ABOVE ⚠️
+` : ''}
+
+═══════════════════════════════════════════════════════════
+📧 FULL EMAIL THREAD (FOR CONTEXT):
+═══════════════════════════════════════════════════════════
 ${JSON.stringify(emailThread, null, 2)}
 
-CUSTOMER INFO:
+═══════════════════════════════════════════════════════════
+👤 CUSTOMER INFO:
+═══════════════════════════════════════════════════════════
 ${conversation.customer ? `Name: ${conversation.customer.name}, Email: ${conversation.customer.primaryEmail}` : 'Unknown customer'}
 
 Remember:
-1. Use search_customer_and_orders to get order data
-2. Use get_tracking_info if needed
-3. Apply knowledge base policies
-4. Return ONLY pure JSON (no markdown, no code blocks)`
+1. ${latestInboundMessage ? '⚠️  RESPOND TO THE LATEST MESSAGE SHOWN ABOVE - not the first message in the thread' : 'Read all messages'}
+2. Use search_customer_and_orders to get order data
+3. Use get_tracking_info if needed
+4. Apply knowledge base policies
+5. Return ONLY pure JSON (no markdown, no code blocks)`
       }
     ];
 
@@ -1981,56 +2017,6 @@ Remember:
           reasoning: "Failed to generate proper response",
           error: "Maximum iterations reached without valid JSON"
         };
-      }
-    }
-
-    // ========================================================================
-    // URL VALIDATION AND SANITIZATION
-    // ========================================================================
-    // Remove any unauthorized URLs from the draft response
-    // ONLY allow URLs that are explicitly mentioned in the knowledge base
-    if (finalResult.draft) {
-      // Get all URLs from knowledge base
-      const kbEntries = await prisma.knowledgeBase.findMany({
-        where: { active: true },
-        select: { content: true }
-      });
-
-      // Extract all unique URLs from knowledge base
-      const urlRegex = /https?:\/\/[^\s<>"']+/gi;
-      const allowedUrls = new Set<string>();
-
-      kbEntries.forEach(entry => {
-        const urls = entry.content.match(urlRegex) || [];
-        urls.forEach(url => allowedUrls.add(url.trim()));
-      });
-
-      console.log(`[Draft] Knowledge base contains ${allowedUrls.size} approved URLs`);
-
-      // Find all URLs in the draft
-      const foundUrls = finalResult.draft.match(urlRegex) || [];
-
-      console.log(`[Draft] Found ${foundUrls.length} URLs in draft, validating against knowledge base...`);
-
-      for (const url of foundUrls) {
-        const trimmedUrl = url.trim();
-
-        // Check if this EXACT URL appears in the knowledge base
-        const isAllowed = allowedUrls.has(trimmedUrl);
-
-        if (!isAllowed) {
-          console.log(`[Draft] ⚠️  REMOVING unauthorized URL: ${trimmedUrl} (not found in knowledge base)`);
-          // Remove the URL from the draft
-          finalResult.draft = finalResult.draft.replace(url, '[URL removed - not in knowledge base]');
-
-          // Add warning to internal reasoning
-          if (!finalResult.internalReasoning) {
-            finalResult.internalReasoning = "";
-          }
-          finalResult.internalReasoning += `\n\n⚠️  SYSTEM WARNING: Removed unauthorized URL: ${trimmedUrl}. This URL does not appear in the knowledge base. Only use URLs that are explicitly mentioned in knowledge base articles.`;
-        } else {
-          console.log(`[Draft] ✅ Approved URL (found in KB): ${trimmedUrl}`);
-        }
       }
     }
 
