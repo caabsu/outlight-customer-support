@@ -205,11 +205,12 @@ export async function sendReply(conversationId: string, to: string, body: string
   const lastInboundMessage = conversation.messages.find(m => m.direction === "inbound");
   const recipientEmail = to || lastInboundMessage?.replyToEmail || conversation.customer?.primaryEmail;
 
-  // Create email in RFC 2822 format
+  // Create email in RFC 2822 format with HTML content type
   const subject = conversation.subject;
   const emailLines = [
     `To: ${recipientEmail}`,
     `Subject: Re: ${subject}`,
+    `Content-Type: text/html; charset=UTF-8`,
     ``,
     body,
   ];
@@ -258,10 +259,11 @@ export async function sendReply(conversationId: string, to: string, body: string
 export async function sendNewEmail(to: string, subject: string, body: string) {
   const gmail = await getAuthedClient();
 
-  // Create email in RFC 2822 format (not as a reply, so no threadId)
+  // Create email in RFC 2822 format with HTML content type (not as a reply, so no threadId)
   const emailLines = [
     `To: ${to}`,
     `Subject: ${subject}`,
+    `Content-Type: text/html; charset=UTF-8`,
     ``,
     body,
   ];
