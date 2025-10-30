@@ -852,6 +852,108 @@ app.delete("/knowledge-base/:id", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Get knowledge base access for AI tools
+ * GET /knowledge-base/tool-access
+ * Returns what knowledge each AI tool has access to
+ */
+app.get("/knowledge-base/tool-access", async (req: Request, res: Response) => {
+  console.log("[Tool Access] Request received for knowledge base tool access");
+  try {
+    // Fetch all active knowledge base entries
+    const allEntries = await prisma.knowledgeBase.findMany({
+      where: { active: true },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        tags: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    // Organize by tool
+    const toolAccess = {
+      draft: {
+        name: "Draft Response Generator",
+        description: "AI tool that generates email draft responses to customer inquiries",
+        model: "gpt-5-mini-2025-08-07",
+        categories: ["general", "draft-reply"],
+        entries: allEntries.filter(e =>
+          e.category === "general" || e.category === "draft-reply"
+        ),
+        capabilities: [
+          "Search customer orders via Shopify",
+          "Get package tracking from 17track",
+          "Calculate return windows from delivery dates",
+          "Generate personalized email responses"
+        ]
+      },
+      summary: {
+        name: "Conversation Summarizer",
+        description: "AI tool that generates concise summaries of email conversations",
+        model: "gpt-4o-mini",
+        categories: ["general", "summary"],
+        entries: allEntries.filter(e =>
+          e.category === "general" || e.category === "summary"
+        ),
+        capabilities: [
+          "Summarize long email threads",
+          "Extract key issues and resolutions",
+          "Provide 150-word maximum summaries"
+        ]
+      },
+      emailExtractor: {
+        name: "Email Extractor",
+        description: "AI tool that extracts customer emails from forwarded messages",
+        model: "gpt-4",
+        categories: [],
+        entries: [],
+        capabilities: [
+          "Extract customer email addresses from message content",
+          "Handle Shopify notification formats",
+          "Identify primary customer contact"
+        ]
+      },
+      kbWriter: {
+        name: "Knowledge Base Writer",
+        description: "AI assistant for creating new knowledge base content",
+        model: "gpt-4",
+        categories: [],
+        entries: [],
+        capabilities: [
+          "Generate professional knowledge base articles",
+          "Create category-specific content",
+          "Follow company tone and style"
+        ]
+      },
+      kbEditor: {
+        name: "Knowledge Base Editor",
+        description: "AI assistant for improving existing knowledge base content",
+        model: "gpt-4",
+        categories: [],
+        entries: [],
+        capabilities: [
+          "Improve clarity and grammar",
+          "Maintain professional tone",
+          "Preserve original meaning"
+        ]
+      }
+    };
+
+    console.log(`[Tool Access] Returning tool access data with ${allEntries.length} total KB entries`);
+    res.json(toolAccess);
+  } catch (error) {
+    console.error("[Tool Access] Error fetching tool access:", error);
+    res.status(500).json({
+      error: "Failed to fetch tool access information",
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
 // ============================================================================
 // AI ENDPOINTS
 // ============================================================================
@@ -1672,10 +1774,19 @@ Step 5: GENERATE RESPONSE
 
 ✅ USE TOOLS FIRST: Always gather data before drafting
 ✅ FOLLOW POLICIES: Apply knowledge base rules exactly
-✅ LINK POLICY: ONLY these links allowed:
-   - 17track: https://t.17track.net/en#nums=TRACKING_NUMBER
-   - Returns: https://outlight.us/apps/returns-portal
-   - Products: https://outlight.us/products/PRODUCT_NAME
+✅ LINK POLICY - CRITICAL ENFORCEMENT:
+   ONLY include links if they match these EXACT patterns:
+   - Tracking: https://t.17track.net/en#nums={TRACKING_NUMBER}
+   - Returns Portal: https://outlight.us/apps/returns-portal
+   - Product Pages: https://outlight.us/products/{PRODUCT-HANDLE}
+
+   ❌ NEVER include:
+   - Generic domain links (outlight.com, outlight.us homepage)
+   - Contact pages, support pages, or any other URLs
+   - External links of any kind
+   - If unsure, DO NOT include the link
+
+   ✅ If you need to reference the website, use text only: "visit our website"
 ✅ DATE MATH: For returns, count 30 days from DELIVERY date
 ✅ PERSONALIZE: Use customer's first name in drafts
 ✅ BE SPECIFIC: Include exact order numbers (#1234), dates (YYYY-MM-DD)
@@ -1874,6 +1985,42 @@ Remember:
           reasoning: "Failed to generate proper response",
           error: "Maximum iterations reached without valid JSON"
         };
+      }
+    }
+
+    // ========================================================================
+    // URL VALIDATION AND SANITIZATION
+    // ========================================================================
+    // Remove any unauthorized URLs from the draft response
+    if (finalResult.draft) {
+      const allowedUrlPatterns = [
+        /https:\/\/t\.17track\.net\/en#nums=[A-Z0-9]+/gi,
+        /https:\/\/outlight\.us\/apps\/returns-portal/gi,
+        /https:\/\/outlight\.us\/products\/[a-z0-9\-]+/gi
+      ];
+
+      // Find all URLs in the draft
+      const urlRegex = /https?:\/\/[^\s<>"']+/gi;
+      const foundUrls = finalResult.draft.match(urlRegex) || [];
+
+      console.log(`[Draft] Found ${foundUrls.length} URLs in draft, validating...`);
+
+      for (const url of foundUrls) {
+        const isAllowed = allowedUrlPatterns.some(pattern => pattern.test(url));
+
+        if (!isAllowed) {
+          console.log(`[Draft] ⚠️  REMOVING unauthorized URL: ${url}`);
+          // Remove the URL from the draft
+          finalResult.draft = finalResult.draft.replace(url, '[URL removed - not in approved list]');
+
+          // Add warning to internal reasoning
+          if (!finalResult.internalReasoning) {
+            finalResult.internalReasoning = "";
+          }
+          finalResult.internalReasoning += `\n\n⚠️  SYSTEM WARNING: Removed unauthorized URL: ${url}. Only approved URLs are allowed: 17track, returns portal, and product pages.`;
+        } else {
+          console.log(`[Draft] ✅ Approved URL: ${url}`);
+        }
       }
     }
 

@@ -97,6 +97,8 @@ export default function ConversationView() {
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
+  const replyEditorRef = useRef<HTMLDivElement>(null);
+  const composerBodyRef = useRef<HTMLDivElement>(null);
   const [history, setHistory] = useState<ConversationHistory[]>([]);
   const [showHistory, setShowHistory] = useState(true);
   const [editingTags, setEditingTags] = useState(false);
@@ -337,7 +339,11 @@ export default function ConversationView() {
   };
 
   const handleSend = async () => {
-    if (!replyText.trim() || !selectedConversation) return;
+    // Get HTML content from contentEditable div
+    const htmlContent = replyEditorRef.current?.innerHTML || "";
+    const textContent = replyEditorRef.current?.textContent || "";
+
+    if (!textContent.trim() || !selectedConversation) return;
 
     setSending(true);
     try {
@@ -349,9 +355,14 @@ export default function ConversationView() {
         body: JSON.stringify({
           conversationId: selectedConversation.id,
           to: recipientEmail,
-          body: replyText,
+          body: htmlContent,
         }),
       });
+
+      // Clear the contentEditable div
+      if (replyEditorRef.current) {
+        replyEditorRef.current.innerHTML = "";
+      }
       setReplyText("");
 
       // Clear draft data when email is sent
@@ -913,7 +924,11 @@ export default function ConversationView() {
 
   // Send email from composer
   const handleSendComposerEmail = async () => {
-    if (!composerTo.trim() || !composerBody.trim()) {
+    // Get HTML content from contentEditable div
+    const htmlContent = composerBodyRef.current?.innerHTML || "";
+    const textContent = composerBodyRef.current?.textContent || "";
+
+    if (!composerTo.trim() || !textContent.trim()) {
       alert("Please provide recipient email and message body");
       return;
     }
@@ -930,7 +945,7 @@ export default function ConversationView() {
           conversationId: isReplyToCurrentConversation ? selectedConversation?.id : undefined,
           to: composerTo,
           subject: composerSubject,
-          body: composerBody,
+          body: htmlContent,
         }),
       });
 
@@ -938,6 +953,9 @@ export default function ConversationView() {
         closeEmailComposer();
         setComposerTo("");
         setComposerSubject("");
+        if (composerBodyRef.current) {
+          composerBodyRef.current.innerHTML = "";
+        }
         setComposerBody("");
         setComposerAttachments([]);
         await refreshConversations();
@@ -1381,11 +1399,22 @@ export default function ConversationView() {
       {/* Reply Section */}
       <div className="border-t border-border p-6 shrink-0">
         <div className="mb-4">
-          <textarea
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-            placeholder="Type your reply..."
-            className="w-full min-h-32 p-4 font-sans bg-muted rounded-lg border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+          <div
+            ref={replyEditorRef}
+            contentEditable
+            onInput={(e) => {
+              setReplyText(e.currentTarget.textContent || "");
+            }}
+            onPaste={(e) => {
+              // Allow default paste behavior to preserve formatting
+              // The contentEditable will automatically handle rich text
+            }}
+            data-placeholder="Type your reply..."
+            className="w-full min-h-32 p-4 font-sans bg-white rounded-lg border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none"
+            style={{
+              whiteSpace: 'pre-wrap',
+              wordWrap: 'break-word'
+            }}
           />
         </div>
         <div className="flex items-center justify-between">
@@ -2176,12 +2205,22 @@ export default function ConversationView() {
             {/* Message Body */}
             <div>
               <label className="block text-sm font-sans font-semibold text-foreground mb-2">Message</label>
-              <textarea
-                value={composerBody}
-                onChange={(e) => setComposerBody(e.target.value)}
-                placeholder="Type your message here..."
-                rows={12}
-                className="w-full px-4 py-3 font-sans bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-foreground resize-none"
+              <div
+                ref={composerBodyRef}
+                contentEditable
+                onInput={(e) => {
+                  setComposerBody(e.currentTarget.textContent || "");
+                }}
+                onPaste={(e) => {
+                  // Allow default paste behavior to preserve formatting
+                  // The contentEditable will automatically handle rich text
+                }}
+                data-placeholder="Type your message here..."
+                className="w-full min-h-[300px] px-4 py-3 font-sans bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-slate-900 overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none"
+                style={{
+                  whiteSpace: 'pre-wrap',
+                  wordWrap: 'break-word'
+                }}
               />
             </div>
 
@@ -3065,6 +3104,10 @@ export default function ConversationView() {
                               </button>
                               <button
                                 onClick={() => {
+                                  // Set both the state and the contentEditable innerHTML
+                                  if (replyEditorRef.current) {
+                                    replyEditorRef.current.innerHTML = draftData.draft;
+                                  }
                                   setReplyText(draftData.draft);
                                   setShowDraftPopup(false);
                                 }}

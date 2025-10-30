@@ -249,8 +249,8 @@ export default function ConversationList() {
           <button
             onClick={() => pollAndRefresh()}
             className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs font-sans font-medium hover:bg-accent transition-colors border border-border"
-            title="Check for new emails"
-            disabled={loading}
+            title="Check for new emails - Fetches ALL emails from Gmail"
+            disabled={loading || refreshing}
           >
             ↻
           </button>

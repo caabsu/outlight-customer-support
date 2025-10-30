@@ -47,7 +47,7 @@ export async function googleAuthCallback(req: Request, res: Response) {
   res.send("Gmail connected. You can close this window.");
 }
 
-async function getAuthedClient() {
+export async function getAuthedClient() {
   const row = await prisma.oAuthToken.findFirst({ where: { accountEmail: process.env.GMAIL_ACCOUNT_EMAIL! } });
   if (!row) throw new Error("No OAuth tokens saved. Hit /oauth/google first.");
 
@@ -68,47 +68,107 @@ async function getAuthedClient() {
 export async function pollOnce(_req: Request, res: Response) {
   const gmail = await getAuthedClient();
 
-  const existing = await prisma.conversation.findFirst();
-  if (!existing) {
-    // Initial sync: fetch both inbox and sent
-    const [inboxThreads, sentThreads] = await Promise.all([
-      gmail.users.threads.list({ userId: "me", q: "in:inbox", maxResults: 50 }),
-      gmail.users.threads.list({ userId: "me", q: "in:sent", maxResults: 50 })
-    ]);
+  console.log("[Gmail Poll] Fetching ALL emails from Gmail with pagination...");
 
-    const allThreads = [
-      ...(inboxThreads.data.threads ?? []),
-      ...(sentThreads.data.threads ?? [])
-    ];
-
-    // Process initial threads in parallel for much faster first-time sync
-    // Use Set to avoid processing same thread twice (if it's both inbox and sent)
-    const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
-    await Promise.all(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
-
-    return res.json({ ingestedThreads: uniqueThreadIds.size });
-  }
-
-  // Regular poll: fetch both inbox and sent from last 2 days
-  const [inboxThreads, sentThreads] = await Promise.all([
-    gmail.users.threads.list({ userId: "me", q: "in:inbox newer_than:2d", maxResults: 20 }),
-    gmail.users.threads.list({ userId: "me", q: "in:sent newer_than:2d", maxResults: 20 })
-  ]);
+  // ALWAYS fetch ALL emails from inbox and sent (no time filters)
+  // The upsert logic prevents duplicates, so this is safe and ensures we catch everything
+  const inboxThreads = await fetchAllThreads(gmail, "in:inbox");
+  const sentThreads = await fetchAllThreads(gmail, "in:sent");
 
   const allThreads = [
-    ...(inboxThreads.data.threads ?? []),
-    ...(sentThreads.data.threads ?? [])
+    ...inboxThreads,
+    ...sentThreads
   ];
 
-  // Process threads in parallel for much faster performance
-  // Use Set to avoid processing same thread twice
-  const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
-  await Promise.all(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
+  console.log(`[Gmail Poll] Found ${inboxThreads.length} inbox + ${sentThreads.length} sent = ${allThreads.length} total threads`);
 
-  res.json({ updatedThreads: uniqueThreadIds.size });
+  // Process threads in parallel for much faster performance
+  // Use Set to avoid processing same thread twice (if it's both inbox and sent)
+  const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
+  console.log(`[Gmail Poll] Processing ${uniqueThreadIds.size} unique threads`);
+
+  // Log sample of thread IDs for debugging
+  const sampleIds = Array.from(uniqueThreadIds).slice(0, 5);
+  console.log(`[Gmail Poll] Sample thread IDs:`, sampleIds);
+
+  // Count how many are new vs existing
+  const existingCount = await prisma.conversation.count({
+    where: {
+      gmailThreadId: {
+        in: Array.from(uniqueThreadIds)
+      }
+    }
+  });
+
+  console.log(`[Gmail Poll] ${existingCount} threads already in database, ${uniqueThreadIds.size - existingCount} are new`);
+
+  // Ingest threads with error handling
+  const results = await Promise.allSettled(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
+
+  const succeeded = results.filter(r => r.status === 'fulfilled').length;
+  const failed = results.filter(r => r.status === 'rejected').length;
+
+  if (failed > 0) {
+    console.error(`[Gmail Poll] ⚠️  ${failed} threads failed to ingest:`);
+    results.forEach((r, idx) => {
+      if (r.status === 'rejected') {
+        console.error(`[Gmail Poll] Thread ${Array.from(uniqueThreadIds)[idx]} failed:`, r.reason);
+      }
+    });
+  }
+
+  console.log(`[Gmail Poll] Ingestion complete: ${succeeded} succeeded, ${failed} failed`);
+
+  res.json({
+    totalThreads: uniqueThreadIds.size,
+    inboxThreads: inboxThreads.length,
+    sentThreads: sentThreads.length,
+    existingThreads: existingCount,
+    newThreads: uniqueThreadIds.size - existingCount
+  });
 }
 
-async function ingestThread(gmail: any, threadId: string) {
+/**
+ * Fetch all threads matching a query using pagination
+ * Recursively fetches all pages until no more results
+ */
+export async function fetchAllThreads(gmail: any, query: string): Promise<any[]> {
+  const allThreads: any[] = [];
+  let pageToken: string | undefined = undefined;
+  let pageCount = 0;
+  const MAX_RESULTS_PER_PAGE = 100; // Gmail API max is 500, but 100 is safer
+
+  do {
+    pageCount++;
+    console.log(`[Gmail Fetch] Page ${pageCount} for query "${query}" ${pageToken ? `(token: ${pageToken.substring(0, 20)}...)` : '(first page)'}`);
+
+    const response = await gmail.users.threads.list({
+      userId: "me",
+      q: query,
+      maxResults: MAX_RESULTS_PER_PAGE,
+      pageToken: pageToken
+    });
+
+    const threads = response.data.threads || [];
+    allThreads.push(...threads);
+
+    console.log(`[Gmail Fetch] Page ${pageCount} returned ${threads.length} threads. Total so far: ${allThreads.length}`);
+
+    pageToken = response.data.nextPageToken;
+
+    // Safety check: prevent infinite loops (max 50 pages = 5000 threads)
+    if (pageCount >= 50) {
+      console.warn(`[Gmail Fetch] WARNING: Hit maximum page limit (50 pages). Stopping pagination. Total threads: ${allThreads.length}`);
+      break;
+    }
+
+  } while (pageToken);
+
+  console.log(`[Gmail Fetch] Finished fetching "${query}". Total threads: ${allThreads.length} across ${pageCount} pages`);
+  return allThreads;
+}
+
+export async function ingestThread(gmail: any, threadId: string) {
   const tr = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
   const messages = tr.data.messages ?? [];
   if (!messages.length) return;
@@ -205,11 +265,12 @@ export async function sendReply(conversationId: string, to: string, body: string
   const lastInboundMessage = conversation.messages.find(m => m.direction === "inbound");
   const recipientEmail = to || lastInboundMessage?.replyToEmail || conversation.customer?.primaryEmail;
 
-  // Create email in RFC 2822 format
+  // Create email in RFC 2822 format with HTML content type
   const subject = conversation.subject;
   const emailLines = [
     `To: ${recipientEmail}`,
     `Subject: Re: ${subject}`,
+    `Content-Type: text/html; charset=UTF-8`,
     ``,
     body,
   ];
@@ -258,10 +319,11 @@ export async function sendReply(conversationId: string, to: string, body: string
 export async function sendNewEmail(to: string, subject: string, body: string) {
   const gmail = await getAuthedClient();
 
-  // Create email in RFC 2822 format (not as a reply, so no threadId)
+  // Create email in RFC 2822 format with HTML content type (not as a reply, so no threadId)
   const emailLines = [
     `To: ${to}`,
     `Subject: ${subject}`,
+    `Content-Type: text/html; charset=UTF-8`,
     ``,
     body,
   ];
