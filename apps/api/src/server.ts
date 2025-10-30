@@ -1984,56 +1984,6 @@ Remember:
       }
     }
 
-    // ========================================================================
-    // URL VALIDATION AND SANITIZATION
-    // ========================================================================
-    // Remove any unauthorized URLs from the draft response
-    // ONLY allow URLs that are explicitly mentioned in the knowledge base
-    if (finalResult.draft) {
-      // Get all URLs from knowledge base
-      const kbEntries = await prisma.knowledgeBase.findMany({
-        where: { active: true },
-        select: { content: true }
-      });
-
-      // Extract all unique URLs from knowledge base
-      const urlRegex = /https?:\/\/[^\s<>"']+/gi;
-      const allowedUrls = new Set<string>();
-
-      kbEntries.forEach(entry => {
-        const urls = entry.content.match(urlRegex) || [];
-        urls.forEach(url => allowedUrls.add(url.trim()));
-      });
-
-      console.log(`[Draft] Knowledge base contains ${allowedUrls.size} approved URLs`);
-
-      // Find all URLs in the draft
-      const foundUrls = finalResult.draft.match(urlRegex) || [];
-
-      console.log(`[Draft] Found ${foundUrls.length} URLs in draft, validating against knowledge base...`);
-
-      for (const url of foundUrls) {
-        const trimmedUrl = url.trim();
-
-        // Check if this EXACT URL appears in the knowledge base
-        const isAllowed = allowedUrls.has(trimmedUrl);
-
-        if (!isAllowed) {
-          console.log(`[Draft] ⚠️  REMOVING unauthorized URL: ${trimmedUrl} (not found in knowledge base)`);
-          // Remove the URL from the draft
-          finalResult.draft = finalResult.draft.replace(url, '[URL removed - not in knowledge base]');
-
-          // Add warning to internal reasoning
-          if (!finalResult.internalReasoning) {
-            finalResult.internalReasoning = "";
-          }
-          finalResult.internalReasoning += `\n\n⚠️  SYSTEM WARNING: Removed unauthorized URL: ${trimmedUrl}. This URL does not appear in the knowledge base. Only use URLs that are explicitly mentioned in knowledge base articles.`;
-        } else {
-          console.log(`[Draft] ✅ Approved URL (found in KB): ${trimmedUrl}`);
-        }
-      }
-    }
-
     // Update conversation tags if new tags were added
     if (finalResult.tags && finalResult.tags.length > 0) {
       const uniqueTags = Array.from(new Set([...(conversation.tags || []), ...finalResult.tags]));
