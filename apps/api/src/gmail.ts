@@ -70,42 +70,96 @@ export async function pollOnce(_req: Request, res: Response) {
 
   const existing = await prisma.conversation.findFirst();
   if (!existing) {
-    // Initial sync: fetch both inbox and sent
-    const [inboxThreads, sentThreads] = await Promise.all([
-      gmail.users.threads.list({ userId: "me", q: "in:inbox", maxResults: 50 }),
-      gmail.users.threads.list({ userId: "me", q: "in:sent", maxResults: 50 })
-    ]);
+    console.log("[Gmail Poll] Initial sync - fetching ALL emails with pagination");
+
+    // Initial sync: fetch ALL emails from inbox and sent with pagination
+    const inboxThreads = await fetchAllThreads(gmail, "in:inbox");
+    const sentThreads = await fetchAllThreads(gmail, "in:sent");
 
     const allThreads = [
-      ...(inboxThreads.data.threads ?? []),
-      ...(sentThreads.data.threads ?? [])
+      ...inboxThreads,
+      ...sentThreads
     ];
+
+    console.log(`[Gmail Poll] Initial sync found ${inboxThreads.length} inbox + ${sentThreads.length} sent = ${allThreads.length} total threads`);
 
     // Process initial threads in parallel for much faster first-time sync
     // Use Set to avoid processing same thread twice (if it's both inbox and sent)
     const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
+    console.log(`[Gmail Poll] Processing ${uniqueThreadIds.size} unique threads`);
+
     await Promise.all(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
 
-    return res.json({ ingestedThreads: uniqueThreadIds.size });
+    return res.json({
+      ingestedThreads: uniqueThreadIds.size,
+      inboxThreads: inboxThreads.length,
+      sentThreads: sentThreads.length
+    });
   }
 
+  console.log("[Gmail Poll] Regular poll - fetching recent emails from last 2 days");
+
   // Regular poll: fetch both inbox and sent from last 2 days
-  const [inboxThreads, sentThreads] = await Promise.all([
-    gmail.users.threads.list({ userId: "me", q: "in:inbox newer_than:2d", maxResults: 20 }),
-    gmail.users.threads.list({ userId: "me", q: "in:sent newer_than:2d", maxResults: 20 })
-  ]);
+  const inboxThreads = await fetchAllThreads(gmail, "in:inbox newer_than:2d");
+  const sentThreads = await fetchAllThreads(gmail, "in:sent newer_than:2d");
 
   const allThreads = [
-    ...(inboxThreads.data.threads ?? []),
-    ...(sentThreads.data.threads ?? [])
+    ...inboxThreads,
+    ...sentThreads
   ];
+
+  console.log(`[Gmail Poll] Regular poll found ${inboxThreads.length} inbox + ${sentThreads.length} sent = ${allThreads.length} total threads`);
 
   // Process threads in parallel for much faster performance
   // Use Set to avoid processing same thread twice
   const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
   await Promise.all(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
 
-  res.json({ updatedThreads: uniqueThreadIds.size });
+  res.json({
+    updatedThreads: uniqueThreadIds.size,
+    inboxThreads: inboxThreads.length,
+    sentThreads: sentThreads.length
+  });
+}
+
+/**
+ * Fetch all threads matching a query using pagination
+ * Recursively fetches all pages until no more results
+ */
+async function fetchAllThreads(gmail: any, query: string): Promise<any[]> {
+  const allThreads: any[] = [];
+  let pageToken: string | undefined = undefined;
+  let pageCount = 0;
+  const MAX_RESULTS_PER_PAGE = 100; // Gmail API max is 500, but 100 is safer
+
+  do {
+    pageCount++;
+    console.log(`[Gmail Fetch] Page ${pageCount} for query "${query}" ${pageToken ? `(token: ${pageToken.substring(0, 20)}...)` : '(first page)'}`);
+
+    const response = await gmail.users.threads.list({
+      userId: "me",
+      q: query,
+      maxResults: MAX_RESULTS_PER_PAGE,
+      pageToken: pageToken
+    });
+
+    const threads = response.data.threads || [];
+    allThreads.push(...threads);
+
+    console.log(`[Gmail Fetch] Page ${pageCount} returned ${threads.length} threads. Total so far: ${allThreads.length}`);
+
+    pageToken = response.data.nextPageToken;
+
+    // Safety check: prevent infinite loops (max 50 pages = 5000 threads)
+    if (pageCount >= 50) {
+      console.warn(`[Gmail Fetch] WARNING: Hit maximum page limit (50 pages). Stopping pagination. Total threads: ${allThreads.length}`);
+      break;
+    }
+
+  } while (pageToken);
+
+  console.log(`[Gmail Fetch] Finished fetching "${query}". Total threads: ${allThreads.length} across ${pageCount} pages`);
+  return allThreads;
 }
 
 async function ingestThread(gmail: any, threadId: string) {
