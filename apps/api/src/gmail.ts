@@ -68,19 +68,15 @@ export async function getAuthedClient() {
 export async function pollOnce(_req: Request, res: Response) {
   const gmail = await getAuthedClient();
 
-  console.log("[Gmail Poll] Fetching ALL emails from Gmail with pagination...");
+  console.log("[Gmail Poll] Fetching ALL emails from Gmail with pagination (including archived)...");
 
-  // ALWAYS fetch ALL emails from inbox and sent (no time filters)
+  // ALWAYS fetch ALL emails (no time filters, includes archived emails)
+  // Using "-in:trash -in:spam" fetches everything except deleted/spam emails
+  // This includes inbox, sent, and archived emails
   // The upsert logic prevents duplicates, so this is safe and ensures we catch everything
-  const inboxThreads = await fetchAllThreads(gmail, "in:inbox");
-  const sentThreads = await fetchAllThreads(gmail, "in:sent");
+  const allThreads = await fetchAllThreads(gmail, "-in:trash -in:spam");
 
-  const allThreads = [
-    ...inboxThreads,
-    ...sentThreads
-  ];
-
-  console.log(`[Gmail Poll] Found ${inboxThreads.length} inbox + ${sentThreads.length} sent = ${allThreads.length} total threads`);
+  console.log(`[Gmail Poll] Found ${allThreads.length} total threads (including inbox, sent, and archived)`);
 
   // Process threads in parallel for much faster performance
   // Use Set to avoid processing same thread twice (if it's both inbox and sent)
@@ -102,8 +98,6 @@ export async function pollOnce(_req: Request, res: Response) {
 
   res.json({
     totalThreads: uniqueThreadIds.size,
-    inboxThreads: inboxThreads.length,
-    sentThreads: sentThreads.length,
     existingThreads: existingCount,
     newThreads: uniqueThreadIds.size - existingCount
   });
