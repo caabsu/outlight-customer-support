@@ -858,6 +858,7 @@ app.delete("/knowledge-base/:id", async (req: Request, res: Response) => {
  * Returns what knowledge each AI tool has access to
  */
 app.get("/knowledge-base/tool-access", async (req: Request, res: Response) => {
+  console.log("[Tool Access] Request received for knowledge base tool access");
   try {
     // Fetch all active knowledge base entries
     const allEntries = await prisma.knowledgeBase.findMany({
@@ -942,10 +943,14 @@ app.get("/knowledge-base/tool-access", async (req: Request, res: Response) => {
       }
     };
 
+    console.log(`[Tool Access] Returning tool access data with ${allEntries.length} total KB entries`);
     res.json(toolAccess);
   } catch (error) {
-    console.error("Error fetching tool access:", error);
-    res.status(500).json({ error: "Failed to fetch tool access information" });
+    console.error("[Tool Access] Error fetching tool access:", error);
+    res.status(500).json({
+      error: "Failed to fetch tool access information",
+      details: error instanceof Error ? error.message : String(error)
+    });
   }
 });
 
@@ -1980,6 +1985,42 @@ Remember:
           reasoning: "Failed to generate proper response",
           error: "Maximum iterations reached without valid JSON"
         };
+      }
+    }
+
+    // ========================================================================
+    // URL VALIDATION AND SANITIZATION
+    // ========================================================================
+    // Remove any unauthorized URLs from the draft response
+    if (finalResult.draft) {
+      const allowedUrlPatterns = [
+        /https:\/\/t\.17track\.net\/en#nums=[A-Z0-9]+/gi,
+        /https:\/\/outlight\.us\/apps\/returns-portal/gi,
+        /https:\/\/outlight\.us\/products\/[a-z0-9\-]+/gi
+      ];
+
+      // Find all URLs in the draft
+      const urlRegex = /https?:\/\/[^\s<>"']+/gi;
+      const foundUrls = finalResult.draft.match(urlRegex) || [];
+
+      console.log(`[Draft] Found ${foundUrls.length} URLs in draft, validating...`);
+
+      for (const url of foundUrls) {
+        const isAllowed = allowedUrlPatterns.some(pattern => pattern.test(url));
+
+        if (!isAllowed) {
+          console.log(`[Draft] ⚠️  REMOVING unauthorized URL: ${url}`);
+          // Remove the URL from the draft
+          finalResult.draft = finalResult.draft.replace(url, '[URL removed - not in approved list]');
+
+          // Add warning to internal reasoning
+          if (!finalResult.internalReasoning) {
+            finalResult.internalReasoning = "";
+          }
+          finalResult.internalReasoning += `\n\n⚠️  SYSTEM WARNING: Removed unauthorized URL: ${url}. Only approved URLs are allowed: 17track, returns portal, and product pages.`;
+        } else {
+          console.log(`[Draft] ✅ Approved URL: ${url}`);
+        }
       }
     }
 

@@ -64,10 +64,18 @@ export default function KnowledgeBasePage() {
     try {
       setLoadingToolAccess(true);
       const res = await fetch("/api/knowledge-base/tool-access");
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error("Failed to fetch tool access:", res.status, errorData);
+        setToolAccess(null);
+        return;
+      }
       const data = await res.json();
+      console.log("Tool access data received:", data);
       setToolAccess(data);
     } catch (error) {
       console.error("Failed to fetch tool access:", error);
+      setToolAccess(null);
     } finally {
       setLoadingToolAccess(false);
     }
