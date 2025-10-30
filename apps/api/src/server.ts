@@ -1596,30 +1596,42 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
       });
 
       if (existingDraft) {
-        console.log(`[Draft] Returning existing draft for conversation ${conversationId}`);
+        // Detect old drafts with URL filtering artifacts and force regeneration
+        const hasOldUrlFiltering = existingDraft.draft && (
+          existingDraft.draft.includes('[URL removed') ||
+          existingDraft.draft.includes('[url removed') ||
+          existingDraft.draft.includes('not in knowledge base')
+        );
 
-        // Handle old data format: convert string actionSteps to array if needed
-        let actionSteps = existingDraft.actionSteps;
-        if (actionSteps && typeof actionSteps === 'string') {
-          // Old format: string with newlines - convert to array
-          actionSteps = (actionSteps as string).split('\n').filter(s => s.trim());
-          console.log(`[Draft] Converted old string actionSteps to array format`);
+        if (hasOldUrlFiltering) {
+          console.log(`[Draft] Detected old draft with URL filtering artifacts, forcing regeneration`);
+          // Skip cache and continue to generate new draft
+        } else {
+          console.log(`[Draft] Returning existing draft for conversation ${conversationId}`);
+
+          // Handle old data format: convert string actionSteps to array if needed
+          let actionSteps = existingDraft.actionSteps;
+          if (actionSteps && typeof actionSteps === 'string') {
+            // Old format: string with newlines - convert to array
+            actionSteps = (actionSteps as string).split('\n').filter(s => s.trim());
+            console.log(`[Draft] Converted old string actionSteps to array format`);
+          }
+
+          return res.json({
+            internalReasoning: existingDraft.internalReasoning,
+            tags: existingDraft.tags,
+            category: existingDraft.category,
+            reasoning: existingDraft.reasoning,
+            shouldDraft: existingDraft.shouldDraft,
+            draft: existingDraft.draft,
+            actionSteps: actionSteps,
+            orderInfo: existingDraft.orderInfo,
+            conversationId,
+            fromDatabase: true,
+            createdAt: existingDraft.createdAt,
+            updatedAt: existingDraft.updatedAt
+          });
         }
-
-        return res.json({
-          internalReasoning: existingDraft.internalReasoning,
-          tags: existingDraft.tags,
-          category: existingDraft.category,
-          reasoning: existingDraft.reasoning,
-          shouldDraft: existingDraft.shouldDraft,
-          draft: existingDraft.draft,
-          actionSteps: actionSteps,
-          orderInfo: existingDraft.orderInfo,
-          conversationId,
-          fromDatabase: true,
-          createdAt: existingDraft.createdAt,
-          updatedAt: existingDraft.updatedAt
-        });
       }
     }
 
