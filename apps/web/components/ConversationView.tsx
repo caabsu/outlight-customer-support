@@ -1568,22 +1568,26 @@ export default function ConversationView() {
                       <button
                         onClick={async () => {
                           try {
-                            await fetch('/api/conversations/tag', {
-                              method: 'POST',
+                            // Mark conversation as archived (resolved)
+                            const updateResponse = await fetch(`/api/conversations/${conv.id}`, {
+                              method: 'PATCH',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                conversationId: conv.id,
-                                tag: 'resolved',
-                              }),
+                              body: JSON.stringify({ archived: true }),
                             });
-                            // Refresh history after marking as resolved
-                            const response = await fetch(`/api/conversations/history?email=${encodeURIComponent(selectedConversation.customer.primaryEmail)}`);
-                            if (response.ok) {
-                              const data = await response.json();
-                              setHistory(data.filter((c: ConversationHistory) => c.id !== selectedConversation.id));
+
+                            if (!updateResponse.ok) {
+                              throw new Error('Failed to mark as resolved');
                             }
+
+                            // Remove from history list immediately for instant feedback
+                            setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== conv.id));
+
+                            // Refresh conversations list in the background
+                            await refreshConversations();
                           } catch (error) {
                             console.error('Failed to mark as resolved:', error);
+                            // Optionally: Show error message to user
+                            alert('Failed to mark conversation as resolved. Please try again.');
                           }
                         }}
                         className="px-2 py-1.5 text-[10px] font-sans font-medium text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 rounded transition-colors flex items-center gap-1"
