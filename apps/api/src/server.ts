@@ -1679,6 +1679,10 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
       body: msg.bodyPlain || msg.bodyHtml,
     }));
 
+    // Identify the LATEST inbound message (the one we need to respond to)
+    const inboundMessages = emailThread.filter(msg => msg.direction === "inbound");
+    const latestInboundMessage = inboundMessages.length > 0 ? inboundMessages[inboundMessages.length - 1] : null;
+
     // Define tools for AI to use
     const tools = [
       {
@@ -1741,8 +1745,10 @@ You have access to these tools:
 ⚡ WORKFLOW - EXECUTE IN THIS EXACT ORDER
 ═══════════════════════════════════════════════════════════
 
-Step 1: READ THE EMAIL COMPLETELY
-- Understand the customer's issue, tone, and urgency
+Step 1: READ THE EMAIL THREAD AND IDENTIFY LATEST MESSAGE
+- ⚠️  CRITICAL: Your draft must RESPOND TO THE LATEST INBOUND MESSAGE (the most recent customer email)
+- Read the full thread for context, but your response addresses the LATEST message
+- Understand the customer's issue, tone, and urgency in their MOST RECENT message
 - Extract: customer email, order numbers, tracking numbers, dates mentioned
 
 Step 2: GATHER DATA USING TOOLS
@@ -1833,19 +1839,37 @@ When providing action steps (shouldDraft = false):
       },
       {
         role: "user",
-        content: `You are now analyzing a customer support email. Follow the workflow exactly:
+        content: `You are now analyzing a customer support email thread. Follow the workflow exactly:
 
-EMAIL THREAD:
+${latestInboundMessage ? `
+═══════════════════════════════════════════════════════════
+🎯 LATEST MESSAGE TO RESPOND TO (MOST RECENT FROM CUSTOMER):
+═══════════════════════════════════════════════════════════
+From: ${latestInboundMessage.from}
+Date: ${latestInboundMessage.date}
+Subject: ${latestInboundMessage.subject}
+
+${latestInboundMessage.body}
+
+⚠️  YOUR DRAFT MUST RESPOND TO THIS LATEST MESSAGE ABOVE ⚠️
+` : ''}
+
+═══════════════════════════════════════════════════════════
+📧 FULL EMAIL THREAD (FOR CONTEXT):
+═══════════════════════════════════════════════════════════
 ${JSON.stringify(emailThread, null, 2)}
 
-CUSTOMER INFO:
+═══════════════════════════════════════════════════════════
+👤 CUSTOMER INFO:
+═══════════════════════════════════════════════════════════
 ${conversation.customer ? `Name: ${conversation.customer.name}, Email: ${conversation.customer.primaryEmail}` : 'Unknown customer'}
 
 Remember:
-1. Use search_customer_and_orders to get order data
-2. Use get_tracking_info if needed
-3. Apply knowledge base policies
-4. Return ONLY pure JSON (no markdown, no code blocks)`
+1. ${latestInboundMessage ? '⚠️  RESPOND TO THE LATEST MESSAGE SHOWN ABOVE - not the first message in the thread' : 'Read all messages'}
+2. Use search_customer_and_orders to get order data
+3. Use get_tracking_info if needed
+4. Apply knowledge base policies
+5. Return ONLY pure JSON (no markdown, no code blocks)`
       }
     ];
 
