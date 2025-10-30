@@ -68,20 +68,28 @@ export async function getAuthedClient() {
 export async function pollOnce(_req: Request, res: Response) {
   const gmail = await getAuthedClient();
 
-  console.log("[Gmail Poll] Fetching ALL emails from Gmail with pagination (including archived)...");
+  console.log("[Gmail Poll] Fetching ALL emails from Gmail with pagination...");
 
-  // ALWAYS fetch ALL emails (no time filters, includes archived emails)
-  // Using "-in:trash -in:spam" fetches everything except deleted/spam emails
-  // This includes inbox, sent, and archived emails
+  // ALWAYS fetch ALL emails from inbox and sent (no time filters)
   // The upsert logic prevents duplicates, so this is safe and ensures we catch everything
-  const allThreads = await fetchAllThreads(gmail, "-in:trash -in:spam");
+  const inboxThreads = await fetchAllThreads(gmail, "in:inbox");
+  const sentThreads = await fetchAllThreads(gmail, "in:sent");
 
-  console.log(`[Gmail Poll] Found ${allThreads.length} total threads (including inbox, sent, and archived)`);
+  const allThreads = [
+    ...inboxThreads,
+    ...sentThreads
+  ];
+
+  console.log(`[Gmail Poll] Found ${inboxThreads.length} inbox + ${sentThreads.length} sent = ${allThreads.length} total threads`);
 
   // Process threads in parallel for much faster performance
   // Use Set to avoid processing same thread twice (if it's both inbox and sent)
   const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
   console.log(`[Gmail Poll] Processing ${uniqueThreadIds.size} unique threads`);
+
+  // Log sample of thread IDs for debugging
+  const sampleIds = Array.from(uniqueThreadIds).slice(0, 5);
+  console.log(`[Gmail Poll] Sample thread IDs:`, sampleIds);
 
   // Count how many are new vs existing
   const existingCount = await prisma.conversation.count({
@@ -94,10 +102,27 @@ export async function pollOnce(_req: Request, res: Response) {
 
   console.log(`[Gmail Poll] ${existingCount} threads already in database, ${uniqueThreadIds.size - existingCount} are new`);
 
-  await Promise.all(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
+  // Ingest threads with error handling
+  const results = await Promise.allSettled(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
+
+  const succeeded = results.filter(r => r.status === 'fulfilled').length;
+  const failed = results.filter(r => r.status === 'rejected').length;
+
+  if (failed > 0) {
+    console.error(`[Gmail Poll] ⚠️  ${failed} threads failed to ingest:`);
+    results.forEach((r, idx) => {
+      if (r.status === 'rejected') {
+        console.error(`[Gmail Poll] Thread ${Array.from(uniqueThreadIds)[idx]} failed:`, r.reason);
+      }
+    });
+  }
+
+  console.log(`[Gmail Poll] Ingestion complete: ${succeeded} succeeded, ${failed} failed`);
 
   res.json({
     totalThreads: uniqueThreadIds.size,
+    inboxThreads: inboxThreads.length,
+    sentThreads: sentThreads.length,
     existingThreads: existingCount,
     newThreads: uniqueThreadIds.size - existingCount
   });
