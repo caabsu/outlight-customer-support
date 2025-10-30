@@ -8,7 +8,7 @@ type ConversationHistory = {
   id: string;
   subject: string;
   lastMessageAt: string;
-  messages: { direction: string }[];
+  messages: { direction: string; bodyText?: string | null; bodyHtml?: string | null }[];
 };
 
 // Sanitize email HTML while preserving Gmail-like display
