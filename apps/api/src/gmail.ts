@@ -47,7 +47,7 @@ export async function googleAuthCallback(req: Request, res: Response) {
   res.send("Gmail connected. You can close this window.");
 }
 
-async function getAuthedClient() {
+export async function getAuthedClient() {
   const row = await prisma.oAuthToken.findFirst({ where: { accountEmail: process.env.GMAIL_ACCOUNT_EMAIL! } });
   if (!row) throw new Error("No OAuth tokens saved. Hit /oauth/google first.");
 
@@ -126,7 +126,7 @@ export async function pollOnce(_req: Request, res: Response) {
  * Fetch all threads matching a query using pagination
  * Recursively fetches all pages until no more results
  */
-async function fetchAllThreads(gmail: any, query: string): Promise<any[]> {
+export async function fetchAllThreads(gmail: any, query: string): Promise<any[]> {
   const allThreads: any[] = [];
   let pageToken: string | undefined = undefined;
   let pageCount = 0;
@@ -162,7 +162,7 @@ async function fetchAllThreads(gmail: any, query: string): Promise<any[]> {
   return allThreads;
 }
 
-async function ingestThread(gmail: any, threadId: string) {
+export async function ingestThread(gmail: any, threadId: string) {
   const tr = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
   const messages = tr.data.messages ?? [];
   if (!messages.length) return;

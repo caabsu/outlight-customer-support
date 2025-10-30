@@ -6,7 +6,7 @@ dotenv.config({ path: ".env.local" });
 dotenv.config(); // This will load .env if .env.local doesn't exist
 import OpenAI from "openai";
 
-import { googleAuthStart, googleAuthCallback, pollOnce, sendReply, sendNewEmail } from "./gmail";
+import { googleAuthStart, googleAuthCallback, pollOnce, sendReply, sendNewEmail, getAuthedClient, fetchAllThreads, ingestThread } from "./gmail";
 import { prisma } from "./db";
 import * as shopify from "./shopify";
 
@@ -44,6 +44,97 @@ app.get("/health", (_req: Request, res: Response) => res.json({ ok: true }));
 app.get("/oauth/google", googleAuthStart);
 app.get("/oauth/google/callback", googleAuthCallback);
 app.post("/gmail/poll", pollOnce);
+
+/**
+ * Fresh Sync - Clear all data and re-fetch ALL emails from Gmail
+ * POST /gmail/fresh-sync
+ * WARNING: This deletes all conversations, messages, and customers
+ */
+app.post("/gmail/fresh-sync", async (req: Request, res: Response) => {
+  try {
+    console.log("[Fresh Sync] Starting fresh sync - deleting all existing data");
+
+    // Delete all data in order to avoid foreign key constraints
+    const deleteStart = Date.now();
+
+    // Delete drafts first (references conversations)
+    const deletedDrafts = await prisma.draftResponse.deleteMany({});
+    console.log(`[Fresh Sync] Deleted ${deletedDrafts.count} draft responses`);
+
+    // Delete messages (references conversations)
+    const deletedMessages = await prisma.message.deleteMany({});
+    console.log(`[Fresh Sync] Deleted ${deletedMessages.count} messages`);
+
+    // Delete conversations (references customers)
+    const deletedConversations = await prisma.conversation.deleteMany({});
+    console.log(`[Fresh Sync] Deleted ${deletedConversations.count} conversations`);
+
+    // Delete customers
+    const deletedCustomers = await prisma.customer.deleteMany({});
+    console.log(`[Fresh Sync] Deleted ${deletedCustomers.count} customers`);
+
+    const deleteTime = Date.now() - deleteStart;
+    console.log(`[Fresh Sync] Database cleared in ${deleteTime}ms`);
+
+    // Now fetch all emails from Gmail
+    console.log("[Fresh Sync] Fetching ALL emails from Gmail with pagination...");
+
+    const syncStart = Date.now();
+    const gmail = await getAuthedClient();
+
+    // Fetch ALL emails from inbox and sent with pagination
+    const inboxThreads = await fetchAllThreads(gmail, "in:inbox");
+    const sentThreads = await fetchAllThreads(gmail, "in:sent");
+
+    const allThreads = [
+      ...inboxThreads,
+      ...sentThreads
+    ];
+
+    console.log(`[Fresh Sync] Found ${inboxThreads.length} inbox + ${sentThreads.length} sent = ${allThreads.length} total threads`);
+
+    // Process threads in parallel
+    const uniqueThreadIds = new Set(allThreads.map(th => th.id!));
+    console.log(`[Fresh Sync] Processing ${uniqueThreadIds.size} unique threads...`);
+
+    await Promise.all(Array.from(uniqueThreadIds).map(id => ingestThread(gmail, id)));
+
+    const syncTime = Date.now() - syncStart;
+    console.log(`[Fresh Sync] Sync completed in ${syncTime}ms`);
+
+    // Get final counts
+    const finalCounts = {
+      conversations: await prisma.conversation.count(),
+      messages: await prisma.message.count(),
+      customers: await prisma.customer.count()
+    };
+
+    res.json({
+      success: true,
+      deleted: {
+        conversations: deletedConversations.count,
+        messages: deletedMessages.count,
+        customers: deletedCustomers.count,
+        drafts: deletedDrafts.count,
+        timeMs: deleteTime
+      },
+      synced: {
+        inboxThreads: inboxThreads.length,
+        sentThreads: sentThreads.length,
+        totalThreads: allThreads.length,
+        uniqueThreads: uniqueThreadIds.size,
+        timeMs: syncTime
+      },
+      final: finalCounts,
+      totalTimeMs: deleteTime + syncTime
+    });
+  } catch (error) {
+    console.error("[Fresh Sync] Error during fresh sync:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to perform fresh sync"
+    });
+  }
+});
 
 // Get all conversations with messages (with filters)
 app.get("/conversations", async (req: Request, res: Response) => {
