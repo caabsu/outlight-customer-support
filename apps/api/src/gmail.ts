@@ -301,8 +301,8 @@ export async function sendReply(conversationId: string, to: string, body: string
       toEmails: [recipientEmail] as any,
       ccEmails: [] as any,
       sentAt: now,
-      bodyHtml: null,
-      bodyText: body,
+      bodyHtml: body,  // Store HTML content here
+      bodyText: null,  // Not plain text
       attachments: [] as any,
     },
   });

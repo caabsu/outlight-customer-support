@@ -8,8 +8,29 @@ type ConversationHistory = {
   id: string;
   subject: string;
   lastMessageAt: string;
+  archived?: boolean;
   messages: { direction: string; bodyText?: string | null; bodyHtml?: string | null }[];
 };
+
+// Helper function to escape HTML special characters
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Convert plain text to Gmail-compatible HTML
+function textToGmailHtml(text: string): string {
+  return text
+    .split('\n')
+    .map(line => {
+      // Escape HTML special characters in the line
+      const escapedLine = escapeHtml(line);
+      // Empty lines need a <br> to preserve spacing
+      return `<div>${escapedLine || '<br>'}</div>`;
+    })
+    .join('');
+}
 
 // Sanitize email HTML while preserving Gmail-like display
 function sanitizeEmailHtml(html: string): string {
@@ -92,7 +113,9 @@ export default function ConversationView() {
     composerBody,
     setComposerBody,
     composerAttachments,
-    setComposerAttachments
+    setComposerAttachments,
+    showArchived,
+    setShowArchived
   } = useConversations();
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
@@ -340,17 +363,19 @@ export default function ConversationView() {
   };
 
   const handleSend = async () => {
-    // Get HTML content from contentEditable div
-    const htmlContent = replyEditorRef.current?.innerHTML || "";
+    // Get text content from contentEditable div
     const textContent = replyEditorRef.current?.textContent || "";
 
     if (!textContent.trim() || !selectedConversation) return;
+
+    // Convert plain text to Gmail-compatible HTML
+    const htmlContent = textToGmailHtml(textContent);
 
     setSending(true);
     try {
       const recipientEmail = getReplyToEmail();
 
-      await fetch("/api/messages", {
+      const response = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -360,7 +385,13 @@ export default function ConversationView() {
         }),
       });
 
-      // Clear the contentEditable div
+      // Check if the request was successful
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
+
+      // Only clear the text if send was successful
       if (replyEditorRef.current) {
         replyEditorRef.current.innerHTML = "";
       }
@@ -382,6 +413,8 @@ export default function ConversationView() {
       await refreshConversations();
     } catch (error) {
       console.error("Failed to send message:", error);
+      // Show error to user
+      alert(`Failed to send email: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
     } finally {
       setSending(false);
     }
@@ -925,14 +958,16 @@ export default function ConversationView() {
 
   // Send email from composer
   const handleSendComposerEmail = async () => {
-    // Get HTML content from contentEditable div
-    const htmlContent = composerBodyRef.current?.innerHTML || "";
+    // Get text content from contentEditable div
     const textContent = composerBodyRef.current?.textContent || "";
 
     if (!composerTo.trim() || !textContent.trim()) {
       alert("Please provide recipient email and message body");
       return;
     }
+
+    // Convert plain text to Gmail-compatible HTML
+    const htmlContent = textToGmailHtml(textContent);
 
     setSendingEmail(true);
     try {
@@ -950,22 +985,25 @@ export default function ConversationView() {
         }),
       });
 
-      if (response.ok) {
-        closeEmailComposer();
-        setComposerTo("");
-        setComposerSubject("");
-        if (composerBodyRef.current) {
-          composerBodyRef.current.innerHTML = "";
-        }
-        setComposerBody("");
-        setComposerAttachments([]);
-        await refreshConversations();
-      } else {
-        throw new Error("Failed to send email");
+      // Check if the request was successful
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || `Server error: ${response.status}`);
       }
+
+      // Only clear and close if send was successful
+      closeEmailComposer();
+      setComposerTo("");
+      setComposerSubject("");
+      if (composerBodyRef.current) {
+        composerBodyRef.current.innerHTML = "";
+      }
+      setComposerBody("");
+      setComposerAttachments([]);
+      await refreshConversations();
     } catch (error) {
       console.error("Failed to send email:", error);
-      alert("Failed to send email. Please try again.");
+      alert(`Failed to send email: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
     } finally {
       setSendingEmail(false);
     }
@@ -1406,9 +1444,52 @@ export default function ConversationView() {
             onInput={(e) => {
               setReplyText(e.currentTarget.textContent || "");
             }}
+            onKeyDown={(e) => {
+              // Handle Enter key to insert newlines properly
+              if (e.key === 'Enter') {
+                e.preventDefault();
+
+                const selection = window.getSelection();
+                if (!selection?.rangeCount) return;
+
+                const range = selection.getRangeAt(0);
+                const textNode = document.createTextNode('\n');
+                range.insertNode(textNode);
+
+                // Move cursor after the newline
+                range.setStartAfter(textNode);
+                range.setEndAfter(textNode);
+                selection.removeAllRanges();
+                selection.addRange(range);
+
+                // Update state
+                setReplyText(e.currentTarget.textContent || "");
+              }
+            }}
             onPaste={(e) => {
-              // Allow default paste behavior to preserve formatting
-              // The contentEditable will automatically handle rich text
+              // Prevent default paste to avoid unwanted HTML formatting
+              e.preventDefault();
+
+              // Get plain text from clipboard
+              const text = e.clipboardData?.getData('text/plain') || '';
+
+              // Insert plain text at cursor position
+              const selection = window.getSelection();
+              if (!selection?.rangeCount) return;
+
+              selection.deleteFromDocument();
+              const range = selection.getRangeAt(0);
+              const textNode = document.createTextNode(text);
+              range.insertNode(textNode);
+
+              // Move cursor to end of inserted text
+              range.setStartAfter(textNode);
+              range.setEndAfter(textNode);
+              selection.removeAllRanges();
+              selection.addRange(range);
+
+              // Update state
+              setReplyText(e.currentTarget.textContent || "");
             }}
             data-placeholder="Type your reply..."
             className="w-full min-h-32 p-4 font-sans bg-white rounded-lg border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none"
@@ -1553,9 +1634,25 @@ export default function ConversationView() {
                       </button>
 
                       <button
-                        onClick={() => {
-                          console.log('Opening conversation:', conv.id);
-                          selectConversation(conv.id);
+                        onClick={async () => {
+                          console.log('Opening conversation:', conv.id, 'archived:', conv.archived);
+
+                          try {
+                            // If conversation is archived, we need to switch to archived view first
+                            if (conv.archived && !showArchived) {
+                              console.log('Switching to archived view');
+                              setShowArchived(true);
+                              // Wait a bit for the state to update and trigger the refetch
+                              await new Promise(resolve => setTimeout(resolve, 500));
+                            }
+
+                            // Now select the conversation
+                            selectConversation(conv.id);
+                            console.log('Selected conversation:', conv.id);
+                          } catch (error) {
+                            console.error('Error opening conversation:', error);
+                            alert('Failed to open conversation. Please try again.');
+                          }
                         }}
                         className="flex-1 px-2 py-1.5 text-[10px] font-sans font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded transition-colors flex items-center justify-center gap-1"
                       >
@@ -2237,21 +2334,83 @@ export default function ConversationView() {
               </>
             ) : history.length > 0 ? (
               history.map((conv) => (
-                <button
+                <div
                   key={conv.id}
-                  onClick={() => {
-                    selectConversation(conv.id);
-                    setShowAllHistory(false);
-                  }}
-                  className="w-full text-left p-4 border border-border bg-background hover:border-primary hover:bg-accent/50 transition-all cursor-pointer rounded-lg"
+                  className="w-full p-4 border border-border bg-background rounded-lg"
                 >
                   <p className="text-sm font-sans font-semibold text-foreground mb-1">
                     {conv.subject}
                   </p>
-                  <p className="text-xs font-sans text-muted-foreground">
+                  <p className="text-xs font-sans text-muted-foreground mb-3">
                     {new Date(conv.lastMessageAt).toLocaleDateString()} • {conv.messages.length} messages
                   </p>
-                </button>
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={async () => {
+                        console.log('Opening conversation:', conv.id, 'archived:', conv.archived);
+
+                        try {
+                          // If conversation is archived, we need to switch to archived view first
+                          if (conv.archived && !showArchived) {
+                            console.log('Switching to archived view');
+                            setShowArchived(true);
+                            // Wait a bit for the state to update and trigger the refetch
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                          }
+
+                          // Now select the conversation and close modal
+                          selectConversation(conv.id);
+                          setShowAllHistory(false);
+                          console.log('Selected conversation:', conv.id);
+                        } catch (error) {
+                          console.error('Error opening conversation:', error);
+                          alert('Failed to open conversation. Please try again.');
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 text-xs font-sans font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      <span>Open</span>
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        try {
+                          // Mark conversation as archived (resolved)
+                          const updateResponse = await fetch(`/api/conversations/${conv.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ archived: true }),
+                          });
+
+                          if (!updateResponse.ok) {
+                            throw new Error('Failed to mark as resolved');
+                          }
+
+                          // Remove from history list immediately for instant feedback
+                          setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== conv.id));
+
+                          // Refresh conversations list in the background
+                          await refreshConversations();
+                        } catch (error) {
+                          console.error('Failed to mark as resolved:', error);
+                          alert('Failed to mark conversation as resolved. Please try again.');
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 text-xs font-sans font-medium text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 rounded transition-colors flex items-center justify-center gap-1.5"
+                      title="Mark as Resolved"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Resolve</span>
+                    </button>
+                  </div>
+                </div>
               ))
             ) : (
               <div className="p-8 text-center">
@@ -2318,9 +2477,52 @@ export default function ConversationView() {
                 onInput={(e) => {
                   setComposerBody(e.currentTarget.textContent || "");
                 }}
+                onKeyDown={(e) => {
+                  // Handle Enter key to insert newlines properly
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+
+                    const selection = window.getSelection();
+                    if (!selection?.rangeCount) return;
+
+                    const range = selection.getRangeAt(0);
+                    const textNode = document.createTextNode('\n');
+                    range.insertNode(textNode);
+
+                    // Move cursor after the newline
+                    range.setStartAfter(textNode);
+                    range.setEndAfter(textNode);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+
+                    // Update state
+                    setComposerBody(e.currentTarget.textContent || "");
+                  }
+                }}
                 onPaste={(e) => {
-                  // Allow default paste behavior to preserve formatting
-                  // The contentEditable will automatically handle rich text
+                  // Prevent default paste to avoid unwanted HTML formatting
+                  e.preventDefault();
+
+                  // Get plain text from clipboard
+                  const text = e.clipboardData?.getData('text/plain') || '';
+
+                  // Insert plain text at cursor position
+                  const selection = window.getSelection();
+                  if (!selection?.rangeCount) return;
+
+                  selection.deleteFromDocument();
+                  const range = selection.getRangeAt(0);
+                  const textNode = document.createTextNode(text);
+                  range.insertNode(textNode);
+
+                  // Move cursor to end of inserted text
+                  range.setStartAfter(textNode);
+                  range.setEndAfter(textNode);
+                  selection.removeAllRanges();
+                  selection.addRange(range);
+
+                  // Update state
+                  setComposerBody(e.currentTarget.textContent || "");
                 }}
                 data-placeholder="Type your message here..."
                 className="w-full min-h-[300px] px-4 py-3 font-sans bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-slate-900 overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none"
