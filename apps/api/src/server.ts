@@ -601,15 +601,32 @@ app.get("/analytics", async (req: Request, res: Response) => {
       ? responseTimes.sort((a, b) => a - b)[Math.floor(responseTimes.length / 2)]
       : 0;
 
-    // Unreplied conversations (needs reply) - now using tag
-    const unrepliedConversations = conversations.filter(conv =>
-      conv.tags?.includes("needs-reply")
-    );
+    // Unreplied conversations (needs reply) - hybrid approach for backward compatibility
+    // Check both the tag (for new conversations) and last message direction (for old conversations)
+    const unrepliedConversations = conversations.filter(conv => {
+      // First check if has needs-reply tag (new system)
+      if (conv.tags?.includes("needs-reply")) {
+        return true;
+      }
 
-    // Resolved conversations (no needs-reply tag)
-    const resolvedConversations = conversations.filter(conv =>
-      !conv.tags?.includes("needs-reply")
-    );
+      // Fallback to last message direction check (for conversations without tags yet)
+      if (conv.messages.length === 0) return false;
+      const lastMessage = conv.messages[conv.messages.length - 1];
+      return lastMessage.direction === "inbound";
+    });
+
+    // Resolved conversations (replied to, no needs-reply tag)
+    const resolvedConversations = conversations.filter(conv => {
+      // First check if has needs-reply tag (new system) - if it has the tag, it's NOT resolved
+      if (conv.tags?.includes("needs-reply")) {
+        return false;
+      }
+
+      // Fallback to last message direction check (for conversations without tags yet)
+      if (conv.messages.length === 0) return false;
+      const lastMessage = conv.messages[conv.messages.length - 1];
+      return lastMessage.direction === "outbound";
+    });
 
     const resolutionRate = totalConversations > 0
       ? (resolvedConversations.length / totalConversations) * 100
