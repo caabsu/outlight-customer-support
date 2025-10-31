@@ -1444,6 +1444,28 @@ export default function ConversationView() {
             onInput={(e) => {
               setReplyText(e.currentTarget.textContent || "");
             }}
+            onKeyDown={(e) => {
+              // Handle Enter key to insert newlines properly
+              if (e.key === 'Enter') {
+                e.preventDefault();
+
+                const selection = window.getSelection();
+                if (!selection?.rangeCount) return;
+
+                const range = selection.getRangeAt(0);
+                const textNode = document.createTextNode('\n');
+                range.insertNode(textNode);
+
+                // Move cursor after the newline
+                range.setStartAfter(textNode);
+                range.setEndAfter(textNode);
+                selection.removeAllRanges();
+                selection.addRange(range);
+
+                // Update state
+                setReplyText(e.currentTarget.textContent || "");
+              }
+            }}
             onPaste={(e) => {
               // Prevent default paste to avoid unwanted HTML formatting
               e.preventDefault();
@@ -1613,33 +1635,23 @@ export default function ConversationView() {
 
                       <button
                         onClick={async () => {
-                          console.log('Opening conversation:', conv.id);
+                          console.log('Opening conversation:', conv.id, 'archived:', conv.archived);
 
                           try {
-                            // Fetch the specific conversation to ensure we have it
-                            const response = await fetch(`/api/conversations/${conv.id}`);
-                            if (response.ok) {
-                              const conversation = await response.json();
-
-                              // Check if conversation is already in the list
-                              const existsInList = conversations.some(c => c.id === conv.id);
-
-                              if (!existsInList) {
-                                // If it's archived and not in the current view, enable showArchived
-                                if (conversation.archived && !showArchived) {
-                                  setShowArchived(true);
-                                  // Refresh to get all archived conversations
-                                  await refreshConversations();
-                                }
-                              }
-
-                              // Select the conversation
-                              selectConversation(conv.id);
-                            } else {
-                              console.error('Failed to fetch conversation');
+                            // If conversation is archived, we need to switch to archived view first
+                            if (conv.archived && !showArchived) {
+                              console.log('Switching to archived view');
+                              setShowArchived(true);
+                              // Wait a bit for the state to update and trigger the refetch
+                              await new Promise(resolve => setTimeout(resolve, 500));
                             }
+
+                            // Now select the conversation
+                            selectConversation(conv.id);
+                            console.log('Selected conversation:', conv.id);
                           } catch (error) {
                             console.error('Error opening conversation:', error);
+                            alert('Failed to open conversation. Please try again.');
                           }
                         }}
                         className="flex-1 px-2 py-1.5 text-[10px] font-sans font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded transition-colors flex items-center justify-center gap-1"
@@ -2402,6 +2414,28 @@ export default function ConversationView() {
                 contentEditable
                 onInput={(e) => {
                   setComposerBody(e.currentTarget.textContent || "");
+                }}
+                onKeyDown={(e) => {
+                  // Handle Enter key to insert newlines properly
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+
+                    const selection = window.getSelection();
+                    if (!selection?.rangeCount) return;
+
+                    const range = selection.getRangeAt(0);
+                    const textNode = document.createTextNode('\n');
+                    range.insertNode(textNode);
+
+                    // Move cursor after the newline
+                    range.setStartAfter(textNode);
+                    range.setEndAfter(textNode);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+
+                    // Update state
+                    setComposerBody(e.currentTarget.textContent || "");
+                  }
                 }}
                 onPaste={(e) => {
                   // Prevent default paste to avoid unwanted HTML formatting
