@@ -8,6 +8,7 @@ type ConversationHistory = {
   id: string;
   subject: string;
   lastMessageAt: string;
+  archived?: boolean;
   messages: { direction: string; bodyText?: string | null; bodyHtml?: string | null }[];
 };
 
@@ -92,7 +93,9 @@ export default function ConversationView() {
     composerBody,
     setComposerBody,
     composerAttachments,
-    setComposerAttachments
+    setComposerAttachments,
+    showArchived,
+    setShowArchived
   } = useConversations();
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
@@ -340,11 +343,17 @@ export default function ConversationView() {
   };
 
   const handleSend = async () => {
-    // Get HTML content from contentEditable div
-    const htmlContent = replyEditorRef.current?.innerHTML || "";
+    // Get text content from contentEditable div
     const textContent = replyEditorRef.current?.textContent || "";
 
     if (!textContent.trim() || !selectedConversation) return;
+
+    // Convert plain text to HTML with proper formatting for Gmail
+    // Wrap each line in a div to preserve line breaks (Gmail's default behavior)
+    const htmlContent = textContent
+      .split('\n')
+      .map(line => `<div>${line || '<br>'}</div>`) // Empty lines get a <br> inside div
+      .join('');
 
     setSending(true);
     try {
@@ -925,14 +934,20 @@ export default function ConversationView() {
 
   // Send email from composer
   const handleSendComposerEmail = async () => {
-    // Get HTML content from contentEditable div
-    const htmlContent = composerBodyRef.current?.innerHTML || "";
+    // Get text content from contentEditable div
     const textContent = composerBodyRef.current?.textContent || "";
 
     if (!composerTo.trim() || !textContent.trim()) {
       alert("Please provide recipient email and message body");
       return;
     }
+
+    // Convert plain text to HTML with proper formatting for Gmail
+    // Wrap each line in a div to preserve line breaks (Gmail's default behavior)
+    const htmlContent = textContent
+      .split('\n')
+      .map(line => `<div>${line || '<br>'}</div>`) // Empty lines get a <br> inside div
+      .join('');
 
     setSendingEmail(true);
     try {
@@ -1576,10 +1591,33 @@ export default function ConversationView() {
                       <button
                         onClick={async () => {
                           console.log('Opening conversation:', conv.id);
-                          // Refresh conversations to ensure the target conversation is in the list
-                          await refreshConversations();
-                          // Select the conversation after refresh
-                          selectConversation(conv.id);
+
+                          try {
+                            // Fetch the specific conversation to ensure we have it
+                            const response = await fetch(`/api/conversations/${conv.id}`);
+                            if (response.ok) {
+                              const conversation = await response.json();
+
+                              // Check if conversation is already in the list
+                              const existsInList = conversations.some(c => c.id === conv.id);
+
+                              if (!existsInList) {
+                                // If it's archived and not in the current view, enable showArchived
+                                if (conversation.archived && !showArchived) {
+                                  setShowArchived(true);
+                                  // Refresh to get all archived conversations
+                                  await refreshConversations();
+                                }
+                              }
+
+                              // Select the conversation
+                              selectConversation(conv.id);
+                            } else {
+                              console.error('Failed to fetch conversation');
+                            }
+                          } catch (error) {
+                            console.error('Error opening conversation:', error);
+                          }
                         }}
                         className="flex-1 px-2 py-1.5 text-[10px] font-sans font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded transition-colors flex items-center justify-center gap-1"
                       >

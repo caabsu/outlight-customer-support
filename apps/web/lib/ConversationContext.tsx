@@ -99,7 +99,8 @@ export function ConversationProvider({
   const fetchConversations = async (silent = false, retryCount = 0, suppressErrors = false, page = currentPage) => {
     try {
       if (!silent) setLoading(true);
-      const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+      const archivedParam = showArchived ? '&archived=true' : '';
+      const res = await fetch(`/api/conversations?page=${page}&limit=50${archivedParam}`);
       if (!res.ok) {
         // Don't log errors if suppressed (during auto-refresh)
         if (!suppressErrors && (retryCount === 0 || res.status !== 500)) {
@@ -200,6 +201,12 @@ export function ConversationProvider({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - only run once on mount
+
+  // Refetch when showArchived or showSent changes
+  useEffect(() => {
+    fetchConversations(true, 0, false, 1); // Silent fetch, reset to page 1
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchived, showSent]);
 
 
   const selectedConversation =
