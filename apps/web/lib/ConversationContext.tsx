@@ -41,6 +41,7 @@ type ConversationContextType = {
   conversations: Conversation[];
   selectedConversation: Conversation | null;
   selectConversation: (id: string) => void;
+  fetchAndSelectConversation: (id: string) => Promise<void>;
   refreshConversations: () => Promise<void>;
   pollAndRefresh: () => Promise<void>;
   updateConversationOptimistic: (id: string, updates: Partial<Conversation>) => void;
@@ -80,6 +81,7 @@ export function ConversationProvider({
 }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pinnedConversation, setPinnedConversation] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshProgress, setRefreshProgress] = useState(0);
@@ -138,6 +140,15 @@ export function ConversationProvider({
 
       setConversations(conversationsList);
       setPagination(paginationData);
+
+      // Update pinned conversation if it's in the new list (to get fresh data)
+      if (pinnedConversation) {
+        const updatedPinned = conversationsList.find((c: Conversation) => c.id === pinnedConversation.id);
+        if (updatedPinned) {
+          setPinnedConversation(updatedPinned);
+        }
+        // If not in list, keep the old pinned version so it stays visible
+      }
 
       // CRITICAL: Always sync currentPage with API response to prevent navigation bugs
       // This ensures the local state matches what the server returned
@@ -209,17 +220,61 @@ export function ConversationProvider({
   }, [showArchived, showSent]);
 
 
+  // Try to find selected conversation in list, fallback to pinned conversation
   const selectedConversation =
-    conversations.find((c) => c.id === selectedId) || null;
+    conversations.find((c) => c.id === selectedId) ||
+    (pinnedConversation?.id === selectedId ? pinnedConversation : null);
 
   const selectConversation = (id: string) => {
     setSelectedId(id);
+    // Clear pinned when manually selecting (will be set if needed)
+    const found = conversations.find((c) => c.id === id);
+    if (found) {
+      setPinnedConversation(found);
+    }
+  };
+
+  const fetchAndSelectConversation = async (id: string) => {
+    try {
+      // First, check if conversation is already in the list
+      const existing = conversations.find((c) => c.id === id);
+      if (existing) {
+        // Just select it and pin it
+        setSelectedId(id);
+        setPinnedConversation(existing);
+        return;
+      }
+
+      // Fetch the conversation from the API
+      const res = await fetch(`/api/conversations/${id}`);
+      if (!res.ok) {
+        throw new Error(`Failed to fetch conversation: ${res.statusText}`);
+      }
+
+      const conversation: Conversation = await res.json();
+
+      // Add it to the conversations list
+      setConversations((prev) => [conversation, ...prev]);
+
+      // Pin it so it stays visible even if filters change
+      setPinnedConversation(conversation);
+
+      // Select it
+      setSelectedId(id);
+    } catch (error) {
+      console.error("Error fetching conversation:", error);
+      throw error;
+    }
   };
 
   const updateConversationOptimistic = (id: string, updates: Partial<Conversation>) => {
     setConversations((prev) =>
       prev.map((conv) => (conv.id === id ? { ...conv, ...updates } : conv))
     );
+    // Also update pinned conversation if it's the one being updated
+    if (pinnedConversation?.id === id) {
+      setPinnedConversation((prev) => prev ? { ...prev, ...updates } : null);
+    }
   };
 
   const pollAndRefresh = async () => {
@@ -321,6 +376,7 @@ export function ConversationProvider({
         conversations,
         selectedConversation,
         selectConversation,
+        fetchAndSelectConversation,
         refreshConversations,
         pollAndRefresh,
         updateConversationOptimistic,

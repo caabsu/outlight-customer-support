@@ -99,6 +99,7 @@ export default function ConversationView() {
     conversations,
     selectedConversation,
     selectConversation,
+    fetchAndSelectConversation,
     refreshConversations,
     updateConversationOptimistic,
     pagination,
@@ -1596,7 +1597,7 @@ export default function ConversationView() {
           </div>
         </div>
 
-        <div className="max-h-[320px] overflow-y-auto px-3 py-3 bg-white space-y-2">
+        <div className="h-[320px] overflow-y-auto px-3 py-3 bg-white space-y-2">
           {loadingHistory ? (
             <>
               {[1, 2].map((i) => (
@@ -1663,20 +1664,9 @@ export default function ConversationView() {
 
                       <button
                         onClick={async () => {
-                          console.log('Opening conversation:', conv.id, 'archived:', conv.archived);
-
                           try {
-                            // If conversation is archived, we need to switch to archived view first
-                            if (conv.archived && !showArchived) {
-                              console.log('Switching to archived view');
-                              setShowArchived(true);
-                              // Wait a bit for the state to update and trigger the refetch
-                              await new Promise(resolve => setTimeout(resolve, 500));
-                            }
-
-                            // Now select the conversation
-                            selectConversation(conv.id);
-                            console.log('Selected conversation:', conv.id);
+                            // Fetch and select the conversation (handles adding it to the list if needed)
+                            await fetchAndSelectConversation(conv.id);
                           } catch (error) {
                             console.error('Error opening conversation:', error);
                             alert('Failed to open conversation. Please try again.');
@@ -2394,21 +2384,11 @@ export default function ConversationView() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={async () => {
-                        console.log('Opening conversation:', conv.id, 'archived:', conv.archived);
-
                         try {
-                          // If conversation is archived, we need to switch to archived view first
-                          if (conv.archived && !showArchived) {
-                            console.log('Switching to archived view');
-                            setShowArchived(true);
-                            // Wait a bit for the state to update and trigger the refetch
-                            await new Promise(resolve => setTimeout(resolve, 500));
-                          }
-
-                          // Now select the conversation and close modal
-                          selectConversation(conv.id);
+                          // Fetch and select the conversation (handles adding it to the list if needed)
+                          await fetchAndSelectConversation(conv.id);
+                          // Close the modal
                           setShowAllHistory(false);
-                          console.log('Selected conversation:', conv.id);
                         } catch (error) {
                           console.error('Error opening conversation:', error);
                           alert('Failed to open conversation. Please try again.');
