@@ -9,6 +9,7 @@ type ConversationHistory = {
   subject: string;
   lastMessageAt: string;
   archived?: boolean;
+  tags?: string[];
   messages: { direction: string; bodyText?: string | null; bodyHtml?: string | null }[];
 };
 
