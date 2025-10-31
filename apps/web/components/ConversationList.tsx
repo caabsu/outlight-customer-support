@@ -63,11 +63,10 @@ export default function ConversationList() {
   // Conversations from context are already filtered and paginated
 
   const toggleTag = (tag: string) => {
-    setSelectedTags((prev: string[]) =>
-      prev.includes(tag)
-        ? prev.filter(t => t !== tag)
-        : [...prev, tag]
-    );
+    const newTags = selectedTags.includes(tag)
+      ? selectedTags.filter(t => t !== tag)
+      : [...selectedTags, tag];
+    setSelectedTags(newTags);
   };
 
   const handleStar = async (e: React.MouseEvent, convId: string) => {
