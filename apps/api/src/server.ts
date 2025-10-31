@@ -523,12 +523,11 @@ app.get("/analytics", async (req: Request, res: Response) => {
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     }
 
-    // Fetch ALL conversations in the time period (for total count)
-    const allConversationsInPeriod = await prisma.conversation.findMany({
+    // Fetch ALL active (non-archived) conversations for current state metrics
+    // We want to show the CURRENT state of needs-reply/resolved, not historical data
+    const allActiveConversations = await prisma.conversation.findMany({
       where: {
-        lastMessageAt: {
-          gte: startDate
-        }
+        archived: false  // Only non-archived conversations
       },
       include: {
         messages: {
@@ -538,12 +537,12 @@ app.get("/analytics", async (req: Request, res: Response) => {
     });
 
     // Count non-customer-support conversations
-    const nonCustomerSupportConversations = allConversationsInPeriod.filter(conv =>
+    const nonCustomerSupportConversations = allActiveConversations.filter(conv =>
       conv.tags?.includes("non-customer-support")
     );
 
     // Get customer support conversations only (exclude non-customer-support)
-    const conversations = allConversationsInPeriod.filter(conv =>
+    const conversations = allActiveConversations.filter(conv =>
       !conv.tags?.includes("non-customer-support")
     );
 
@@ -743,7 +742,7 @@ app.get("/analytics", async (req: Request, res: Response) => {
         unrepliedCount: unrepliedConversations.length,
         resolvedCount: resolvedConversations.length,
         resolutionRate: Math.round(resolutionRate * 10) / 10,
-        totalConversationsIncludingNonSupport: allConversationsInPeriod.length,
+        totalConversationsIncludingNonSupport: allActiveConversations.length,
         nonCustomerSupportCount: nonCustomerSupportConversations.length
       },
       emailVelocity: {
