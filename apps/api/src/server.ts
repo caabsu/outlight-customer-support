@@ -523,12 +523,11 @@ app.get("/analytics", async (req: Request, res: Response) => {
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     }
 
-    // Fetch ALL conversations in the time period (for total count)
-    const allConversationsInPeriod = await prisma.conversation.findMany({
+    // Fetch ALL active (non-archived) conversations for current state metrics
+    // We want to show the CURRENT state of needs-reply/resolved, not historical data
+    const allActiveConversations = await prisma.conversation.findMany({
       where: {
-        lastMessageAt: {
-          gte: startDate
-        }
+        archived: false  // Only non-archived conversations
       },
       include: {
         messages: {
@@ -538,12 +537,12 @@ app.get("/analytics", async (req: Request, res: Response) => {
     });
 
     // Count non-customer-support conversations
-    const nonCustomerSupportConversations = allConversationsInPeriod.filter(conv =>
+    const nonCustomerSupportConversations = allActiveConversations.filter(conv =>
       conv.tags?.includes("non-customer-support")
     );
 
     // Get customer support conversations only (exclude non-customer-support)
-    const conversations = allConversationsInPeriod.filter(conv =>
+    const conversations = allActiveConversations.filter(conv =>
       !conv.tags?.includes("non-customer-support")
     );
 
@@ -601,15 +600,32 @@ app.get("/analytics", async (req: Request, res: Response) => {
       ? responseTimes.sort((a, b) => a - b)[Math.floor(responseTimes.length / 2)]
       : 0;
 
-    // Unreplied conversations (needs reply) - now using tag
-    const unrepliedConversations = conversations.filter(conv =>
-      conv.tags?.includes("needs-reply")
-    );
+    // Unreplied conversations (needs reply) - hybrid approach for backward compatibility
+    // Check both the tag (for new conversations) and last message direction (for old conversations)
+    const unrepliedConversations = conversations.filter(conv => {
+      // First check if has needs-reply tag (new system)
+      if (conv.tags?.includes("needs-reply")) {
+        return true;
+      }
 
-    // Resolved conversations (no needs-reply tag)
-    const resolvedConversations = conversations.filter(conv =>
-      !conv.tags?.includes("needs-reply")
-    );
+      // Fallback to last message direction check (for conversations without tags yet)
+      if (conv.messages.length === 0) return false;
+      const lastMessage = conv.messages[conv.messages.length - 1];
+      return lastMessage.direction === "inbound";
+    });
+
+    // Resolved conversations (replied to, no needs-reply tag)
+    const resolvedConversations = conversations.filter(conv => {
+      // First check if has needs-reply tag (new system) - if it has the tag, it's NOT resolved
+      if (conv.tags?.includes("needs-reply")) {
+        return false;
+      }
+
+      // Fallback to last message direction check (for conversations without tags yet)
+      if (conv.messages.length === 0) return false;
+      const lastMessage = conv.messages[conv.messages.length - 1];
+      return lastMessage.direction === "outbound";
+    });
 
     const resolutionRate = totalConversations > 0
       ? (resolvedConversations.length / totalConversations) * 100
@@ -726,7 +742,7 @@ app.get("/analytics", async (req: Request, res: Response) => {
         unrepliedCount: unrepliedConversations.length,
         resolvedCount: resolvedConversations.length,
         resolutionRate: Math.round(resolutionRate * 10) / 10,
-        totalConversationsIncludingNonSupport: allConversationsInPeriod.length,
+        totalConversationsIncludingNonSupport: allActiveConversations.length,
         nonCustomerSupportCount: nonCustomerSupportConversations.length
       },
       emailVelocity: {
@@ -1762,11 +1778,11 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
 
     // Build email thread context
     const emailThread = conversation.messages.map((msg: any) => {
-      // Use bodyPlain if it has content, otherwise fall back to bodyHtml
+      // Use bodyText (plain text) if it has content, otherwise fall back to bodyHtml
       // Check for empty/whitespace-only strings, not just falsy values
-      const bodyPlain = msg.bodyPlain?.trim();
+      const bodyText = msg.bodyText?.trim();
       const bodyHtml = msg.bodyHtml?.trim();
-      const body = bodyPlain || bodyHtml || "[No message body]";
+      const body = bodyText || bodyHtml || "[No message body]";
 
       return {
         from: msg.direction === "inbound" ? conversation.customer?.primaryEmail : "support@outlight.us",

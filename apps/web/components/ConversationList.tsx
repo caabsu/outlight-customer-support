@@ -23,7 +23,14 @@ export default function ConversationList() {
   ).sort();
 
   // Helper function to check if conversation is unreplied
+  // Uses hybrid approach: check tag first (new system), then fall back to message direction (old system)
   const isUnreplied = (conv: Conversation) => {
+    // First check if has needs-reply tag (new system)
+    if (conv.tags?.includes("needs-reply")) {
+      return true;
+    }
+
+    // Fallback to last message direction check (for conversations without tags yet)
     if (conv.messages.length === 0) return false;
     const lastMessage = conv.messages[conv.messages.length - 1];
     return lastMessage.direction === "inbound";

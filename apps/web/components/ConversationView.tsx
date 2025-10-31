@@ -197,8 +197,15 @@ export default function ConversationView() {
   // Track which conversations we've already attempted to auto-load drafts for
   const autoLoadAttemptedRef = useRef<Set<string>>(new Set());
 
-  // Helper function to check if conversation needs reply (last message is inbound)
+  // Helper function to check if conversation needs reply
+  // Uses hybrid approach: check tag first (new system), then fall back to message direction (old system)
   const isUnreplied = (conv: ConversationHistory) => {
+    // First check if has needs-reply tag (new system)
+    if (conv.tags?.includes("needs-reply")) {
+      return true;
+    }
+
+    // Fallback to last message direction check (for conversations without tags yet)
     if (!conv.messages || conv.messages.length === 0) return false;
     const lastMessage = conv.messages[conv.messages.length - 1];
     return lastMessage.direction === "inbound";

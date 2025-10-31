@@ -130,8 +130,12 @@ export default function AnalyticsPage() {
   }
 
   // Prepare volume trend chart data
-  const volumeData = Object.entries(data.volumeTrends).sort((a, b) => a[0].localeCompare(b[0]));
-  const maxVolume = Math.max(...volumeData.map(([_, v]) => v.total), 1);
+  const volumeData = data.volumeTrends
+    ? Object.entries(data.volumeTrends).sort((a, b) => a[0].localeCompare(b[0]))
+    : [];
+  const maxVolume = volumeData.length > 0
+    ? Math.max(...volumeData.map(([_, v]) => v.total), 1)
+    : 1;
 
   // Graph dimensions
   const graphWidth = 1000;
@@ -159,11 +163,15 @@ export default function AnalyticsPage() {
   const newConvValues = volumeData.map(([_, v]) => v.newConversations);
 
   // Hourly distribution data
-  const hourlyData = Object.entries(data.hourlyDistribution).map(([hour, count]) => ({
-    hour: parseInt(hour),
-    count: count as number
-  })).sort((a, b) => a.hour - b.hour);
-  const maxHourlyVolume = Math.max(...hourlyData.map(h => h.count), 1);
+  const hourlyData = data.hourlyDistribution
+    ? Object.entries(data.hourlyDistribution).map(([hour, count]) => ({
+        hour: parseInt(hour),
+        count: count as number
+      })).sort((a, b) => a.hour - b.hour)
+    : [];
+  const maxHourlyVolume = hourlyData.length > 0
+    ? Math.max(...hourlyData.map(h => h.count), 1)
+    : 1;
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -303,60 +311,62 @@ export default function AnalyticsPage() {
           </div>
 
           {/* SLA Performance */}
-          <div className="mb-8">
-            <h2 className="text-lg font-semibold text-foreground mb-4 uppercase tracking-wide text-muted-foreground">SLA Performance</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-card border border-border rounded-lg p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-muted-foreground">Within 2 Hours</h3>
-                  <span className={`text-2xl font-bold ${getStatusColor(data.sla.within2Hours, "sla")}`}>
-                    {data.sla.within2Hours}%
-                  </span>
+          {data.sla && (
+            <div className="mb-8">
+              <h2 className="text-lg font-semibold text-foreground mb-4 uppercase tracking-wide text-muted-foreground">SLA Performance</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-card border border-border rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-muted-foreground">Within 2 Hours</h3>
+                    <span className={`text-2xl font-bold ${getStatusColor(data.sla.within2Hours || 0, "sla")}`}>
+                      {data.sla.within2Hours || 0}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2.5">
+                    <div
+                      className="bg-success rounded-full h-2.5 transition-all duration-500"
+                      style={{ width: `${Math.min(data.sla.within2Hours || 0, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-muted rounded-full h-2.5">
-                  <div
-                    className="bg-success rounded-full h-2.5 transition-all duration-500"
-                    style={{ width: `${Math.min(data.sla.within2Hours, 100)}%` }}
-                  />
-                </div>
-              </div>
 
-              <div className="bg-card border border-border rounded-lg p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-muted-foreground">Within 8 Hours</h3>
-                  <span className={`text-2xl font-bold ${getStatusColor(data.sla.within8Hours, "sla")}`}>
-                    {data.sla.within8Hours}%
-                  </span>
+                <div className="bg-card border border-border rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-muted-foreground">Within 8 Hours</h3>
+                    <span className={`text-2xl font-bold ${getStatusColor(data.sla.within8Hours || 0, "sla")}`}>
+                      {data.sla.within8Hours || 0}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2.5">
+                    <div
+                      className="bg-warning rounded-full h-2.5 transition-all duration-500"
+                      style={{ width: `${Math.min(data.sla.within8Hours || 0, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-muted rounded-full h-2.5">
-                  <div
-                    className="bg-warning rounded-full h-2.5 transition-all duration-500"
-                    style={{ width: `${Math.min(data.sla.within8Hours, 100)}%` }}
-                  />
-                </div>
-              </div>
 
-              <div className="bg-card border border-border rounded-lg p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-muted-foreground">Within 24 Hours</h3>
-                  <span className={`text-2xl font-bold ${getStatusColor(data.sla.within24Hours, "sla")}`}>
-                    {data.sla.within24Hours}%
-                  </span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2.5">
-                  <div
-                    className="bg-primary rounded-full h-2.5 transition-all duration-500"
-                    style={{ width: `${Math.min(data.sla.within24Hours, 100)}%` }}
-                  />
+                <div className="bg-card border border-border rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-muted-foreground">Within 24 Hours</h3>
+                    <span className={`text-2xl font-bold ${getStatusColor(data.sla.within24Hours || 0, "sla")}`}>
+                      {data.sla.within24Hours || 0}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2.5">
+                    <div
+                      className="bg-primary rounded-full h-2.5 transition-all duration-500"
+                      style={{ width: `${Math.min(data.sla.within24Hours || 0, 100)}%` }}
+                    />
+                  </div>
                 </div>
               </div>
+              {data.sla.sampleSize > 0 && (
+                <p className="text-xs text-muted-foreground mt-3 text-center">
+                  Based on {data.sla.sampleSize} response{data.sla.sampleSize !== 1 ? 's' : ''}
+                </p>
+              )}
             </div>
-            {data.sla.sampleSize > 0 && (
-              <p className="text-xs text-muted-foreground mt-3 text-center">
-                Based on {data.sla.sampleSize} response{data.sla.sampleSize !== 1 ? 's' : ''}
-              </p>
-            )}
-          </div>
+          )}
 
           {/* Response Time Metrics */}
           <div className="mb-8">
@@ -568,31 +578,33 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Hourly Workload Distribution */}
-          <div className="bg-card border border-border rounded-lg p-6 mb-8">
-            <h2 className="text-lg font-semibold text-foreground mb-6 uppercase tracking-wide text-muted-foreground">
-              Hourly Workload Distribution
-            </h2>
-            <div className="grid grid-cols-12 gap-1">
-              {hourlyData.map(({ hour, count }) => {
-                const height = maxHourlyVolume > 0 ? (count / maxHourlyVolume) * 100 : 0;
-                return (
-                  <div key={hour} className="flex flex-col items-center gap-2">
-                    <div className="w-full h-32 bg-muted rounded-sm flex items-end overflow-hidden">
-                      <div
-                        className="w-full bg-primary/70 hover:bg-primary transition-all"
-                        style={{ height: `${height}%` }}
-                        title={`${hour}:00 - ${count} emails`}
-                      />
+          {hourlyData.length > 0 && (
+            <div className="bg-card border border-border rounded-lg p-6 mb-8">
+              <h2 className="text-lg font-semibold text-foreground mb-6 uppercase tracking-wide text-muted-foreground">
+                Hourly Workload Distribution
+              </h2>
+              <div className="grid grid-cols-12 gap-1">
+                {hourlyData.map(({ hour, count }) => {
+                  const height = maxHourlyVolume > 0 ? (count / maxHourlyVolume) * 100 : 0;
+                  return (
+                    <div key={hour} className="flex flex-col items-center gap-2">
+                      <div className="w-full h-32 bg-muted rounded-sm flex items-end overflow-hidden">
+                        <div
+                          className="w-full bg-primary/70 hover:bg-primary transition-all"
+                          style={{ height: `${height}%` }}
+                          title={`${hour}:00 - ${count} emails`}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground">{hour}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">{hour}</span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground mt-4 text-center">
+                Inbound email distribution by hour of day (based on {data.overview.inboundMessages} messages)
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground mt-4 text-center">
-              Inbound email distribution by hour of day (based on {data.overview.inboundMessages} messages)
-            </p>
-          </div>
+          )}
 
           {/* Tag Distribution & Customer Engagement */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
