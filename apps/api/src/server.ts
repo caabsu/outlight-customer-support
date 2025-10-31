@@ -340,16 +340,24 @@ app.patch("/conversations/:id/archive", async (req: Request, res: Response) => {
   try {
     const { tag } = req.body;
 
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: req.params.id },
+    });
+
     const data: any = { archived: true };
 
-    if (tag) {
-      const conversation = await prisma.conversation.findUnique({
-        where: { id: req.params.id },
-      });
+    if (conversation) {
+      let updatedTags = conversation.tags || [];
 
-      if (conversation) {
-        data.tags = [...(conversation.tags || []), tag];
+      // Add the tag if provided
+      if (tag) {
+        updatedTags = [...updatedTags, tag];
       }
+
+      // Remove "needs-reply" tag when archiving (resolved conversations shouldn't need reply)
+      updatedTags = updatedTags.filter(t => t !== "needs-reply");
+
+      data.tags = updatedTags;
     }
 
     const updated = await prisma.conversation.update({
@@ -373,9 +381,15 @@ app.patch("/conversations/:id/tags", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Tags must be an array" });
     }
 
+    // If "non-customer-support" tag is being added, also remove "needs-reply" tag
+    let finalTags = tags;
+    if (tags.includes("non-customer-support")) {
+      finalTags = tags.filter(tag => tag !== "needs-reply");
+    }
+
     const updated = await prisma.conversation.update({
       where: { id: req.params.id },
-      data: { tags },
+      data: { tags: finalTags },
     });
 
     res.json(updated);
@@ -587,37 +601,55 @@ app.get("/analytics", async (req: Request, res: Response) => {
       ? responseTimes.sort((a, b) => a - b)[Math.floor(responseTimes.length / 2)]
       : 0;
 
-    // Unreplied conversations (needs reply)
-    const unrepliedConversations = conversations.filter(conv => {
-      if (conv.messages.length === 0) return false;
-      const lastMessage = conv.messages[conv.messages.length - 1];
-      return lastMessage.direction === "inbound";
-    });
+    // Unreplied conversations (needs reply) - now using tag
+    const unrepliedConversations = conversations.filter(conv =>
+      conv.tags?.includes("needs-reply")
+    );
 
-    // Resolved conversations (last message is outbound)
-    const resolvedConversations = conversations.filter(conv => {
-      if (conv.messages.length === 0) return false;
-      const lastMessage = conv.messages[conv.messages.length - 1];
-      return lastMessage.direction === "outbound";
-    });
+    // Resolved conversations (no needs-reply tag)
+    const resolvedConversations = conversations.filter(conv =>
+      !conv.tags?.includes("needs-reply")
+    );
 
     const resolutionRate = totalConversations > 0
       ? (resolvedConversations.length / totalConversations) * 100
       : 0;
 
-    // Volume trends (daily breakdown)
-    const dailyVolume: { [key: string]: { inbound: number; outbound: number; total: number } } = {};
+    // Volume trends (daily breakdown) - enhanced with more detail
+    const dailyVolume: { [key: string]: {
+      inbound: number;
+      outbound: number;
+      total: number;
+      newConversations: number;
+      resolved: number;
+    } } = {};
 
+    // Initialize all dates in range with 0 values
+    for (let d = new Date(startDate); d <= now; d.setDate(d.getDate() + 1)) {
+      const dateKey = d.toISOString().split('T')[0];
+      dailyVolume[dateKey] = { inbound: 0, outbound: 0, total: 0, newConversations: 0, resolved: 0 };
+    }
+
+    // Count messages per day
     allMessages.forEach(msg => {
       const dateKey = new Date(msg.sentAt).toISOString().split('T')[0];
-      if (!dailyVolume[dateKey]) {
-        dailyVolume[dateKey] = { inbound: 0, outbound: 0, total: 0 };
+      if (dailyVolume[dateKey]) {
+        dailyVolume[dateKey].total++;
+        if (msg.direction === "inbound") {
+          dailyVolume[dateKey].inbound++;
+        } else {
+          dailyVolume[dateKey].outbound++;
+        }
       }
-      dailyVolume[dateKey].total++;
-      if (msg.direction === "inbound") {
-        dailyVolume[dateKey].inbound++;
-      } else {
-        dailyVolume[dateKey].outbound++;
+    });
+
+    // Count new conversations per day
+    conversations.forEach(conv => {
+      if (conv.firstMessageAt) {
+        const dateKey = new Date(conv.firstMessageAt).toISOString().split('T')[0];
+        if (dailyVolume[dateKey]) {
+          dailyVolume[dateKey].newConversations++;
+        }
       }
     });
 
@@ -645,12 +677,40 @@ app.get("/analytics", async (req: Request, res: Response) => {
       ? firstResponseTimes.reduce((a, b) => a + b, 0) / firstResponseTimes.length
       : 0;
 
+    // SLA metrics - percentage of responses within time thresholds
+    const slaMetrics = {
+      within2Hours: responseTimes.filter(rt => rt <= 2 * 60 * 60 * 1000).length,
+      within8Hours: responseTimes.filter(rt => rt <= 8 * 60 * 60 * 1000).length,
+      within24Hours: responseTimes.filter(rt => rt <= 24 * 60 * 60 * 1000).length,
+      total: responseTimes.length
+    };
+
+    // Customer engagement metrics
+    const customerMetrics = {
+      totalUniqueCustomers: new Set(conversations.map(c => c.customerId)).size,
+      multiMessageConversations: conversations.filter(c => c.messages.length > 2).length,
+      avgMessagesPerConversation: totalConversations > 0 ? totalMessages / totalConversations : 0
+    };
+
     // Tag distribution
     const tagCounts: { [key: string]: number } = {};
     conversations.forEach(conv => {
       conv.tags?.forEach(tag => {
-        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+        // Exclude needs-reply from tag distribution as it's a special tag
+        if (tag !== "needs-reply") {
+          tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+        }
       });
+    });
+
+    // Hourly distribution for workload analysis
+    const hourlyDistribution: { [hour: number]: number } = {};
+    for (let i = 0; i < 24; i++) {
+      hourlyDistribution[i] = 0;
+    }
+    inboundMessages.forEach(msg => {
+      const hour = new Date(msg.sentAt).getHours();
+      hourlyDistribution[hour]++;
     });
 
     res.json({
@@ -681,8 +741,20 @@ app.get("/analytics", async (req: Request, res: Response) => {
         firstResponseAverageHours: Math.round((avgFirstResponseTime / (1000 * 60 * 60)) * 10) / 10,
         sampleSize: responseTimes.length
       },
+      sla: {
+        within2Hours: slaMetrics.total > 0 ? Math.round((slaMetrics.within2Hours / slaMetrics.total) * 100) : 0,
+        within8Hours: slaMetrics.total > 0 ? Math.round((slaMetrics.within8Hours / slaMetrics.total) * 100) : 0,
+        within24Hours: slaMetrics.total > 0 ? Math.round((slaMetrics.within24Hours / slaMetrics.total) * 100) : 0,
+        sampleSize: slaMetrics.total
+      },
+      customerMetrics: {
+        totalUniqueCustomers: customerMetrics.totalUniqueCustomers,
+        multiMessageConversations: customerMetrics.multiMessageConversations,
+        avgMessagesPerConversation: Math.round(customerMetrics.avgMessagesPerConversation * 10) / 10
+      },
       volumeTrends: dailyVolume,
-      tagDistribution: tagCounts
+      tagDistribution: tagCounts,
+      hourlyDistribution
     });
   } catch (error) {
     console.error("Error generating analytics:", error);
