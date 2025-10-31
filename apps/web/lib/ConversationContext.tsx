@@ -357,8 +357,8 @@ export function ConversationProvider({
       }
 
       setRefreshProgress(90);
-      // Then refresh conversations from database (don't suppress errors for manual refresh)
-      await fetchConversations(true, 1, false);
+      // Then refresh conversations from database - reset to page 1 to see new emails
+      await fetchConversations(true, 1, false, 1);
       setRefreshProgress(100);
     } catch (error) {
       // Silently ignore connection errors
@@ -375,7 +375,7 @@ export function ConversationProvider({
   };
 
   const refreshConversations = async () => {
-    await fetchConversations(false, 1, false); // Don't suppress errors for manual refresh
+    await fetchConversations(false, 1, false, 1); // Reset to page 1 and don't suppress errors
   };
 
   const goToPage = async (page: number) => {

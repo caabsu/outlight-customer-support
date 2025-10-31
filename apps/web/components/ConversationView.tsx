@@ -117,7 +117,15 @@ export default function ConversationView() {
     composerAttachments,
     setComposerAttachments,
     showArchived,
-    setShowArchived
+    setShowArchived,
+    // Filters
+    showStarred,
+    excludeNonSupport,
+    showNeedsReply,
+    selectedTags,
+    statusFilter,
+    dateRange,
+    showSent
   } = useConversations();
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
@@ -209,6 +217,38 @@ export default function ConversationView() {
     if (!conv.messages || conv.messages.length === 0) return false;
     const lastMessage = conv.messages[conv.messages.length - 1];
     return lastMessage.direction === "inbound";
+  };
+
+  // Helper function to build query params with current filters
+  const buildFilterParams = (page: number, limit: number = 50): string => {
+    const params = new URLSearchParams();
+    params.set('page', page.toString());
+    params.set('limit', limit.toString());
+
+    if (showArchived) params.set('archived', 'true');
+    if (showStarred) params.set('starred', 'true');
+    if (excludeNonSupport) params.set('excludeNonSupport', 'true');
+    if (showSent) params.set('showSent', 'true');
+
+    // Status filter overrides showNeedsReply
+    if (statusFilter === 'needs-reply') {
+      params.set('needsReply', 'true');
+    } else if (statusFilter === 'resolved') {
+      params.set('resolved', 'true');
+    } else if (showNeedsReply) {
+      // Only apply showNeedsReply if statusFilter is 'all'
+      params.set('needsReply', 'true');
+    }
+
+    if (selectedTags.length > 0) {
+      params.set('tags', selectedTags.join(','));
+    }
+
+    if (dateRange !== 'all') {
+      params.set('dateRange', dateRange);
+    }
+
+    return params.toString();
   };
 
   // Filter history based on needs-reply filter
@@ -574,7 +614,7 @@ export default function ConversationView() {
         if (nextConvDate < currentPageOldest) {
           // Search forward through later pages
           for (let page = pagination.page + 1; page <= pagination.totalPages; page++) {
-            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
@@ -587,7 +627,7 @@ export default function ConversationView() {
         } else if (nextConvDate > currentPageNewest) {
           // Search backward through earlier pages
           for (let page = pagination.page - 1; page >= 1; page--) {
-            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
@@ -603,7 +643,7 @@ export default function ConversationView() {
         if (foundPage === 0) {
           for (let page = 1; page <= pagination.totalPages; page++) {
             if (page === pagination.page) continue; // Skip current page (already checked)
-            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
@@ -679,7 +719,7 @@ export default function ConversationView() {
         if (oldestDate < currentPageOldest) {
           // Search forward through later pages (most likely)
           for (let page = pagination.page + 1; page <= pagination.totalPages; page++) {
-            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
@@ -692,7 +732,7 @@ export default function ConversationView() {
         } else if (oldestDate > currentPageNewest) {
           // Search backward through earlier pages
           for (let page = pagination.page - 1; page >= 1; page--) {
-            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
@@ -708,7 +748,7 @@ export default function ConversationView() {
         if (foundPage === 0) {
           for (let page = 1; page <= pagination.totalPages; page++) {
             if (page === pagination.page) continue;
-            const res = await fetch(`/api/conversations?page=${page}&limit=50`);
+            const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
