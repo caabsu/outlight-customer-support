@@ -159,11 +159,15 @@ export default function AnalyticsPage() {
   const newConvValues = volumeData.map(([_, v]) => v.newConversations);
 
   // Hourly distribution data
-  const hourlyData = Object.entries(data.hourlyDistribution).map(([hour, count]) => ({
-    hour: parseInt(hour),
-    count: count as number
-  })).sort((a, b) => a.hour - b.hour);
-  const maxHourlyVolume = Math.max(...hourlyData.map(h => h.count), 1);
+  const hourlyData = data.hourlyDistribution
+    ? Object.entries(data.hourlyDistribution).map(([hour, count]) => ({
+        hour: parseInt(hour),
+        count: count as number
+      })).sort((a, b) => a.hour - b.hour)
+    : [];
+  const maxHourlyVolume = hourlyData.length > 0
+    ? Math.max(...hourlyData.map(h => h.count), 1)
+    : 1;
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -568,31 +572,33 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Hourly Workload Distribution */}
-          <div className="bg-card border border-border rounded-lg p-6 mb-8">
-            <h2 className="text-lg font-semibold text-foreground mb-6 uppercase tracking-wide text-muted-foreground">
-              Hourly Workload Distribution
-            </h2>
-            <div className="grid grid-cols-12 gap-1">
-              {hourlyData.map(({ hour, count }) => {
-                const height = maxHourlyVolume > 0 ? (count / maxHourlyVolume) * 100 : 0;
-                return (
-                  <div key={hour} className="flex flex-col items-center gap-2">
-                    <div className="w-full h-32 bg-muted rounded-sm flex items-end overflow-hidden">
-                      <div
-                        className="w-full bg-primary/70 hover:bg-primary transition-all"
-                        style={{ height: `${height}%` }}
-                        title={`${hour}:00 - ${count} emails`}
-                      />
+          {hourlyData.length > 0 && (
+            <div className="bg-card border border-border rounded-lg p-6 mb-8">
+              <h2 className="text-lg font-semibold text-foreground mb-6 uppercase tracking-wide text-muted-foreground">
+                Hourly Workload Distribution
+              </h2>
+              <div className="grid grid-cols-12 gap-1">
+                {hourlyData.map(({ hour, count }) => {
+                  const height = maxHourlyVolume > 0 ? (count / maxHourlyVolume) * 100 : 0;
+                  return (
+                    <div key={hour} className="flex flex-col items-center gap-2">
+                      <div className="w-full h-32 bg-muted rounded-sm flex items-end overflow-hidden">
+                        <div
+                          className="w-full bg-primary/70 hover:bg-primary transition-all"
+                          style={{ height: `${height}%` }}
+                          title={`${hour}:00 - ${count} emails`}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground">{hour}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">{hour}</span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground mt-4 text-center">
+                Inbound email distribution by hour of day (based on {data.overview.inboundMessages} messages)
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground mt-4 text-center">
-              Inbound email distribution by hour of day (based on {data.overview.inboundMessages} messages)
-            </p>
-          </div>
+          )}
 
           {/* Tag Distribution & Customer Engagement */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
