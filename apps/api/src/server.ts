@@ -217,6 +217,7 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
     // - If reply-to exists: match ONLY by reply-to
     // - If NO reply-to but has fromEmail: match by fromEmail (for mailer@shopify.com, etc)
     // - Otherwise: match by customer ID
+    // - Always exclude archived (resolved) conversations
     const whereClause = replyToEmail
       ? {
           // Has reply-to: match only conversations with same reply-to
@@ -226,6 +227,7 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
             }
           },
           id: { not: req.params.id },
+          archived: false,
         }
       : fromEmail
       ? {
@@ -237,11 +239,13 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
             }
           },
           id: { not: req.params.id },
+          archived: false,
         }
       : {
           // Fallback: match by customer ID
           customerId: conversation.customerId,
           id: { not: req.params.id },
+          archived: false,
         };
 
     // Find all other conversations matching the criteria
