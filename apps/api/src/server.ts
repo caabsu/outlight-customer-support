@@ -1759,13 +1759,21 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
     }
 
     // Build email thread context
-    const emailThread = conversation.messages.map((msg: any) => ({
-      from: msg.direction === "inbound" ? conversation.customer?.primaryEmail : "support@outlight.us",
-      direction: msg.direction,
-      date: msg.sentAt,
-      subject: msg.subject || conversation.subject,
-      body: msg.bodyPlain || msg.bodyHtml,
-    }));
+    const emailThread = conversation.messages.map((msg: any) => {
+      // Use bodyPlain if it has content, otherwise fall back to bodyHtml
+      // Check for empty/whitespace-only strings, not just falsy values
+      const bodyPlain = msg.bodyPlain?.trim();
+      const bodyHtml = msg.bodyHtml?.trim();
+      const body = bodyPlain || bodyHtml || "[No message body]";
+
+      return {
+        from: msg.direction === "inbound" ? conversation.customer?.primaryEmail : "support@outlight.us",
+        direction: msg.direction,
+        date: msg.sentAt,
+        subject: msg.subject || conversation.subject,
+        body: body,
+      };
+    });
 
     // Identify the LATEST inbound message (the one we need to respond to)
     const inboundMessages = emailThread.filter(msg => msg.direction === "inbound");
