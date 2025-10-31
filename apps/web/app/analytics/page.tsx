@@ -311,60 +311,62 @@ export default function AnalyticsPage() {
           </div>
 
           {/* SLA Performance */}
-          <div className="mb-8">
-            <h2 className="text-lg font-semibold text-foreground mb-4 uppercase tracking-wide text-muted-foreground">SLA Performance</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-card border border-border rounded-lg p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-muted-foreground">Within 2 Hours</h3>
-                  <span className={`text-2xl font-bold ${getStatusColor(data.sla.within2Hours, "sla")}`}>
-                    {data.sla.within2Hours}%
-                  </span>
+          {data.sla && (
+            <div className="mb-8">
+              <h2 className="text-lg font-semibold text-foreground mb-4 uppercase tracking-wide text-muted-foreground">SLA Performance</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-card border border-border rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-muted-foreground">Within 2 Hours</h3>
+                    <span className={`text-2xl font-bold ${getStatusColor(data.sla.within2Hours || 0, "sla")}`}>
+                      {data.sla.within2Hours || 0}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2.5">
+                    <div
+                      className="bg-success rounded-full h-2.5 transition-all duration-500"
+                      style={{ width: `${Math.min(data.sla.within2Hours || 0, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-muted rounded-full h-2.5">
-                  <div
-                    className="bg-success rounded-full h-2.5 transition-all duration-500"
-                    style={{ width: `${Math.min(data.sla.within2Hours, 100)}%` }}
-                  />
-                </div>
-              </div>
 
-              <div className="bg-card border border-border rounded-lg p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-muted-foreground">Within 8 Hours</h3>
-                  <span className={`text-2xl font-bold ${getStatusColor(data.sla.within8Hours, "sla")}`}>
-                    {data.sla.within8Hours}%
-                  </span>
+                <div className="bg-card border border-border rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-muted-foreground">Within 8 Hours</h3>
+                    <span className={`text-2xl font-bold ${getStatusColor(data.sla.within8Hours || 0, "sla")}`}>
+                      {data.sla.within8Hours || 0}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2.5">
+                    <div
+                      className="bg-warning rounded-full h-2.5 transition-all duration-500"
+                      style={{ width: `${Math.min(data.sla.within8Hours || 0, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-muted rounded-full h-2.5">
-                  <div
-                    className="bg-warning rounded-full h-2.5 transition-all duration-500"
-                    style={{ width: `${Math.min(data.sla.within8Hours, 100)}%` }}
-                  />
-                </div>
-              </div>
 
-              <div className="bg-card border border-border rounded-lg p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-muted-foreground">Within 24 Hours</h3>
-                  <span className={`text-2xl font-bold ${getStatusColor(data.sla.within24Hours, "sla")}`}>
-                    {data.sla.within24Hours}%
-                  </span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2.5">
-                  <div
-                    className="bg-primary rounded-full h-2.5 transition-all duration-500"
-                    style={{ width: `${Math.min(data.sla.within24Hours, 100)}%` }}
-                  />
+                <div className="bg-card border border-border rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-muted-foreground">Within 24 Hours</h3>
+                    <span className={`text-2xl font-bold ${getStatusColor(data.sla.within24Hours || 0, "sla")}`}>
+                      {data.sla.within24Hours || 0}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2.5">
+                    <div
+                      className="bg-primary rounded-full h-2.5 transition-all duration-500"
+                      style={{ width: `${Math.min(data.sla.within24Hours || 0, 100)}%` }}
+                    />
+                  </div>
                 </div>
               </div>
+              {data.sla.sampleSize > 0 && (
+                <p className="text-xs text-muted-foreground mt-3 text-center">
+                  Based on {data.sla.sampleSize} response{data.sla.sampleSize !== 1 ? 's' : ''}
+                </p>
+              )}
             </div>
-            {data.sla.sampleSize > 0 && (
-              <p className="text-xs text-muted-foreground mt-3 text-center">
-                Based on {data.sla.sampleSize} response{data.sla.sampleSize !== 1 ? 's' : ''}
-              </p>
-            )}
-          </div>
+          )}
 
           {/* Response Time Metrics */}
           <div className="mb-8">
