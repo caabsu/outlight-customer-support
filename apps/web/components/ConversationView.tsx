@@ -12,6 +12,26 @@ type ConversationHistory = {
   messages: { direction: string; bodyText?: string | null; bodyHtml?: string | null }[];
 };
 
+// Helper function to escape HTML special characters
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Convert plain text to Gmail-compatible HTML
+function textToGmailHtml(text: string): string {
+  return text
+    .split('\n')
+    .map(line => {
+      // Escape HTML special characters in the line
+      const escapedLine = escapeHtml(line);
+      // Empty lines need a <br> to preserve spacing
+      return `<div>${escapedLine || '<br>'}</div>`;
+    })
+    .join('');
+}
+
 // Sanitize email HTML while preserving Gmail-like display
 function sanitizeEmailHtml(html: string): string {
   if (!html) return html;
@@ -348,18 +368,14 @@ export default function ConversationView() {
 
     if (!textContent.trim() || !selectedConversation) return;
 
-    // Convert plain text to HTML with proper formatting for Gmail
-    // Wrap each line in a div to preserve line breaks (Gmail's default behavior)
-    const htmlContent = textContent
-      .split('\n')
-      .map(line => `<div>${line || '<br>'}</div>`) // Empty lines get a <br> inside div
-      .join('');
+    // Convert plain text to Gmail-compatible HTML
+    const htmlContent = textToGmailHtml(textContent);
 
     setSending(true);
     try {
       const recipientEmail = getReplyToEmail();
 
-      await fetch("/api/messages", {
+      const response = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -369,7 +385,13 @@ export default function ConversationView() {
         }),
       });
 
-      // Clear the contentEditable div
+      // Check if the request was successful
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
+
+      // Only clear the text if send was successful
       if (replyEditorRef.current) {
         replyEditorRef.current.innerHTML = "";
       }
@@ -391,6 +413,8 @@ export default function ConversationView() {
       await refreshConversations();
     } catch (error) {
       console.error("Failed to send message:", error);
+      // Show error to user
+      alert(`Failed to send email: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
     } finally {
       setSending(false);
     }
@@ -942,12 +966,8 @@ export default function ConversationView() {
       return;
     }
 
-    // Convert plain text to HTML with proper formatting for Gmail
-    // Wrap each line in a div to preserve line breaks (Gmail's default behavior)
-    const htmlContent = textContent
-      .split('\n')
-      .map(line => `<div>${line || '<br>'}</div>`) // Empty lines get a <br> inside div
-      .join('');
+    // Convert plain text to Gmail-compatible HTML
+    const htmlContent = textToGmailHtml(textContent);
 
     setSendingEmail(true);
     try {
@@ -965,22 +985,25 @@ export default function ConversationView() {
         }),
       });
 
-      if (response.ok) {
-        closeEmailComposer();
-        setComposerTo("");
-        setComposerSubject("");
-        if (composerBodyRef.current) {
-          composerBodyRef.current.innerHTML = "";
-        }
-        setComposerBody("");
-        setComposerAttachments([]);
-        await refreshConversations();
-      } else {
-        throw new Error("Failed to send email");
+      // Check if the request was successful
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errorData.error || `Server error: ${response.status}`);
       }
+
+      // Only clear and close if send was successful
+      closeEmailComposer();
+      setComposerTo("");
+      setComposerSubject("");
+      if (composerBodyRef.current) {
+        composerBodyRef.current.innerHTML = "";
+      }
+      setComposerBody("");
+      setComposerAttachments([]);
+      await refreshConversations();
     } catch (error) {
       console.error("Failed to send email:", error);
-      alert("Failed to send email. Please try again.");
+      alert(`Failed to send email: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
     } finally {
       setSendingEmail(false);
     }
