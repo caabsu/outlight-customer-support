@@ -2334,21 +2334,83 @@ export default function ConversationView() {
               </>
             ) : history.length > 0 ? (
               history.map((conv) => (
-                <button
+                <div
                   key={conv.id}
-                  onClick={() => {
-                    selectConversation(conv.id);
-                    setShowAllHistory(false);
-                  }}
-                  className="w-full text-left p-4 border border-border bg-background hover:border-primary hover:bg-accent/50 transition-all cursor-pointer rounded-lg"
+                  className="w-full p-4 border border-border bg-background rounded-lg"
                 >
                   <p className="text-sm font-sans font-semibold text-foreground mb-1">
                     {conv.subject}
                   </p>
-                  <p className="text-xs font-sans text-muted-foreground">
+                  <p className="text-xs font-sans text-muted-foreground mb-3">
                     {new Date(conv.lastMessageAt).toLocaleDateString()} • {conv.messages.length} messages
                   </p>
-                </button>
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={async () => {
+                        console.log('Opening conversation:', conv.id, 'archived:', conv.archived);
+
+                        try {
+                          // If conversation is archived, we need to switch to archived view first
+                          if (conv.archived && !showArchived) {
+                            console.log('Switching to archived view');
+                            setShowArchived(true);
+                            // Wait a bit for the state to update and trigger the refetch
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                          }
+
+                          // Now select the conversation and close modal
+                          selectConversation(conv.id);
+                          setShowAllHistory(false);
+                          console.log('Selected conversation:', conv.id);
+                        } catch (error) {
+                          console.error('Error opening conversation:', error);
+                          alert('Failed to open conversation. Please try again.');
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 text-xs font-sans font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      <span>Open</span>
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        try {
+                          // Mark conversation as archived (resolved)
+                          const updateResponse = await fetch(`/api/conversations/${conv.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ archived: true }),
+                          });
+
+                          if (!updateResponse.ok) {
+                            throw new Error('Failed to mark as resolved');
+                          }
+
+                          // Remove from history list immediately for instant feedback
+                          setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== conv.id));
+
+                          // Refresh conversations list in the background
+                          await refreshConversations();
+                        } catch (error) {
+                          console.error('Failed to mark as resolved:', error);
+                          alert('Failed to mark conversation as resolved. Please try again.');
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 text-xs font-sans font-medium text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 rounded transition-colors flex items-center justify-center gap-1.5"
+                      title="Mark as Resolved"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Resolve</span>
+                    </button>
+                  </div>
+                </div>
               ))
             ) : (
               <div className="p-8 text-center">
