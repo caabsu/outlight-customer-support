@@ -9,6 +9,7 @@ type ConversationHistory = {
   subject: string;
   lastMessageAt: string;
   archived?: boolean;
+  tags?: string[];
   messages: { direction: string; bodyText?: string | null; bodyHtml?: string | null }[];
 };
 
@@ -423,8 +424,16 @@ export default function ConversationView() {
       setDraftMinimized(false);
       setDraftError(null);
 
+      // Save the current conversation ID to re-select it after refresh
+      const currentConversationId = selectedConversation?.id;
+
       // Refresh conversations to show the new message
       await refreshConversations();
+
+      // Re-select the conversation to keep it visible (using fetchAndSelectConversation to pin it)
+      if (currentConversationId) {
+        await fetchAndSelectConversation(currentConversationId);
+      }
     } catch (error) {
       console.error("Failed to send message:", error);
       // Show error to user
@@ -1684,10 +1693,10 @@ export default function ConversationView() {
                         onClick={async () => {
                           try {
                             // Mark conversation as archived (resolved)
-                            const updateResponse = await fetch(`/api/conversations/${conv.id}`, {
+                            const updateResponse = await fetch(`/api/conversations/${conv.id}/archive`, {
                               method: 'PATCH',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ archived: true }),
+                              body: JSON.stringify({}),
                             });
 
                             if (!updateResponse.ok) {
@@ -1712,6 +1721,42 @@ export default function ConversationView() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                         <span>Resolve</span>
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          try {
+                            // Add non-customer-support tag to conversation
+                            const currentTags = conv.tags || [];
+                            const updatedTags = [...currentTags, "non-customer-support"];
+
+                            const updateResponse = await fetch(`/api/conversations/${conv.id}/tags`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ tags: updatedTags }),
+                            });
+
+                            if (!updateResponse.ok) {
+                              throw new Error('Failed to mark as non-support');
+                            }
+
+                            // Remove from history list immediately for instant feedback
+                            setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== conv.id));
+
+                            // Refresh conversations list in the background
+                            await refreshConversations();
+                          } catch (error) {
+                            console.error('Failed to mark as non-support:', error);
+                            alert('Failed to mark conversation as non-support. Please try again.');
+                          }
+                        }}
+                        className="px-2 py-1.5 text-[10px] font-sans font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded transition-colors flex items-center gap-1"
+                        title="Mark as Non-Support"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
+                        </svg>
+                        <span>Non-CS</span>
                       </button>
                     </div>
 
@@ -2406,10 +2451,10 @@ export default function ConversationView() {
                       onClick={async () => {
                         try {
                           // Mark conversation as archived (resolved)
-                          const updateResponse = await fetch(`/api/conversations/${conv.id}`, {
+                          const updateResponse = await fetch(`/api/conversations/${conv.id}/archive`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ archived: true }),
+                            body: JSON.stringify({}),
                           });
 
                           if (!updateResponse.ok) {
@@ -2433,6 +2478,42 @@ export default function ConversationView() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
                       <span>Resolve</span>
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        try {
+                          // Add non-customer-support tag to conversation
+                          const currentTags = conv.tags || [];
+                          const updatedTags = [...currentTags, "non-customer-support"];
+
+                          const updateResponse = await fetch(`/api/conversations/${conv.id}/tags`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ tags: updatedTags }),
+                          });
+
+                          if (!updateResponse.ok) {
+                            throw new Error('Failed to mark as non-support');
+                          }
+
+                          // Remove from history list immediately for instant feedback
+                          setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== conv.id));
+
+                          // Refresh conversations list in the background
+                          await refreshConversations();
+                        } catch (error) {
+                          console.error('Failed to mark as non-support:', error);
+                          alert('Failed to mark conversation as non-support. Please try again.');
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 text-xs font-sans font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded transition-colors flex items-center justify-center gap-1.5"
+                      title="Mark as Non-Support"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
+                      <span>Non-CS</span>
                     </button>
                   </div>
                 </div>

@@ -225,6 +225,38 @@ export async function ingestThread(gmail: any, threadId: string) {
       },
     });
   }));
+
+  // After processing all messages, update conversation tags based on last message direction
+  // Fetch all messages for this conversation to determine the last one
+  const conversationMessages = await prisma.message.findMany({
+    where: { conversationId: convo.id },
+    orderBy: { sentAt: "desc" },
+    take: 1
+  });
+
+  if (conversationMessages.length > 0) {
+    const lastMessage = conversationMessages[0];
+    const currentTags = convo.tags || [];
+
+    // If last message is inbound, add "needs-reply" tag
+    // If last message is outbound, remove "needs-reply" tag
+    if (lastMessage.direction === "inbound") {
+      if (!currentTags.includes("needs-reply")) {
+        await prisma.conversation.update({
+          where: { id: convo.id },
+          data: { tags: [...currentTags, "needs-reply"] }
+        });
+      }
+    } else {
+      // Remove needs-reply tag if present
+      if (currentTags.includes("needs-reply")) {
+        await prisma.conversation.update({
+          where: { id: convo.id },
+          data: { tags: currentTags.filter(tag => tag !== "needs-reply") }
+        });
+      }
+    }
+  }
 }
 
 function getHeader(msg: any, name: string): string | undefined {
@@ -307,10 +339,16 @@ export async function sendReply(conversationId: string, to: string, body: string
     },
   });
 
-  // Update conversation last message time
+  // Update conversation last message time and remove needs-reply tag (conversation is now resolved)
+  const currentTags = conversation.tags || [];
+  const updatedTags = currentTags.filter(tag => tag !== "needs-reply");
+
   await prisma.conversation.update({
     where: { id: conversationId },
-    data: { lastMessageAt: now },
+    data: {
+      lastMessageAt: now,
+      tags: updatedTags
+    },
   });
 
   return result.data;
