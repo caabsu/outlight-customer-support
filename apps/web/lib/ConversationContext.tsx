@@ -68,6 +68,19 @@ type ConversationContextType = {
   setComposerBody: (body: string) => void;
   composerAttachments: File[];
   setComposerAttachments: (files: File[]) => void;
+  // Filters
+  showStarred: boolean;
+  setShowStarred: (show: boolean) => void;
+  excludeNonSupport: boolean;
+  setExcludeNonSupport: (exclude: boolean) => void;
+  showNeedsReply: boolean;
+  setShowNeedsReply: (show: boolean) => void;
+  selectedTags: string[];
+  setSelectedTags: (tags: string[]) => void;
+  statusFilter: "all" | "needs-reply" | "resolved";
+  setStatusFilter: (filter: "all" | "needs-reply" | "resolved") => void;
+  dateRange: "all" | "today" | "week" | "month";
+  setDateRange: (range: "all" | "today" | "week" | "month") => void;
 };
 
 const ConversationContext = createContext<ConversationContextType | undefined>(
@@ -98,11 +111,47 @@ export function ConversationProvider({
   const [composerBody, setComposerBody] = useState("");
   const [composerAttachments, setComposerAttachments] = useState<File[]>([]);
 
+  // Filter state
+  const [showStarred, setShowStarred] = useState(false);
+  const [excludeNonSupport, setExcludeNonSupport] = useState(true);
+  const [showNeedsReply, setShowNeedsReply] = useState(true);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<"all" | "needs-reply" | "resolved">("all");
+  const [dateRange, setDateRange] = useState<"all" | "today" | "week" | "month">("all");
+
   const fetchConversations = async (silent = false, retryCount = 0, suppressErrors = false, page = currentPage) => {
     try {
       if (!silent) setLoading(true);
-      const archivedParam = showArchived ? '&archived=true' : '';
-      const res = await fetch(`/api/conversations?page=${page}&limit=50${archivedParam}`);
+
+      // Build query params from filter state
+      const params = new URLSearchParams();
+      params.set('page', page.toString());
+      params.set('limit', '50');
+
+      if (showArchived) params.set('archived', 'true');
+      if (showStarred) params.set('starred', 'true');
+      if (excludeNonSupport) params.set('excludeNonSupport', 'true');
+      if (showSent) params.set('showSent', 'true');
+
+      // Status filter overrides showNeedsReply
+      if (statusFilter === 'needs-reply') {
+        params.set('needsReply', 'true');
+      } else if (statusFilter === 'resolved') {
+        params.set('resolved', 'true');
+      } else if (showNeedsReply) {
+        // Only apply showNeedsReply if statusFilter is 'all'
+        params.set('needsReply', 'true');
+      }
+
+      if (selectedTags.length > 0) {
+        params.set('tags', selectedTags.join(','));
+      }
+
+      if (dateRange !== 'all') {
+        params.set('dateRange', dateRange);
+      }
+
+      const res = await fetch(`/api/conversations?${params.toString()}`);
       if (!res.ok) {
         // Don't log errors if suppressed (during auto-refresh)
         if (!suppressErrors && (retryCount === 0 || res.status !== 500)) {
@@ -213,11 +262,11 @@ export function ConversationProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - only run once on mount
 
-  // Refetch when showArchived or showSent changes
+  // Refetch when any filter changes (reset to page 1)
   useEffect(() => {
     fetchConversations(true, 0, false, 1); // Silent fetch, reset to page 1
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showArchived, showSent]);
+  }, [showArchived, showSent, showStarred, excludeNonSupport, showNeedsReply, selectedTags, statusFilter, dateRange]);
 
 
   // Try to find selected conversation in list, fallback to pinned conversation
@@ -403,6 +452,19 @@ export function ConversationProvider({
         setComposerBody,
         composerAttachments,
         setComposerAttachments,
+        // Filters
+        showStarred,
+        setShowStarred,
+        excludeNonSupport,
+        setExcludeNonSupport,
+        showNeedsReply,
+        setShowNeedsReply,
+        selectedTags,
+        setSelectedTags,
+        statusFilter,
+        setStatusFilter,
+        dateRange,
+        setDateRange,
       }}
     >
       {children}

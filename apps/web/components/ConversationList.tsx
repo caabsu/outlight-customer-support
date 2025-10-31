@@ -4,16 +4,39 @@ import { useConversations, type Conversation } from "@/lib/ConversationContext";
 import { useState } from "react";
 
 export default function ConversationList() {
-  const { conversations, selectedConversation, selectConversation, loading, refreshing, refreshProgress, refreshConversations, pollAndRefresh, updateConversationOptimistic, showArchived, showSent, pagination, nextPage, prevPage, pageTransitioning } =
-    useConversations();
+  const {
+    conversations,
+    selectedConversation,
+    selectConversation,
+    loading,
+    refreshing,
+    refreshProgress,
+    refreshConversations,
+    pollAndRefresh,
+    updateConversationOptimistic,
+    showArchived,
+    showSent,
+    pagination,
+    nextPage,
+    prevPage,
+    pageTransitioning,
+    // Filters from context
+    showStarred,
+    setShowStarred,
+    excludeNonSupport,
+    setExcludeNonSupport,
+    showNeedsReply,
+    setShowNeedsReply,
+    selectedTags,
+    setSelectedTags,
+    statusFilter,
+    setStatusFilter,
+    dateRange,
+    setDateRange,
+  } = useConversations();
+
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [showStarred, setShowStarred] = useState(false);
-  const [excludeNonSupport, setExcludeNonSupport] = useState(true);
-  const [showNeedsReply, setShowNeedsReply] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<"all" | "needs-reply" | "resolved">("all");
-  const [dateRange, setDateRange] = useState<"all" | "today" | "week" | "month">("all");
 
   // Get all unique tags from conversations
   const allTags = Array.from(
@@ -36,57 +59,8 @@ export default function ConversationList() {
     return lastMessage.direction === "inbound";
   };
 
-  const filteredConversations = conversations.filter((conv: Conversation) => {
-    // Sent filter - only show conversations with outbound messages
-    if (showSent) {
-      const hasOutboundMessage = conv.messages.some(msg => msg.direction === "outbound");
-      if (!hasOutboundMessage) return false;
-    }
-
-    // Starred filter
-    if (showStarred && !conv.starred) return false;
-
-    // Non-support filter
-    if (excludeNonSupport && conv.tags?.includes("non-customer-support"))
-      return false;
-
-    // Needs Reply quick filter
-    if (showNeedsReply && !isUnreplied(conv)) return false;
-
-    // Archive filter
-    if (showArchived && !conv.archived) return false;
-    if (!showArchived && conv.archived) return false;
-
-    // Tag filter (must have ALL selected tags)
-    if (selectedTags.length > 0) {
-      const hasAllTags = selectedTags.every(tag => conv.tags?.includes(tag));
-      if (!hasAllTags) return false;
-    }
-
-    // Status filter
-    if (statusFilter === "needs-reply" && !isUnreplied(conv)) return false;
-    if (statusFilter === "resolved" && isUnreplied(conv)) return false;
-
-    // Date range filter
-    if (dateRange !== "all") {
-      const messageDate = new Date(conv.lastMessageAt);
-      const now = new Date();
-      const diffInHours = (now.getTime() - messageDate.getTime()) / (1000 * 60 * 60);
-
-      if (dateRange === "today" && diffInHours > 24) return false;
-      if (dateRange === "week" && diffInHours > 168) return false;
-      if (dateRange === "month" && diffInHours > 720) return false;
-    }
-
-    return true;
-  });
-
-  // Sort: Sent view shows newest first (descending)
-  const sortedConversations = showSent
-    ? [...filteredConversations].sort((a, b) =>
-        new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
-      )
-    : filteredConversations;
+  // No client-side filtering needed - all filtering is done server-side
+  // Conversations from context are already filtered and paginated
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev =>
@@ -249,7 +223,7 @@ export default function ConversationList() {
             <div>
               <h2 className="text-lg font-sans font-semibold text-foreground">Conversations</h2>
               <p className="text-sm font-sans text-muted-foreground mt-1">
-                {sortedConversations.length} threads
+                {conversations.length} threads
               </p>
             </div>
           </div>
@@ -441,12 +415,12 @@ export default function ConversationList() {
 
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto">
-        {sortedConversations.length === 0 ? (
+        {conversations.length === 0 ? (
           <div className="p-8 text-center">
             <p className="text-foreground font-sans text-sm">No conversations match filters</p>
           </div>
         ) : (
-          sortedConversations.map((conv: Conversation) => (
+          conversations.map((conv: Conversation) => (
             <div
               key={conv.id}
               onClick={() => selectConversation(conv.id)}

@@ -48,7 +48,19 @@ app.post("/gmail/poll", pollOnce);
 // Get all conversations with messages (with filters)
 app.get("/conversations", async (req: Request, res: Response) => {
   try {
-    const { starred, archived, excludeNonSupport, unreadOnly, page, limit } = req.query;
+    const {
+      starred,
+      archived,
+      excludeNonSupport,
+      unreadOnly,
+      needsReply,
+      resolved,
+      tags,
+      dateRange,
+      showSent,
+      page,
+      limit
+    } = req.query;
 
     const where: any = {};
 
@@ -75,15 +87,57 @@ app.get("/conversations", async (req: Request, res: Response) => {
       where.unreadAgent = true;
     }
 
+    // Needs reply filter (has needs-reply tag)
+    if (needsReply === "true") {
+      where.tags = {
+        has: "needs-reply"
+      };
+    }
+
+    // Resolved filter (does NOT have needs-reply tag)
+    if (resolved === "true") {
+      where.NOT = {
+        ...where.NOT,
+        tags: {
+          has: "needs-reply"
+        }
+      };
+    }
+
+    // Specific tags filter (must have ALL specified tags)
+    if (tags && typeof tags === 'string' && tags.length > 0) {
+      const tagArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
+      if (tagArray.length > 0) {
+        where.AND = tagArray.map(tag => ({
+          tags: { has: tag }
+        }));
+      }
+    }
+
+    // Date range filter
+    if (dateRange && dateRange !== "all") {
+      const now = new Date();
+      let hoursAgo = 0;
+
+      if (dateRange === "today") hoursAgo = 24;
+      else if (dateRange === "week") hoursAgo = 168;
+      else if (dateRange === "month") hoursAgo = 720;
+
+      if (hoursAgo > 0) {
+        const cutoffDate = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
+        where.lastMessageAt = {
+          gte: cutoffDate
+        };
+      }
+    }
+
     // Pagination
     const pageNum = parseInt(page as string) || 1;
     const limitNum = parseInt(limit as string) || 50;
     const skip = (pageNum - 1) * limitNum;
 
-    // Get total count for pagination
-    const totalCount = await prisma.conversation.count({ where });
-
-    const conversations = await prisma.conversation.findMany({
+    // Fetch conversations with all filters applied
+    let conversations = await prisma.conversation.findMany({
       where,
       include: {
         customer: true,
@@ -92,12 +146,58 @@ app.get("/conversations", async (req: Request, res: Response) => {
         },
       },
       orderBy: { lastMessageAt: "desc" },
-      skip,
-      take: limitNum,
     });
 
+    // Apply showSent filter (requires checking messages)
+    if (showSent === "true") {
+      conversations = conversations.filter(conv =>
+        conv.messages.some(msg => msg.direction === "outbound")
+      );
+    }
+
+    // Apply hybrid needs-reply filter for conversations without tags (backward compatibility)
+    // This handles conversations created before the tag system was implemented
+    if (needsReply === "true") {
+      conversations = conversations.filter(conv => {
+        // Already filtered by tag above, but also check last message for old conversations
+        if (conv.tags?.includes("needs-reply")) return true;
+
+        // Fallback: check last message direction for conversations without tags
+        if (!conv.tags || conv.tags.length === 0) {
+          if (conv.messages.length === 0) return false;
+          const lastMessage = conv.messages[conv.messages.length - 1];
+          return lastMessage.direction === "inbound";
+        }
+
+        return false;
+      });
+    }
+
+    // Apply hybrid resolved filter
+    if (resolved === "true") {
+      conversations = conversations.filter(conv => {
+        // If has needs-reply tag, it's not resolved
+        if (conv.tags?.includes("needs-reply")) return false;
+
+        // For conversations without tags, check last message direction
+        if (!conv.tags || conv.tags.length === 0) {
+          if (conv.messages.length === 0) return true; // No messages = resolved
+          const lastMessage = conv.messages[conv.messages.length - 1];
+          return lastMessage.direction === "outbound";
+        }
+
+        return true;
+      });
+    }
+
+    // Get total count after all filters
+    const totalCount = conversations.length;
+
+    // Apply pagination AFTER all filters
+    const paginatedConversations = conversations.slice(skip, skip + limitNum);
+
     res.json({
-      conversations,
+      conversations: paginatedConversations,
       pagination: {
         page: pageNum,
         limit: limitNum,
