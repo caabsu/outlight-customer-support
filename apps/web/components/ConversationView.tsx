@@ -134,7 +134,7 @@ export default function ConversationView() {
   const [expandedPreviews, setExpandedPreviews] = useState<Set<string>>(new Set());
   const [activeInfoTooltip, setActiveInfoTooltip] = useState<string | null>(null);
   const [navigatingUnreplied, setNavigatingUnreplied] = useState(false);
-  const [showNeedsReplyOnly, setShowNeedsReplyOnly] = useState(true); // Default to showing only needs-reply
+  const [showNeedsReplyOnly, setShowNeedsReplyOnly] = useState(false); // Default to showing all conversations
 
   // Shopify state
   const [shopifyCustomer, setShopifyCustomer] = useState<any>(null);
