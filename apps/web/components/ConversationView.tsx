@@ -99,6 +99,7 @@ export default function ConversationView() {
     conversations,
     selectedConversation,
     selectConversation,
+    fetchAndSelectConversation,
     refreshConversations,
     updateConversationOptimistic,
     pagination,
@@ -134,6 +135,7 @@ export default function ConversationView() {
   const [expandedPreviews, setExpandedPreviews] = useState<Set<string>>(new Set());
   const [activeInfoTooltip, setActiveInfoTooltip] = useState<string | null>(null);
   const [navigatingUnreplied, setNavigatingUnreplied] = useState(false);
+  const [showNeedsReplyOnly, setShowNeedsReplyOnly] = useState(false); // Default to showing all conversations
 
   // Shopify state
   const [shopifyCustomer, setShopifyCustomer] = useState<any>(null);
@@ -193,6 +195,18 @@ export default function ConversationView() {
 
   // Track which conversations we've already attempted to auto-load drafts for
   const autoLoadAttemptedRef = useRef<Set<string>>(new Set());
+
+  // Helper function to check if conversation needs reply (last message is inbound)
+  const isUnreplied = (conv: ConversationHistory) => {
+    if (!conv.messages || conv.messages.length === 0) return false;
+    const lastMessage = conv.messages[conv.messages.length - 1];
+    return lastMessage.direction === "inbound";
+  };
+
+  // Filter history based on needs-reply filter
+  const filteredHistory = showNeedsReplyOnly
+    ? history.filter(conv => isUnreplied(conv))
+    : history;
 
   // Fetch conversation history
   useEffect(() => {
@@ -1549,7 +1563,7 @@ export default function ConversationView() {
       {/* Related Conversations Section */}
       <div className="border-b border-gray-200">
         <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-gray-50 border-b border-slate-200">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -1566,9 +1580,24 @@ export default function ConversationView() {
               </svg>
             </button>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowNeedsReplyOnly(!showNeedsReplyOnly)}
+              className={`px-2 py-1 rounded text-[10px] font-sans font-medium transition-colors ${
+                showNeedsReplyOnly
+                  ? "bg-orange-100 text-orange-700 border border-orange-200"
+                  : "bg-slate-100 text-slate-600 border border-slate-200"
+              }`}
+            >
+              📩 Needs Reply {showNeedsReplyOnly ? '✓' : ''}
+            </button>
+            <span className="text-[10px] font-sans text-slate-500">
+              {filteredHistory.length} of {history.length}
+            </span>
+          </div>
         </div>
 
-        <div className="max-h-[320px] overflow-y-auto px-3 py-3 bg-white space-y-2">
+        <div className="h-[320px] overflow-y-auto px-3 py-3 bg-white space-y-2">
           {loadingHistory ? (
             <>
               {[1, 2].map((i) => (
@@ -1578,8 +1607,8 @@ export default function ConversationView() {
                 </div>
               ))}
             </>
-          ) : history.length > 0 ? (
-            history.slice(0, 4).map((conv) => {
+          ) : filteredHistory.length > 0 ? (
+            filteredHistory.slice(0, 4).map((conv) => {
               const isExpanded = expandedPreviews.has(conv.id);
               const lastMessage = conv.messages && conv.messages.length > 0 ? conv.messages[conv.messages.length - 1] : null;
               const messagePreview = lastMessage
@@ -1635,20 +1664,9 @@ export default function ConversationView() {
 
                       <button
                         onClick={async () => {
-                          console.log('Opening conversation:', conv.id, 'archived:', conv.archived);
-
                           try {
-                            // If conversation is archived, we need to switch to archived view first
-                            if (conv.archived && !showArchived) {
-                              console.log('Switching to archived view');
-                              setShowArchived(true);
-                              // Wait a bit for the state to update and trigger the refetch
-                              await new Promise(resolve => setTimeout(resolve, 500));
-                            }
-
-                            // Now select the conversation
-                            selectConversation(conv.id);
-                            console.log('Selected conversation:', conv.id);
+                            // Fetch and select the conversation (handles adding it to the list if needed)
+                            await fetchAndSelectConversation(conv.id);
                           } catch (error) {
                             console.error('Error opening conversation:', error);
                             alert('Failed to open conversation. Please try again.');
@@ -2313,14 +2331,31 @@ export default function ConversationView() {
     {showAllHistory && (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-background border border-border rounded-lg w-[600px] max-h-[80vh] flex flex-col shadow-xl">
-          <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
-            <h2 className="text-lg font-sans font-bold text-foreground">All Related Conversations</h2>
-            <button
-              onClick={() => setShowAllHistory(false)}
-              className="text-muted-foreground hover:text-foreground transition-colors text-xl"
-            >
-              ✕
-            </button>
+          <div className="px-6 py-4 border-b border-border shrink-0">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-sans font-bold text-foreground">All Related Conversations</h2>
+              <button
+                onClick={() => setShowAllHistory(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors text-xl"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowNeedsReplyOnly(!showNeedsReplyOnly)}
+                className={`px-3 py-1.5 rounded text-xs font-sans font-medium transition-colors ${
+                  showNeedsReplyOnly
+                    ? "bg-orange-100 text-orange-700 border border-orange-200"
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}
+              >
+                📩 Needs Reply {showNeedsReplyOnly ? '✓' : ''}
+              </button>
+              <span className="text-xs font-sans text-muted-foreground">
+                Showing {filteredHistory.length} of {history.length} conversations
+              </span>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
             {loadingHistory ? (
@@ -2332,8 +2367,8 @@ export default function ConversationView() {
                   </div>
                 ))}
               </>
-            ) : history.length > 0 ? (
-              history.map((conv) => (
+            ) : filteredHistory.length > 0 ? (
+              filteredHistory.map((conv) => (
                 <div
                   key={conv.id}
                   className="w-full p-4 border border-border bg-background rounded-lg"
@@ -2349,21 +2384,11 @@ export default function ConversationView() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={async () => {
-                        console.log('Opening conversation:', conv.id, 'archived:', conv.archived);
-
                         try {
-                          // If conversation is archived, we need to switch to archived view first
-                          if (conv.archived && !showArchived) {
-                            console.log('Switching to archived view');
-                            setShowArchived(true);
-                            // Wait a bit for the state to update and trigger the refetch
-                            await new Promise(resolve => setTimeout(resolve, 500));
-                          }
-
-                          // Now select the conversation and close modal
-                          selectConversation(conv.id);
+                          // Fetch and select the conversation (handles adding it to the list if needed)
+                          await fetchAndSelectConversation(conv.id);
+                          // Close the modal
                           setShowAllHistory(false);
-                          console.log('Selected conversation:', conv.id);
                         } catch (error) {
                           console.error('Error opening conversation:', error);
                           alert('Failed to open conversation. Please try again.');
