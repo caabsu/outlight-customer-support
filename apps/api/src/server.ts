@@ -1779,11 +1779,11 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
 
     // Build email thread context
     const emailThread = conversation.messages.map((msg: any) => {
-      // Use bodyPlain if it has content, otherwise fall back to bodyHtml
+      // Use bodyText (plain text) if it has content, otherwise fall back to bodyHtml
       // Check for empty/whitespace-only strings, not just falsy values
-      const bodyPlain = msg.bodyPlain?.trim();
+      const bodyText = msg.bodyText?.trim();
       const bodyHtml = msg.bodyHtml?.trim();
-      const body = bodyPlain || bodyHtml || "[No message body]";
+      const body = bodyText || bodyHtml || "[No message body]";
 
       return {
         from: msg.direction === "inbound" ? conversation.customer?.primaryEmail : "support@outlight.us",
