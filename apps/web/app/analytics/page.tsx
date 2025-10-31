@@ -130,8 +130,12 @@ export default function AnalyticsPage() {
   }
 
   // Prepare volume trend chart data
-  const volumeData = Object.entries(data.volumeTrends).sort((a, b) => a[0].localeCompare(b[0]));
-  const maxVolume = Math.max(...volumeData.map(([_, v]) => v.total), 1);
+  const volumeData = data.volumeTrends
+    ? Object.entries(data.volumeTrends).sort((a, b) => a[0].localeCompare(b[0]))
+    : [];
+  const maxVolume = volumeData.length > 0
+    ? Math.max(...volumeData.map(([_, v]) => v.total), 1)
+    : 1;
 
   // Graph dimensions
   const graphWidth = 1000;
