@@ -63,7 +63,7 @@ export default function ConversationList() {
   // Conversations from context are already filtered and paginated
 
   const toggleTag = (tag: string) => {
-    setSelectedTags(prev =>
+    setSelectedTags((prev: string[]) =>
       prev.includes(tag)
         ? prev.filter(t => t !== tag)
         : [...prev, tag]
