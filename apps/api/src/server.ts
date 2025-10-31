@@ -625,9 +625,11 @@ app.get("/analytics", async (req: Request, res: Response) => {
     } } = {};
 
     // Initialize all dates in range with 0 values
-    for (let d = new Date(startDate); d <= now; d.setDate(d.getDate() + 1)) {
-      const dateKey = d.toISOString().split('T')[0];
+    const currentDate = new Date(startDate);
+    while (currentDate <= now) {
+      const dateKey = currentDate.toISOString().split('T')[0];
       dailyVolume[dateKey] = { inbound: 0, outbound: 0, total: 0, newConversations: 0, resolved: 0 };
+      currentDate.setDate(currentDate.getDate() + 1);
     }
 
     // Count messages per day
