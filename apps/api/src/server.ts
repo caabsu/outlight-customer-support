@@ -2006,18 +2006,30 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
       systemPrompt += `
 
 ═══════════════════════════════════════════════════════════
-🔴 CRITICAL: CUSTOM INSTRUCTIONS - HIGHEST PRIORITY
+🔴 CRITICAL: CUSTOM CONTEXT & GUIDANCE - HIGHEST PRIORITY
 ═══════════════════════════════════════════════════════════
 
-⚠️  THESE INSTRUCTIONS OVERRIDE ALL OTHER KNOWLEDGE BASE INFORMATION
-⚠️  FOLLOW THESE INSTRUCTIONS EXACTLY AS PROVIDED
-⚠️  IF THERE IS ANY CONFLICT BETWEEN THIS SECTION AND THE KNOWLEDGE BASE, ALWAYS FOLLOW THIS SECTION
+⚠️  IMPORTANT: The information below is CONTEXTUAL GUIDANCE to help you craft a better response.
+⚠️  DO NOT copy or insert this text directly into the email.
+⚠️  USE this information to inform your response, expand on it, and integrate it professionally.
+⚠️  This context OVERRIDES any conflicting knowledge base information.
 
+WHAT TO DO WITH THIS INFORMATION:
+• Read and understand the context provided below
+• Use it to inform your draft response
+• Expand on any brief points with full, professional explanations
+• Integrate the information naturally into your email
+• Add appropriate context, tone, and professionalism
+• DO NOT treat this as raw email content to paste
+
+CUSTOM CONTEXT PROVIDED:
 ${additionalContext}
 
 ═══════════════════════════════════════════════════════════
-END OF CUSTOM INSTRUCTIONS
+END OF CUSTOM CONTEXT
 ═══════════════════════════════════════════════════════════
+
+Remember: The above is GUIDANCE. Craft a professional email using this information as your source of truth.
 `;
     }
 
