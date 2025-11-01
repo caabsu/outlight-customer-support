@@ -194,15 +194,26 @@ export default function ConversationView() {
   });
   const [editingDraft, setEditingDraft] = useState(false);
   const [editedDraftText, setEditedDraftText] = useState("");
-  const [additionalContext, setAdditionalContext] = useState(""); // Custom context that takes precedence
+  const [customContextByConversationId, setCustomContextByConversationId] = useState<Record<string, string>>({}); // Custom context per conversation
   const [showContextInput, setShowContextInput] = useState(false);
 
   // Sidebar resize state
   const [rightSidebarWidth, setRightSidebarWidth] = useState(320); // 320px = 20rem = w-80
 
-  // Get current conversation's draft and loading state
+  // Get current conversation's draft, loading state, and custom context
   const draftData = selectedConversation?.id ? draftsByConversationId[selectedConversation.id] : null;
   const loadingDraft = selectedConversation?.id ? loadingDraftByConversationId[selectedConversation.id] || false : false;
+  const currentCustomContext = selectedConversation?.id ? (customContextByConversationId[selectedConversation.id] || "") : "";
+
+  // Helper to set current conversation's custom context
+  const setCurrentCustomContext = (context: string) => {
+    if (selectedConversation?.id) {
+      setCustomContextByConversationId(prev => ({
+        ...prev,
+        [selectedConversation.id]: context
+      }));
+    }
+  };
 
   // Track which conversations we've already attempted to auto-load drafts for
   const autoLoadAttemptedRef = useRef<Set<string>>(new Set());
@@ -287,9 +298,7 @@ export default function ConversationView() {
     setShowKBTab(false);
     setShowSummarizeKBTab(false);
     setDraftError(null);
-    // Clear custom instructions for new conversation
-    setAdditionalContext("");
-    setShowContextInput(false);
+    // Don't clear custom instructions - they are stored per conversation
   }, [selectedConversation?.id]);
 
   // Auto-load existing draft from database when conversation is selected
@@ -857,7 +866,9 @@ export default function ConversationView() {
     if (!selectedConversation) return;
 
     const conversationId = selectedConversation.id;
-    const contextToUse = customContext !== undefined ? customContext : additionalContext;
+    // Capture the custom context for this specific conversation at call time
+    const thisConversationContext = customContextByConversationId[conversationId] || "";
+    const contextToUse = customContext !== undefined ? customContext : thisConversationContext;
 
     // Set loading state for this specific conversation
     setLoadingDraftByConversationId(prev => ({
@@ -2224,9 +2235,18 @@ export default function ConversationView() {
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                 )}
-                {/* Custom context indicator */}
+                {/* Custom context indicator - AFTER generation */}
                 {draftData?.usedCustomContext && !loadingDraft && (
                   <span className="text-[9px] px-1.5 py-0.5 bg-orange-500 text-white rounded font-semibold">CUSTOM</span>
+                )}
+                {/* Custom context active indicator - BEFORE generation */}
+                {!draftData && !loadingDraft && currentCustomContext && (
+                  <span className="text-[9px] px-1.5 py-0.5 bg-orange-400 text-white rounded font-semibold flex items-center gap-0.5">
+                    <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
+                    </svg>
+                    WILL USE CUSTOM
+                  </span>
                 )}
               </div>
               {/* Info Icon */}
@@ -2258,7 +2278,7 @@ export default function ConversationView() {
               <button
                 onClick={() => setShowContextInput(!showContextInput)}
                 className={`w-full px-2 py-1.5 rounded text-xs font-sans font-medium transition-colors flex items-center justify-between ${
-                  additionalContext ? 'bg-orange-100 hover:bg-orange-200 text-orange-900 border border-orange-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  currentCustomContext ? 'bg-orange-100 hover:bg-orange-200 text-orange-900 border border-orange-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
               >
                 <div className="flex items-center gap-1.5">
@@ -2266,7 +2286,7 @@ export default function ConversationView() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
                   <span>Custom Instructions</span>
-                  {additionalContext && (
+                  {currentCustomContext && (
                     <span className="px-1.5 py-0.5 bg-orange-500 text-white text-[8px] font-bold rounded">ACTIVE</span>
                   )}
                 </div>
@@ -2290,16 +2310,16 @@ export default function ConversationView() {
                   </div>
 
                   <textarea
-                    value={additionalContext}
-                    onChange={(e) => setAdditionalContext(e.target.value)}
+                    value={currentCustomContext}
+                    onChange={(e) => setCurrentCustomContext(e.target.value)}
                     placeholder="Enter specific product details, special instructions, or custom guidance for this email..."
                     className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm font-sans text-slate-900 bg-white resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent placeholder:text-slate-400"
                     rows={4}
                   />
 
-                  {additionalContext && (
+                  {currentCustomContext && (
                     <button
-                      onClick={() => setAdditionalContext("")}
+                      onClick={() => setCurrentCustomContext("")}
                       className="w-full px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-xs font-sans transition-colors"
                     >
                       Clear Instructions
