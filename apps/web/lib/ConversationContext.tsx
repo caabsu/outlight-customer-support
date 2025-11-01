@@ -195,8 +195,12 @@ export function ConversationProvider({
         const updatedPinned = conversationsList.find((c: Conversation) => c.id === pinnedConversation.id);
         if (updatedPinned) {
           setPinnedConversation(updatedPinned);
+        } else {
+          // Conversation not in list - it may have been archived or marked as non-support
+          // Clear the pinned conversation so it disappears from view
+          setPinnedConversation(null);
+          setSelectedId(null); // Also clear selection
         }
-        // If not in list, keep the old pinned version so it stays visible
       }
 
       // CRITICAL: Always sync currentPage with API response to prevent navigation bugs
