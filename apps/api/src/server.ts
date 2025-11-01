@@ -75,12 +75,15 @@ app.get("/conversations", async (req: Request, res: Response) => {
       where.archived = false;
     }
 
+    // Build NOT conditions array for proper filtering
+    const notConditions: any[] = [];
+
     if (excludeNonSupport === "true") {
-      where.NOT = {
+      notConditions.push({
         tags: {
           has: "non-customer-support"
         }
-      };
+      });
     }
 
     if (unreadOnly === "true") {
@@ -96,12 +99,16 @@ app.get("/conversations", async (req: Request, res: Response) => {
 
     // Resolved filter (does NOT have needs-reply tag)
     if (resolved === "true") {
-      where.NOT = {
-        ...where.NOT,
+      notConditions.push({
         tags: {
           has: "needs-reply"
         }
-      };
+      });
+    }
+
+    // Apply NOT conditions if any exist
+    if (notConditions.length > 0) {
+      where.NOT = notConditions.length === 1 ? notConditions[0] : notConditions;
     }
 
     // Specific tags filter (must have ALL specified tags)
@@ -1554,6 +1561,44 @@ app.get("/shopify/order/:orderId/refunds", async (req: Request, res: Response) =
     console.error("Error getting order refunds:", error);
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to get order refunds"
+    });
+  }
+});
+
+/**
+ * Cancel an order
+ * POST /shopify/order/:orderId/cancel
+ * Body: {
+ *   amount?: string,
+ *   currency?: string,
+ *   reason?: 'customer' | 'fraud' | 'inventory' | 'declined' | 'other',
+ *   email?: boolean,
+ *   refund?: boolean
+ * }
+ */
+app.post("/shopify/order/:orderId/cancel", async (req: Request, res: Response) => {
+  try {
+    const orderId = parseInt(req.params.orderId);
+
+    if (isNaN(orderId)) {
+      return res.status(400).json({ error: "Invalid order ID" });
+    }
+
+    const { amount, currency, reason, email, refund } = req.body;
+
+    const cancelledOrder = await shopify.cancelOrder(orderId, {
+      amount,
+      currency,
+      reason,
+      email,
+      refund
+    });
+
+    res.json(cancelledOrder);
+  } catch (error) {
+    console.error("Error cancelling order:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to cancel order"
     });
   }
 });
