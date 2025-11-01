@@ -194,6 +194,8 @@ export default function ConversationView() {
   });
   const [editingDraft, setEditingDraft] = useState(false);
   const [editedDraftText, setEditedDraftText] = useState("");
+  const [additionalContext, setAdditionalContext] = useState(""); // Custom context that takes precedence
+  const [showContextInput, setShowContextInput] = useState(false);
 
   // Sidebar resize state
   const [rightSidebarWidth, setRightSidebarWidth] = useState(320); // 320px = 20rem = w-80
@@ -848,10 +850,11 @@ export default function ConversationView() {
   };
 
   // Generate AI draft
-  const generateDraft = async () => {
+  const generateDraft = async (customContext?: string) => {
     if (!selectedConversation) return;
 
     const conversationId = selectedConversation.id;
+    const contextToUse = customContext !== undefined ? customContext : additionalContext;
 
     // Set loading state for this specific conversation
     setLoadingDraftByConversationId(prev => ({
@@ -876,6 +879,12 @@ export default function ConversationView() {
 
       const response = await fetch(apiUrl, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          additionalContext: contextToUse || undefined
+        }),
       });
 
       if (!response.ok) {
@@ -2236,6 +2245,57 @@ export default function ConversationView() {
                 </svg>
               </div>
             </button>
+
+            {/* Additional Context Input - Collapsible */}
+            <div className="mt-2">
+              <button
+                onClick={() => setShowContextInput(!showContextInput)}
+                className="w-full px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-sans font-medium transition-colors flex items-center justify-between"
+              >
+                <div className="flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <span>Custom Instructions</span>
+                </div>
+                <svg className={`w-3 h-3 transition-transform ${showContextInput ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showContextInput && (
+                <div className="mt-2 space-y-2">
+                  <div className="text-xs font-sans text-slate-600 bg-blue-50 border border-blue-200 rounded px-2 py-1.5">
+                    <div className="flex items-start gap-1.5">
+                      <svg className="w-3.5 h-3.5 text-blue-600 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <div>
+                        <div className="font-semibold text-blue-900">High Priority Context</div>
+                        <div className="text-blue-700 mt-0.5">Add specific instructions or information that takes precedence over the knowledge base. Example: product specs, special handling instructions, or custom response guidance.</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <textarea
+                    value={additionalContext}
+                    onChange={(e) => setAdditionalContext(e.target.value)}
+                    placeholder="Enter specific product details, special instructions, or custom guidance for this email..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm font-sans resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                    rows={4}
+                  />
+
+                  {additionalContext && (
+                    <button
+                      onClick={() => setAdditionalContext("")}
+                      className="w-full px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-xs font-sans transition-colors"
+                    >
+                      Clear Instructions
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Expandable Knowledge Base Tab for Draft */}
             {showKBTab && (
