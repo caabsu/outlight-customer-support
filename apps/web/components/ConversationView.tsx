@@ -518,7 +518,8 @@ export default function ConversationView() {
     if (!selectedConversation) return;
 
     const currentTags = selectedConversation.tags || [];
-    const updatedTags = [...currentTags, "non-customer-support"];
+    // Add non-customer-support tag and remove needs-reply tag
+    const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "non-customer-support"];
 
     // Optimistic update - instant UI feedback
     updateConversationOptimistic(selectedConversation.id, {
@@ -545,9 +546,14 @@ export default function ConversationView() {
   const handleMarkResolved = async () => {
     if (!selectedConversation) return;
 
+    // Remove needs-reply tag when marking as resolved
+    const currentTags = selectedConversation.tags || [];
+    const updatedTags = currentTags.filter(tag => tag !== "needs-reply");
+
     // Optimistic update - instant UI feedback
     updateConversationOptimistic(selectedConversation.id, {
-      archived: true
+      archived: true,
+      tags: updatedTags
     });
 
     try {
@@ -1498,7 +1504,7 @@ export default function ConversationView() {
 
           {/* Tag Management */}
           <div className="flex items-center gap-2 flex-wrap">
-            {selectedConversation.tags?.map((tag) => (
+            {selectedConversation.tags?.filter(tag => tag !== 'needs-reply' && tag !== 'non-customer-support').map((tag) => (
               <span
                 key={tag}
                 className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs font-sans rounded-md border border-primary/20"
@@ -4153,9 +4159,9 @@ export default function ConversationView() {
                     </svg>
                     {fullViewConversation.messages?.length || 0} messages
                   </span>
-                  {fullViewConversation.tags && fullViewConversation.tags.length > 0 && (
+                  {fullViewConversation.tags && fullViewConversation.tags.filter(tag => tag !== 'needs-reply' && tag !== 'non-customer-support').length > 0 && (
                     <div className="flex items-center gap-1 ml-2">
-                      {fullViewConversation.tags.slice(0, 3).map((tag) => (
+                      {fullViewConversation.tags.filter(tag => tag !== 'needs-reply' && tag !== 'non-customer-support').slice(0, 3).map((tag) => (
                         <span key={tag} className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-semibold">
                           {tag}
                         </span>

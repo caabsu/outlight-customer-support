@@ -1829,8 +1829,9 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
     const additionalContext = req.body?.additionalContext || null;
     console.log(`[Draft] Starting draft generation for conversation ${conversationId} (forceRegenerate: ${forceRegenerate}, hasAdditionalContext: ${!!additionalContext})`);
 
-    // Check if draft already exists and return it unless forceRegenerate is true
-    if (!forceRegenerate) {
+    // Check if draft already exists and return it unless forceRegenerate is true OR custom context is provided
+    // IMPORTANT: If custom context is provided, we must always regenerate to include that context
+    if (!forceRegenerate && !additionalContext) {
       const existingDraft = await prisma.draftResponse.findUnique({
         where: { conversationId }
       });
