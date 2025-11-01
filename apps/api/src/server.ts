@@ -1522,7 +1522,6 @@ app.post("/shopify/order/:orderId/refund/calculate", async (req: Request, res: R
  * POST /shopify/order/:orderId/refund
  * Body: {
  *   refundLineItems: [{ line_item_id: number, quantity: number, restock_type?: string }],
- *   amount?: string,
  *   reason?: string,
  *   notify?: boolean,
  *   note?: string
@@ -1536,14 +1535,13 @@ app.post("/shopify/order/:orderId/refund", async (req: Request, res: Response) =
       return res.status(400).json({ error: "Invalid order ID" });
     }
 
-    const { refundLineItems, amount, reason, notify, note } = req.body;
+    const { refundLineItems, reason, notify, note } = req.body;
 
     if (!refundLineItems || !Array.isArray(refundLineItems)) {
       return res.status(400).json({ error: "refundLineItems array is required" });
     }
 
     const refund = await shopify.createRefund(orderId, refundLineItems, {
-      amount,
       reason,
       notify,
       note

@@ -375,6 +375,7 @@ export async function createRefund(
     reason?: string;
     notify?: boolean;
     note?: string;
+    shipping?: { full_refund?: boolean; amount?: string };
   } = {}
 ): Promise<ShopifyRefund> {
   try {
@@ -390,13 +391,9 @@ export async function createRefund(
       },
     };
 
-    // If specific amount is provided, add it
-    if (options.amount) {
-      refundData.refund.transactions = [{
-        amount: options.amount,
-        kind: 'refund',
-        gateway: 'manual',
-      }];
+    // Add shipping refund if specified
+    if (options.shipping) {
+      refundData.refund.shipping = options.shipping;
     }
 
     const response = await shopifyRequest<{ refund: ShopifyRefund }>(
