@@ -1824,7 +1824,8 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
             conversationId,
             fromDatabase: true,
             createdAt: existingDraft.createdAt,
-            updatedAt: existingDraft.updatedAt
+            updatedAt: existingDraft.updatedAt,
+            usedCustomContext: false // Cached drafts didn't use custom context
           });
         }
       }
@@ -2294,7 +2295,8 @@ Remember:
       conversationId,
       processingTime: new Date().toISOString(),
       toolCallsMade: toolCallCount,
-      fromDatabase: false
+      fromDatabase: false,
+      usedCustomContext: !!(additionalContext && additionalContext.trim())
     });
   } catch (error) {
     console.error("Error generating draft:", error);
