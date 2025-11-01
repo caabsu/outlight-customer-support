@@ -890,8 +890,14 @@ export default function ConversationView() {
         [conversationId]: data
       }));
 
-      // Refresh conversation to get updated tags
-      await refreshConversations();
+      // Update conversation tags optimistically if draft added new tags
+      if (data.tags && data.tags.length > 0) {
+        const currentTags = selectedConversation.tags || [];
+        const uniqueTags = Array.from(new Set([...currentTags, ...data.tags]));
+        updateConversationOptimistic(conversationId, {
+          tags: uniqueTags
+        });
+      }
     } catch (error) {
       console.error("Error generating draft:", error);
       setDraftError(error instanceof Error ? error.message : "Failed to generate draft");
