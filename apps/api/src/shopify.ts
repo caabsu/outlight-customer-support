@@ -471,6 +471,47 @@ export async function getOrderRefunds(orderId: number): Promise<ShopifyRefund[]>
 }
 
 /**
+ * Cancel an order
+ *
+ * @param orderId - The order ID to cancel
+ * @param options - Cancel options
+ * @returns The cancelled order
+ */
+export async function cancelOrder(
+  orderId: number,
+  options: {
+    amount?: string;
+    currency?: string;
+    reason?: 'customer' | 'fraud' | 'inventory' | 'declined' | 'other';
+    email?: boolean;
+    refund?: boolean;
+  } = {}
+): Promise<ShopifyOrder> {
+  try {
+    const cancelData: any = {
+      amount: options.amount,
+      currency: options.currency,
+      reason: options.reason || 'customer',
+      email: options.email ?? false,
+      refund: options.refund ?? false,
+    };
+
+    const response = await shopifyRequest<{ order: ShopifyOrder }>(
+      `/orders/${orderId}/cancel.json`,
+      {
+        method: 'POST',
+        body: JSON.stringify(cancelData),
+      }
+    );
+
+    return response.order;
+  } catch (error) {
+    console.error('Error cancelling order:', error);
+    throw error;
+  }
+}
+
+/**
  * Validate Shopify configuration
  */
 export function validateShopifyConfig(): { valid: boolean; errors: string[] } {

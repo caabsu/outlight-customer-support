@@ -1566,6 +1566,44 @@ app.get("/shopify/order/:orderId/refunds", async (req: Request, res: Response) =
 });
 
 /**
+ * Cancel an order
+ * POST /shopify/order/:orderId/cancel
+ * Body: {
+ *   amount?: string,
+ *   currency?: string,
+ *   reason?: 'customer' | 'fraud' | 'inventory' | 'declined' | 'other',
+ *   email?: boolean,
+ *   refund?: boolean
+ * }
+ */
+app.post("/shopify/order/:orderId/cancel", async (req: Request, res: Response) => {
+  try {
+    const orderId = parseInt(req.params.orderId);
+
+    if (isNaN(orderId)) {
+      return res.status(400).json({ error: "Invalid order ID" });
+    }
+
+    const { amount, currency, reason, email, refund } = req.body;
+
+    const cancelledOrder = await shopify.cancelOrder(orderId, {
+      amount,
+      currency,
+      reason,
+      email,
+      refund
+    });
+
+    res.json(cancelledOrder);
+  } catch (error) {
+    console.error("Error cancelling order:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to cancel order"
+    });
+  }
+});
+
+/**
  * 17track API Integration
  * Docs: https://asset.17track.net/api/document/v2_en/index.html
  */
