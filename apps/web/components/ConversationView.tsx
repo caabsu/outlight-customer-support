@@ -142,6 +142,7 @@ export default function ConversationView() {
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [summaryMinimized, setSummaryMinimized] = useState(false);
   const [expandedPreviews, setExpandedPreviews] = useState<Set<string>>(new Set());
+  const [fullViewConversation, setFullViewConversation] = useState<ConversationHistory | null>(null);
   const [activeInfoTooltip, setActiveInfoTooltip] = useState<string | null>(null);
   const [navigatingUnreplied, setNavigatingUnreplied] = useState(false);
   const [showNeedsReplyOnly, setShowNeedsReplyOnly] = useState(false); // Default to showing all conversations
@@ -194,15 +195,26 @@ export default function ConversationView() {
   });
   const [editingDraft, setEditingDraft] = useState(false);
   const [editedDraftText, setEditedDraftText] = useState("");
-  const [additionalContext, setAdditionalContext] = useState(""); // Custom context that takes precedence
+  const [customContextByConversationId, setCustomContextByConversationId] = useState<Record<string, string>>({}); // Custom context per conversation
   const [showContextInput, setShowContextInput] = useState(false);
 
   // Sidebar resize state
   const [rightSidebarWidth, setRightSidebarWidth] = useState(320); // 320px = 20rem = w-80
 
-  // Get current conversation's draft and loading state
+  // Get current conversation's draft, loading state, and custom context
   const draftData = selectedConversation?.id ? draftsByConversationId[selectedConversation.id] : null;
   const loadingDraft = selectedConversation?.id ? loadingDraftByConversationId[selectedConversation.id] || false : false;
+  const currentCustomContext = selectedConversation?.id ? (customContextByConversationId[selectedConversation.id] || "") : "";
+
+  // Helper to set current conversation's custom context
+  const setCurrentCustomContext = (context: string) => {
+    if (selectedConversation?.id) {
+      setCustomContextByConversationId(prev => ({
+        ...prev,
+        [selectedConversation.id]: context
+      }));
+    }
+  };
 
   // Track which conversations we've already attempted to auto-load drafts for
   const autoLoadAttemptedRef = useRef<Set<string>>(new Set());
@@ -287,9 +299,7 @@ export default function ConversationView() {
     setShowKBTab(false);
     setShowSummarizeKBTab(false);
     setDraftError(null);
-    // Clear custom instructions for new conversation
-    setAdditionalContext("");
-    setShowContextInput(false);
+    // Don't clear custom instructions - they are stored per conversation
   }, [selectedConversation?.id]);
 
   // Auto-load existing draft from database when conversation is selected
@@ -857,7 +867,9 @@ export default function ConversationView() {
     if (!selectedConversation) return;
 
     const conversationId = selectedConversation.id;
-    const contextToUse = customContext !== undefined ? customContext : additionalContext;
+    // Capture the custom context for this specific conversation at call time
+    const thisConversationContext = customContextByConversationId[conversationId] || "";
+    const contextToUse = customContext !== undefined ? customContext : thisConversationContext;
 
     // Set loading state for this specific conversation
     setLoadingDraftByConversationId(prev => ({
@@ -1716,37 +1728,32 @@ export default function ConversationView() {
                     </div>
 
                     {/* Action buttons */}
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       <button
-                        onClick={() => {
-                          const newSet = new Set(expandedPreviews);
-                          if (isExpanded) {
-                            newSet.delete(conv.id);
-                          } else {
-                            newSet.add(conv.id);
-                          }
-                          setExpandedPreviews(newSet);
-                        }}
-                        className="flex-1 px-2 py-1.5 text-[10px] font-sans font-medium text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded transition-colors flex items-center justify-center gap-1"
+                        onClick={() => setFullViewConversation(conv)}
+                        className="flex-1 px-2 py-1.5 text-[10px] font-sans font-medium text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 rounded transition-colors flex items-center justify-center gap-1"
+                        title="View Full Email"
                       >
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                         </svg>
-                        <span>{isExpanded ? 'Hide' : 'Preview'}</span>
+                        <span>View</span>
                       </button>
 
                       <button
                         onClick={async () => {
                           try {
-                            // Fetch and select the conversation (handles adding it to the list if needed)
                             await fetchAndSelectConversation(conv.id);
+                            // Scroll to top to ensure it's visible
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
                           } catch (error) {
                             console.error('Error opening conversation:', error);
                             alert('Failed to open conversation. Please try again.');
                           }
                         }}
                         className="flex-1 px-2 py-1.5 text-[10px] font-sans font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded transition-colors flex items-center justify-center gap-1"
+                        title="Open in Main View"
                       >
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -1757,7 +1764,6 @@ export default function ConversationView() {
                       <button
                         onClick={async () => {
                           try {
-                            // Mark conversation as archived (resolved)
                             const updateResponse = await fetch(`/api/conversations/${conv.id}/archive`, {
                               method: 'PATCH',
                               headers: { 'Content-Type': 'application/json' },
@@ -1768,30 +1774,24 @@ export default function ConversationView() {
                               throw new Error('Failed to mark as resolved');
                             }
 
-                            // Remove from history list immediately for instant feedback
                             setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== conv.id));
-
-                            // Refresh conversations list in the background
                             await refreshConversations();
                           } catch (error) {
                             console.error('Failed to mark as resolved:', error);
-                            // Optionally: Show error message to user
                             alert('Failed to mark conversation as resolved. Please try again.');
                           }
                         }}
-                        className="px-2 py-1.5 text-[10px] font-sans font-medium text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 rounded transition-colors flex items-center gap-1"
+                        className="px-2 py-1.5 text-[10px] font-sans font-medium text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 rounded transition-colors flex items-center justify-center gap-1"
                         title="Mark as Resolved"
                       >
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>Resolve</span>
                       </button>
 
                       <button
                         onClick={async () => {
                           try {
-                            // Add non-customer-support tag to conversation
                             const currentTags = conv.tags || [];
                             const updatedTags = [...currentTags, "non-customer-support"];
 
@@ -1805,34 +1805,21 @@ export default function ConversationView() {
                               throw new Error('Failed to mark as non-support');
                             }
 
-                            // Remove from history list immediately for instant feedback
                             setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== conv.id));
-
-                            // Refresh conversations list in the background
                             await refreshConversations();
                           } catch (error) {
                             console.error('Failed to mark as non-support:', error);
                             alert('Failed to mark conversation as non-support. Please try again.');
                           }
                         }}
-                        className="px-2 py-1.5 text-[10px] font-sans font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded transition-colors flex items-center gap-1"
+                        className="px-2 py-1.5 text-[10px] font-sans font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded transition-colors flex items-center justify-center gap-1"
                         title="Mark as Non-Support"
                       >
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
                         </svg>
-                        <span>Non-CS</span>
                       </button>
                     </div>
-
-                    {/* Preview section */}
-                    {isExpanded && (
-                      <div className="pt-2 border-t border-slate-100 animate-in fade-in duration-200">
-                        <p className="text-[10px] font-sans text-slate-600 leading-relaxed whitespace-pre-wrap">
-                          {messagePreview}{messagePreview.length >= 150 ? '...' : ''}
-                        </p>
-                      </div>
-                    )}
                   </div>
                 </div>
               );
@@ -2224,9 +2211,18 @@ export default function ConversationView() {
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                 )}
-                {/* Custom context indicator */}
+                {/* Custom context indicator - AFTER generation */}
                 {draftData?.usedCustomContext && !loadingDraft && (
                   <span className="text-[9px] px-1.5 py-0.5 bg-orange-500 text-white rounded font-semibold">CUSTOM</span>
+                )}
+                {/* Custom context active indicator - BEFORE generation */}
+                {!draftData && !loadingDraft && currentCustomContext && (
+                  <span className="text-[9px] px-1.5 py-0.5 bg-orange-400 text-white rounded font-semibold flex items-center gap-0.5">
+                    <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
+                    </svg>
+                    WILL USE CUSTOM
+                  </span>
                 )}
               </div>
               {/* Info Icon */}
@@ -2258,7 +2254,7 @@ export default function ConversationView() {
               <button
                 onClick={() => setShowContextInput(!showContextInput)}
                 className={`w-full px-2 py-1.5 rounded text-xs font-sans font-medium transition-colors flex items-center justify-between ${
-                  additionalContext ? 'bg-orange-100 hover:bg-orange-200 text-orange-900 border border-orange-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  currentCustomContext ? 'bg-orange-100 hover:bg-orange-200 text-orange-900 border border-orange-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
               >
                 <div className="flex items-center gap-1.5">
@@ -2266,7 +2262,7 @@ export default function ConversationView() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
                   <span>Custom Instructions</span>
-                  {additionalContext && (
+                  {currentCustomContext && (
                     <span className="px-1.5 py-0.5 bg-orange-500 text-white text-[8px] font-bold rounded">ACTIVE</span>
                   )}
                 </div>
@@ -2290,16 +2286,16 @@ export default function ConversationView() {
                   </div>
 
                   <textarea
-                    value={additionalContext}
-                    onChange={(e) => setAdditionalContext(e.target.value)}
+                    value={currentCustomContext}
+                    onChange={(e) => setCurrentCustomContext(e.target.value)}
                     placeholder="Enter specific product details, special instructions, or custom guidance for this email..."
                     className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm font-sans text-slate-900 bg-white resize-none focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent placeholder:text-slate-400"
                     rows={4}
                   />
 
-                  {additionalContext && (
+                  {currentCustomContext && (
                     <button
-                      onClick={() => setAdditionalContext("")}
+                      onClick={() => setCurrentCustomContext("")}
                       className="w-full px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-xs font-sans transition-colors"
                     >
                       Clear Instructions
@@ -2553,18 +2549,33 @@ export default function ConversationView() {
                   {/* Action buttons */}
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={() => {
+                        setFullViewConversation(conv);
+                        setShowAllHistory(false);
+                      }}
+                      className="flex-1 px-3 py-2 text-xs font-sans font-medium text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 rounded transition-colors flex items-center justify-center gap-1.5"
+                      title="View Full Email"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      <span>View</span>
+                    </button>
+
+                    <button
                       onClick={async () => {
                         try {
-                          // Fetch and select the conversation (handles adding it to the list if needed)
                           await fetchAndSelectConversation(conv.id);
-                          // Close the modal
                           setShowAllHistory(false);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
                         } catch (error) {
                           console.error('Error opening conversation:', error);
                           alert('Failed to open conversation. Please try again.');
                         }
                       }}
                       className="flex-1 px-3 py-2 text-xs font-sans font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded transition-colors flex items-center justify-center gap-1.5"
+                      title="Open in Main View"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -3877,6 +3888,219 @@ export default function ConversationView() {
             <button
               onClick={() => setShowKnowledgeBase(false)}
               className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-sans text-sm font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Full Email View Modal */}
+    {fullViewConversation && (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="bg-white border border-slate-200 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
+          {/* Header */}
+          <div className="px-6 py-4 bg-gradient-to-r from-purple-50 to-blue-50 border-b border-slate-200 shrink-0">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <h2 className="text-lg font-sans font-bold text-slate-900 mb-2">
+                  {fullViewConversation.subject || 'No Subject'}
+                </h2>
+                <div className="flex items-center gap-3 text-xs text-slate-600">
+                  <span className="flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    {new Date(fullViewConversation.lastMessageAt).toLocaleDateString(undefined, {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
+                    {fullViewConversation.messages?.length || 0} messages
+                  </span>
+                  {fullViewConversation.tags && fullViewConversation.tags.length > 0 && (
+                    <div className="flex items-center gap-1 ml-2">
+                      {fullViewConversation.tags.slice(0, 3).map((tag) => (
+                        <span key={tag} className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-semibold">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setFullViewConversation(null)}
+                className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+                title="Close"
+              >
+                <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Email Messages */}
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            {fullViewConversation.messages && fullViewConversation.messages.length > 0 ? (
+              fullViewConversation.messages.map((message, index) => {
+                const isInbound = message.direction === 'inbound';
+                const messageBody = message.bodyHtml || message.bodyText || 'No content available';
+
+                return (
+                  <div key={index} className={`p-4 rounded-lg border ${
+                    isInbound
+                      ? 'bg-blue-50 border-blue-200'
+                      : 'bg-green-50 border-green-200'
+                  }`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                          isInbound ? 'bg-blue-500' : 'bg-green-500'
+                        }`}>
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            {isInbound ? (
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                            ) : (
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            )}
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-xs font-sans font-semibold text-slate-900">
+                            {isInbound ? 'Customer' : 'Support Team'}
+                          </p>
+                          <p className="text-[10px] font-sans text-slate-500">
+                            Message #{index + 1}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-1 rounded text-[10px] font-sans font-semibold ${
+                        isInbound
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-green-100 text-green-700'
+                      }`}>
+                        {isInbound ? 'Inbound' : 'Outbound'}
+                      </span>
+                    </div>
+                    <div className="prose prose-sm max-w-none">
+                      {message.bodyHtml ? (
+                        <div
+                          className="text-sm font-sans text-slate-700 leading-relaxed"
+                          dangerouslySetInnerHTML={{ __html: messageBody }}
+                        />
+                      ) : (
+                        <p className="text-sm font-sans text-slate-700 leading-relaxed whitespace-pre-wrap">
+                          {messageBody}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-center py-12">
+                <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
+                <p className="text-sm font-sans text-slate-500">No messages in this conversation</p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer Actions */}
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    await fetchAndSelectConversation(fullViewConversation.id);
+                    setFullViewConversation(null);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  } catch (error) {
+                    console.error('Error opening conversation:', error);
+                    alert('Failed to open conversation. Please try again.');
+                  }
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-sans text-sm font-medium flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                Open in Main View
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const updateResponse = await fetch(`/api/conversations/${fullViewConversation.id}/archive`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({}),
+                    });
+
+                    if (!updateResponse.ok) {
+                      throw new Error('Failed to mark as resolved');
+                    }
+
+                    setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== fullViewConversation.id));
+                    await refreshConversations();
+                    setFullViewConversation(null);
+                  } catch (error) {
+                    console.error('Failed to mark as resolved:', error);
+                    alert('Failed to mark conversation as resolved. Please try again.');
+                  }
+                }}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-sans text-sm font-medium flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Mark as Resolved
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const currentTags = fullViewConversation.tags || [];
+                    const updatedTags = [...currentTags, "non-customer-support"];
+
+                    const updateResponse = await fetch(`/api/conversations/${fullViewConversation.id}/tags`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ tags: updatedTags }),
+                    });
+
+                    if (!updateResponse.ok) {
+                      throw new Error('Failed to mark as non-support');
+                    }
+
+                    setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== fullViewConversation.id));
+                    await refreshConversations();
+                    setFullViewConversation(null);
+                  } catch (error) {
+                    console.error('Failed to mark as non-support:', error);
+                    alert('Failed to mark conversation as non-support. Please try again.');
+                  }
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-sans text-sm font-medium flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                Mark as Non-CS
+              </button>
+            </div>
+            <button
+              onClick={() => setFullViewConversation(null)}
+              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors font-sans text-sm font-medium"
             >
               Close
             </button>
