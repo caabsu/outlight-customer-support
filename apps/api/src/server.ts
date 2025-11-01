@@ -75,12 +75,15 @@ app.get("/conversations", async (req: Request, res: Response) => {
       where.archived = false;
     }
 
+    // Build NOT conditions array for proper filtering
+    const notConditions: any[] = [];
+
     if (excludeNonSupport === "true") {
-      where.NOT = {
+      notConditions.push({
         tags: {
           has: "non-customer-support"
         }
-      };
+      });
     }
 
     if (unreadOnly === "true") {
@@ -96,12 +99,16 @@ app.get("/conversations", async (req: Request, res: Response) => {
 
     // Resolved filter (does NOT have needs-reply tag)
     if (resolved === "true") {
-      where.NOT = {
-        ...where.NOT,
+      notConditions.push({
         tags: {
           has: "needs-reply"
         }
-      };
+      });
+    }
+
+    // Apply NOT conditions if any exist
+    if (notConditions.length > 0) {
+      where.NOT = notConditions.length === 1 ? notConditions[0] : notConditions;
     }
 
     // Specific tags filter (must have ALL specified tags)
