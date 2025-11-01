@@ -521,54 +521,46 @@ export default function ConversationView() {
     // Add non-customer-support tag and remove needs-reply tag
     const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "non-customer-support"];
 
-    // Optimistic update - instant UI feedback
-    updateConversationOptimistic(selectedConversation.id, {
-      tags: updatedTags
-    });
-
     try {
-      // Update tags
-      await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
+      // Update tags on backend FIRST
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: updatedTags }),
       });
+
+      if (!response.ok) {
+        throw new Error('Failed to update tags');
+      }
+
+      // Then refresh to get updated filtered list from server
       await refreshConversations();
     } catch (error) {
       console.error("Failed to mark as non-support:", error);
-      // Revert on error
-      updateConversationOptimistic(selectedConversation.id, {
-        tags: currentTags
-      });
+      alert('Failed to mark as non-support. Please try again.');
     }
   };
 
   const handleMarkResolved = async () => {
     if (!selectedConversation) return;
 
-    // Remove needs-reply tag when marking as resolved
-    const currentTags = selectedConversation.tags || [];
-    const updatedTags = currentTags.filter(tag => tag !== "needs-reply");
-
-    // Optimistic update - instant UI feedback
-    updateConversationOptimistic(selectedConversation.id, {
-      archived: true,
-      tags: updatedTags
-    });
-
     try {
-      await fetch(`/api/conversations/${selectedConversation.id}`, {
+      // Update backend FIRST
+      const response = await fetch(`/api/conversations/${selectedConversation.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ archived: true }),
       });
+
+      if (!response.ok) {
+        throw new Error('Failed to mark as resolved');
+      }
+
+      // Then refresh to get updated filtered list from server
       await refreshConversations();
     } catch (error) {
       console.error("Failed to mark as resolved:", error);
-      // Revert on error
-      updateConversationOptimistic(selectedConversation.id, {
-        archived: false
-      });
+      alert('Failed to mark as resolved. Please try again.');
     }
   };
 
