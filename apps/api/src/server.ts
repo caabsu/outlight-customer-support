@@ -1781,7 +1781,8 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
   try {
     const conversationId = req.params.id;
     const forceRegenerate = req.body?.forceRegenerate === true;
-    console.log(`[Draft] Starting draft generation for conversation ${conversationId} (forceRegenerate: ${forceRegenerate})`);
+    const additionalContext = req.body?.additionalContext || null;
+    console.log(`[Draft] Starting draft generation for conversation ${conversationId} (forceRegenerate: ${forceRegenerate}, hasAdditionalContext: ${!!additionalContext})`);
 
     // Check if draft already exists and return it unless forceRegenerate is true
     if (!forceRegenerate) {
@@ -1823,7 +1824,8 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
             conversationId,
             fromDatabase: true,
             createdAt: existingDraft.createdAt,
-            updatedAt: existingDraft.updatedAt
+            updatedAt: existingDraft.updatedAt,
+            usedCustomContext: false // Cached drafts didn't use custom context
           });
         }
       }
@@ -1935,11 +1937,30 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
       }
     ];
 
-    // Initial AI call with function calling
-    const messages: any[] = [
-      {
-        role: "system",
-        content: `You are an expert AI assistant for Outlight customer support. You have been trained on the company's complete knowledge base and have access to internal tools.
+    // Build system prompt with optional additional context
+    let systemPrompt = `You are an expert AI assistant for Outlight customer support. You have been trained on the company's complete knowledge base and have access to internal tools.`;
+
+    // Add additional context section if provided - THIS TAKES HIGHEST PRIORITY
+    if (additionalContext && additionalContext.trim()) {
+      systemPrompt += `
+
+═══════════════════════════════════════════════════════════
+🔴 CRITICAL: CUSTOM INSTRUCTIONS - HIGHEST PRIORITY
+═══════════════════════════════════════════════════════════
+
+⚠️  THESE INSTRUCTIONS OVERRIDE ALL OTHER KNOWLEDGE BASE INFORMATION
+⚠️  FOLLOW THESE INSTRUCTIONS EXACTLY AS PROVIDED
+⚠️  IF THERE IS ANY CONFLICT BETWEEN THIS SECTION AND THE KNOWLEDGE BASE, ALWAYS FOLLOW THIS SECTION
+
+${additionalContext}
+
+═══════════════════════════════════════════════════════════
+END OF CUSTOM INSTRUCTIONS
+═══════════════════════════════════════════════════════════
+`;
+    }
+
+    systemPrompt += `
 
 ═══════════════════════════════════════════════════════════
 📚 KNOWLEDGE BASE - READ AND MEMORIZE ALL POLICIES
@@ -2049,7 +2070,13 @@ When providing action steps (shouldDraft = false):
     "deliveryDate": "2025-09-28",
     "isWithinReturnWindow": false
   }
-}`
+}`;
+
+    // Initial AI call with function calling
+    const messages: any[] = [
+      {
+        role: "system",
+        content: systemPrompt
       },
       {
         role: "user",
@@ -2268,7 +2295,8 @@ Remember:
       conversationId,
       processingTime: new Date().toISOString(),
       toolCallsMade: toolCallCount,
-      fromDatabase: false
+      fromDatabase: false,
+      usedCustomContext: !!(additionalContext && additionalContext.trim())
     });
   } catch (error) {
     console.error("Error generating draft:", error);

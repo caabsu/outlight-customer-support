@@ -375,7 +375,7 @@ export function ConversationProvider({
   };
 
   const refreshConversations = async () => {
-    await fetchConversations(false, 1, false, 1); // Reset to page 1 and don't suppress errors
+    await fetchConversations(false, 1, false); // Preserve current page, don't suppress errors
   };
 
   const goToPage = async (page: number) => {
