@@ -521,54 +521,46 @@ export default function ConversationView() {
     // Add non-customer-support tag and remove needs-reply tag
     const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "non-customer-support"];
 
-    // Optimistic update - instant UI feedback
-    updateConversationOptimistic(selectedConversation.id, {
-      tags: updatedTags
-    });
-
     try {
-      // Update tags
-      await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
+      // Update tags on backend FIRST
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: updatedTags }),
       });
+
+      if (!response.ok) {
+        throw new Error('Failed to update tags');
+      }
+
+      // Then refresh to get updated filtered list from server
       await refreshConversations();
     } catch (error) {
       console.error("Failed to mark as non-support:", error);
-      // Revert on error
-      updateConversationOptimistic(selectedConversation.id, {
-        tags: currentTags
-      });
+      alert('Failed to mark as non-support. Please try again.');
     }
   };
 
   const handleMarkResolved = async () => {
     if (!selectedConversation) return;
 
-    // Remove needs-reply tag when marking as resolved
-    const currentTags = selectedConversation.tags || [];
-    const updatedTags = currentTags.filter(tag => tag !== "needs-reply");
-
-    // Optimistic update - instant UI feedback
-    updateConversationOptimistic(selectedConversation.id, {
-      archived: true,
-      tags: updatedTags
-    });
-
     try {
-      await fetch(`/api/conversations/${selectedConversation.id}`, {
+      // Update backend FIRST
+      const response = await fetch(`/api/conversations/${selectedConversation.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ archived: true }),
       });
+
+      if (!response.ok) {
+        throw new Error('Failed to mark as resolved');
+      }
+
+      // Then refresh to get updated filtered list from server
       await refreshConversations();
     } catch (error) {
       console.error("Failed to mark as resolved:", error);
-      // Revert on error
-      updateConversationOptimistic(selectedConversation.id, {
-        archived: false
-      });
+      alert('Failed to mark as resolved. Please try again.');
     }
   };
 
@@ -1841,10 +1833,10 @@ export default function ConversationView() {
                       <button
                         onClick={async () => {
                           try {
-                            const updateResponse = await fetch(`/api/conversations/${conv.id}/archive`, {
+                            const updateResponse = await fetch(`/api/conversations/${conv.id}`, {
                               method: 'PATCH',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({}),
+                              body: JSON.stringify({ archived: true }),
                             });
 
                             if (!updateResponse.ok) {
@@ -1870,7 +1862,8 @@ export default function ConversationView() {
                         onClick={async () => {
                           try {
                             const currentTags = conv.tags || [];
-                            const updatedTags = [...currentTags, "non-customer-support"];
+                            // Remove needs-reply tag and add non-customer-support tag
+                            const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "non-customer-support"];
 
                             const updateResponse = await fetch(`/api/conversations/${conv.id}/tags`, {
                               method: 'PATCH',
@@ -2673,10 +2666,10 @@ export default function ConversationView() {
                       onClick={async () => {
                         try {
                           // Mark conversation as archived (resolved)
-                          const updateResponse = await fetch(`/api/conversations/${conv.id}/archive`, {
+                          const updateResponse = await fetch(`/api/conversations/${conv.id}`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({}),
+                            body: JSON.stringify({ archived: true }),
                           });
 
                           if (!updateResponse.ok) {
@@ -2705,9 +2698,9 @@ export default function ConversationView() {
                     <button
                       onClick={async () => {
                         try {
-                          // Add non-customer-support tag to conversation
+                          // Add non-customer-support tag and remove needs-reply tag
                           const currentTags = conv.tags || [];
-                          const updatedTags = [...currentTags, "non-customer-support"];
+                          const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "non-customer-support"];
 
                           const updateResponse = await fetch(`/api/conversations/${conv.id}/tags`, {
                             method: 'PATCH',
@@ -4274,10 +4267,10 @@ export default function ConversationView() {
               <button
                 onClick={async () => {
                   try {
-                    const updateResponse = await fetch(`/api/conversations/${fullViewConversation.id}/archive`, {
+                    const updateResponse = await fetch(`/api/conversations/${fullViewConversation.id}`, {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({}),
+                      body: JSON.stringify({ archived: true }),
                     });
 
                     if (!updateResponse.ok) {
@@ -4303,7 +4296,8 @@ export default function ConversationView() {
                 onClick={async () => {
                   try {
                     const currentTags = fullViewConversation.tags || [];
-                    const updatedTags = [...currentTags, "non-customer-support"];
+                    // Remove needs-reply tag and add non-customer-support tag
+                    const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "non-customer-support"];
 
                     const updateResponse = await fetch(`/api/conversations/${fullViewConversation.id}/tags`, {
                       method: 'PATCH',

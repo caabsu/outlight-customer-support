@@ -427,7 +427,22 @@ app.patch("/conversations/:id", async (req: Request, res: Response) => {
     const { archived, starred } = req.body;
     const data: any = {};
 
-    if (archived !== undefined) data.archived = archived;
+    if (archived !== undefined) {
+      data.archived = archived;
+
+      // If archiving, also remove needs-reply tag
+      if (archived === true) {
+        const conversation = await prisma.conversation.findUnique({
+          where: { id: req.params.id },
+        });
+
+        if (conversation) {
+          const updatedTags = (conversation.tags || []).filter(t => t !== "needs-reply");
+          data.tags = updatedTags;
+        }
+      }
+    }
+
     if (starred !== undefined) data.starred = starred;
 
     const updated = await prisma.conversation.update({
