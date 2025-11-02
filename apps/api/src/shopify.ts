@@ -112,6 +112,7 @@ export interface ShopifyOrder {
   shipping_address?: ShopifyAddress;
   billing_address?: ShopifyAddress;
   refunds?: ShopifyRefund[];
+  transactions?: ShopifyTransaction[];
 }
 
 export interface ShopifyLineItem {
@@ -379,6 +380,26 @@ export async function createRefund(
   } = {}
 ): Promise<ShopifyRefund> {
   try {
+    // First, calculate the refund to get the correct amount
+    const calculation = await calculateRefund(orderId, refundLineItems);
+
+    // Fetch the order to get the original transaction
+    const order = await getOrder(orderId);
+
+    // Find the successful payment transaction (sale or capture)
+    const parentTransaction = order.transactions?.find(
+      t => (t.kind === 'sale' || t.kind === 'capture') && t.status === 'success'
+    );
+
+    if (!parentTransaction) {
+      throw new Error('No successful payment transaction found for this order');
+    }
+
+    // Calculate the refund amount from the calculated transactions
+    const refundAmount = calculation.transactions
+      .filter(t => t.kind === 'refund')
+      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+
     const refundData: any = {
       refund: {
         notify: options.notify ?? false,
@@ -388,6 +409,14 @@ export async function createRefund(
           quantity: item.quantity,
           restock_type: item.restock_type || 'no_restock',
         })),
+        transactions: [
+          {
+            parent_id: parentTransaction.id,
+            amount: refundAmount.toFixed(2),
+            kind: 'refund',
+            gateway: parentTransaction.gateway,
+          }
+        ],
       },
     };
 
