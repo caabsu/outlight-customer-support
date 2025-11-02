@@ -238,22 +238,30 @@ export async function ingestThread(gmail: any, threadId: string) {
     const lastMessage = conversationMessages[0];
     const currentTags = convo.tags || [];
 
-    // If last message is inbound, add "needs-reply" tag
-    // If last message is outbound, remove "needs-reply" tag
-    if (lastMessage.direction === "inbound") {
-      if (!currentTags.includes("needs-reply")) {
-        await prisma.conversation.update({
-          where: { id: convo.id },
-          data: { tags: [...currentTags, "needs-reply"] }
-        });
-      }
-    } else {
-      // Remove needs-reply tag if present
-      if (currentTags.includes("needs-reply")) {
-        await prisma.conversation.update({
-          where: { id: convo.id },
-          data: { tags: currentTags.filter(tag => tag !== "needs-reply") }
-        });
+    // Don't automatically manage "needs-reply" tag if conversation is:
+    // - Marked as non-customer-support
+    // - Archived (resolved)
+    const isNonSupport = currentTags.includes("non-customer-support");
+    const isArchived = convo.archived;
+
+    if (!isNonSupport && !isArchived) {
+      // If last message is inbound, add "needs-reply" tag
+      // If last message is outbound, remove "needs-reply" tag
+      if (lastMessage.direction === "inbound") {
+        if (!currentTags.includes("needs-reply")) {
+          await prisma.conversation.update({
+            where: { id: convo.id },
+            data: { tags: [...currentTags, "needs-reply"] }
+          });
+        }
+      } else {
+        // Remove needs-reply tag if present
+        if (currentTags.includes("needs-reply")) {
+          await prisma.conversation.update({
+            where: { id: convo.id },
+            data: { tags: currentTags.filter(tag => tag !== "needs-reply") }
+          });
+        }
       }
     }
   }
