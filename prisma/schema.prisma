@@ -101,3 +101,35 @@ model DraftResponse {
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 }
+
+model StandaloneDraft {
+  id                 String    @id @default(uuid())
+
+  // Input fields
+  subject            String
+  emailBody          String    // The external email body they received
+  contextNotes       String?   // Additional context/background
+  customInstructions String?   // Custom instructions for AI
+
+  // Processing status
+  status             String    @default("pending") // pending, processing, completed, failed
+
+  // AI Output (same structure as DraftResponse for consistency)
+  internalReasoning  String?
+  tags               String[]  @default([])
+  category           String?
+  reasoning          String?
+  shouldDraft        Boolean   @default(true)
+  draft              String?
+  actionSteps        Json?
+  orderInfo          Json?
+
+  // Metadata
+  processingTime     String?   // e.g., "2.3s"
+  toolCallsMade      Int?      // Number of tool calls AI made
+  error              String?   // Error message if failed
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  completedAt        DateTime? // When processing finished
+}

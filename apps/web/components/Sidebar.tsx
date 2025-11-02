@@ -28,6 +28,7 @@ export default function Sidebar() {
 
   const isAnalyticsActive = pathname === "/analytics";
   const isKnowledgeBaseActive = pathname === "/knowledge-base";
+  const isExternalDraftsActive = pathname === "/external-drafts";
 
   return (
     <div className="w-full h-full border-r border-border bg-background flex flex-col" style={{ fontFamily: "Roboto, sans-serif" }}>
@@ -107,6 +108,17 @@ export default function Sidebar() {
           >
             <span className={`w-2 h-2 rounded-full ${isAnalyticsActive ? "bg-warning" : "bg-transparent"}`}></span>
             Analytics
+          </Link>
+          <Link
+            href="/external-drafts"
+            className={`block w-full text-left px-4 py-2.5 rounded-lg text-sm font-sans font-medium transition-colors flex items-center gap-2 ${
+              isExternalDraftsActive
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${isExternalDraftsActive ? "bg-blue-500" : "bg-transparent"}`}></span>
+            External Drafts
           </Link>
         </div>
 
