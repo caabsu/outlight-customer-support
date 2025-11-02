@@ -1219,7 +1219,6 @@ export default function ConversationView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           refundLineItems,
-          amount: refundAmount.toFixed(2),
           reason: refundReason || 'Customer request',
           notify: refundNotifyCustomer,
           note: refundReason,
