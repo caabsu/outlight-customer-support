@@ -2815,8 +2815,8 @@ Your final response must be valid JSON matching this exact structure:
 
         // Execute each tool call
         for (const toolCall of assistantMessage.tool_calls) {
-          const functionName = toolCall.function.name;
-          const functionArgs = JSON.parse(toolCall.function.arguments);
+          const functionName = (toolCall as any).function.name;
+          const functionArgs = JSON.parse((toolCall as any).function.arguments);
           console.log(`[StandaloneDraft ${draftId}] Calling tool: ${functionName}`, functionArgs);
 
           let toolResult: any;
