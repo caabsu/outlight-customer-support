@@ -329,8 +329,9 @@ export async function getCustomerOrders(customerId: string, limit: number = 50):
  */
 export async function getOrder(orderId: number): Promise<ShopifyOrder> {
   try {
+    // Explicitly request transactions to ensure they're included in the response
     const response = await shopifyRequest<{ order: ShopifyOrder }>(
-      `/orders/${orderId}.json`
+      `/orders/${orderId}.json?fields=id,order_number,name,email,created_at,updated_at,financial_status,fulfillment_status,total_price,subtotal_price,total_tax,currency,line_items,customer,shipping_address,billing_address,refunds,transactions`
     );
     return response.order;
   } catch (error) {
@@ -386,14 +387,31 @@ export async function createRefund(
     // Fetch the order to get the original transaction
     const order = await getOrder(orderId);
 
-    // Find the successful payment transaction (sale or capture)
+    // Log transactions for debugging
+    console.log(`Order ${orderId} transactions:`, JSON.stringify(order.transactions, null, 2));
+    console.log(`Order ${orderId} financial_status:`, order.financial_status);
+
+    // Find the successful payment transaction
+    // Different payment gateways use different transaction types:
+    // - 'sale': Single-step payment (common with most processors)
+    // - 'capture': Two-step payment (authorization then capture)
+    // - 'authorization': Pre-authorized payment (can be captured later)
     const parentTransaction = order.transactions?.find(
-      t => (t.kind === 'sale' || t.kind === 'capture') && t.status === 'success'
+      t => (t.kind === 'sale' || t.kind === 'capture' || t.kind === 'authorization') && t.status === 'success'
     );
 
     if (!parentTransaction) {
-      throw new Error('No successful payment transaction found for this order');
+      // Provide detailed error message showing what transactions exist
+      const transactionSummary = order.transactions?.map(t => `${t.kind} (${t.status})`).join(', ') || 'none';
+      throw new Error(
+        `No successful payment transaction found for this order. ` +
+        `Order financial status: ${order.financial_status}. ` +
+        `Transactions found: ${transactionSummary}. ` +
+        `Note: Refunds require a completed payment (sale, capture, or authorization with success status).`
+      );
     }
+
+    console.log(`Using parent transaction:`, { id: parentTransaction.id, kind: parentTransaction.kind, gateway: parentTransaction.gateway });
 
     // Calculate the refund amount from the calculated transactions
     const refundAmount = calculation.transactions
