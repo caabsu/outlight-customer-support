@@ -2401,6 +2401,570 @@ app.delete("/conversations/:id/draft", async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================================
+// STANDALONE DRAFT ENDPOINTS - External Email Draft Tool
+// ============================================================================
+
+// Get all standalone drafts (with pagination and filtering)
+app.get("/standalone-drafts", async (req: Request, res: Response) => {
+  try {
+    const { page = "1", limit = "50", status } = req.query;
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+
+    const where: any = {};
+    if (status && typeof status === 'string') {
+      where.status = status;
+    }
+
+    const [drafts, total] = await Promise.all([
+      prisma.standaloneDraft.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limitNum,
+      }),
+      prisma.standaloneDraft.count({ where }),
+    ]);
+
+    res.json({
+      drafts,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching standalone drafts:", error);
+    res.status(500).json({ error: "Failed to fetch drafts" });
+  }
+});
+
+// Get single standalone draft
+app.get("/standalone-drafts/:id", async (req: Request, res: Response) => {
+  try {
+    const draft = await prisma.standaloneDraft.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!draft) {
+      return res.status(404).json({ error: "Draft not found" });
+    }
+
+    res.json(draft);
+  } catch (error) {
+    console.error("Error fetching standalone draft:", error);
+    res.status(500).json({ error: "Failed to fetch draft" });
+  }
+});
+
+// Create new standalone draft and generate AI response
+app.post("/standalone-drafts", async (req: Request, res: Response) => {
+  try {
+    const { subject, emailBody, contextNotes, customInstructions } = req.body;
+
+    if (!subject || !emailBody) {
+      return res.status(400).json({ error: "Subject and emailBody are required" });
+    }
+
+    // Create draft record with pending status
+    const draft = await prisma.standaloneDraft.create({
+      data: {
+        subject,
+        emailBody,
+        contextNotes: contextNotes || null,
+        customInstructions: customInstructions || null,
+        status: "pending",
+      },
+    });
+
+    // Return immediately with pending status
+    res.json(draft);
+
+    // Process in background (don't await - allows concurrent processing)
+    processStandaloneDraft(draft.id).catch(error => {
+      console.error(`[StandaloneDraft ${draft.id}] Background processing failed:`, error);
+    });
+
+  } catch (error) {
+    console.error("Error creating standalone draft:", error);
+    res.status(500).json({ error: "Failed to create draft" });
+  }
+});
+
+// Regenerate standalone draft
+app.post("/standalone-drafts/:id/regenerate", async (req: Request, res: Response) => {
+  try {
+    const draft = await prisma.standaloneDraft.findUnique({
+      where: { id: req.params.id },
+    });
+
+    if (!draft) {
+      return res.status(404).json({ error: "Draft not found" });
+    }
+
+    // Reset to pending status
+    const updated = await prisma.standaloneDraft.update({
+      where: { id: draft.id },
+      data: {
+        status: "pending",
+        error: null,
+        draft: null,
+        internalReasoning: null,
+        tags: [],
+        category: null,
+        reasoning: null,
+        actionSteps: null,
+        orderInfo: null,
+        processingTime: null,
+        toolCallsMade: null,
+        completedAt: null,
+      },
+    });
+
+    res.json(updated);
+
+    // Process in background
+    processStandaloneDraft(draft.id).catch(error => {
+      console.error(`[StandaloneDraft ${draft.id}] Regeneration failed:`, error);
+    });
+
+  } catch (error) {
+    console.error("Error regenerating standalone draft:", error);
+    res.status(500).json({ error: "Failed to regenerate draft" });
+  }
+});
+
+// Delete standalone draft
+app.delete("/standalone-drafts/:id", async (req: Request, res: Response) => {
+  try {
+    await prisma.standaloneDraft.delete({
+      where: { id: req.params.id },
+    });
+
+    res.json({ success: true, message: "Draft deleted successfully" });
+  } catch (error) {
+    if ((error as any).code === 'P2025') {
+      return res.status(404).json({ error: "Draft not found" });
+    }
+    console.error("Error deleting standalone draft:", error);
+    res.status(500).json({ error: "Failed to delete draft" });
+  }
+});
+
+// Background processing function for standalone drafts
+async function processStandaloneDraft(draftId: string) {
+  const startTime = Date.now();
+  let toolCallCount = 0;
+
+  try {
+    console.log(`[StandaloneDraft ${draftId}] Starting processing...`);
+
+    // Mark as processing
+    await prisma.standaloneDraft.update({
+      where: { id: draftId },
+      data: { status: "processing" },
+    });
+
+    // Get the draft
+    const draft = await prisma.standaloneDraft.findUnique({
+      where: { id: draftId },
+    });
+
+    if (!draft) {
+      throw new Error("Draft not found");
+    }
+
+    // Load knowledge base (same as conversation drafts)
+    const knowledgeBase = await prisma.knowledgeBase.findMany({
+      where: {
+        active: true,
+        OR: [
+          { category: "general" },
+          { category: "draft-reply" },
+        ],
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    let knowledgeBaseText = "";
+    if (knowledgeBase.length > 0) {
+      knowledgeBaseText = knowledgeBase
+        .map(kb => {
+          const categoryLabel = kb.category === "general" ? "[GENERAL]" : "[DRAFT-SPECIFIC]";
+          return `${categoryLabel} ${kb.title}\n\n${kb.content}`;
+        })
+        .join("\n\n---\n\n");
+    }
+
+    // Build system prompt (similar to conversation draft)
+    let systemPrompt = `You are an expert customer support AI assistant analyzing an external email and generating a professional response draft.
+
+═══════════════════════════════════════════════════════════
+📧 EMAIL INFORMATION
+═══════════════════════════════════════════════════════════
+
+Subject: ${draft.subject}
+
+Email Body:
+${draft.emailBody}
+
+${draft.contextNotes ? `Additional Context/Notes:\n${draft.contextNotes}\n` : ''}
+`;
+
+    // Add custom instructions if provided (HIGHEST PRIORITY)
+    if (draft.customInstructions && draft.customInstructions.trim()) {
+      systemPrompt += `
+
+═══════════════════════════════════════════════════════════
+🔴 CRITICAL: CUSTOM INSTRUCTIONS - HIGHEST PRIORITY
+═══════════════════════════════════════════════════════════
+
+⚠️  IMPORTANT: The information below is CONTEXTUAL GUIDANCE
+⚠️  provided by the agent. USE this information to inform your response.
+⚠️  This context OVERRIDES any conflicting knowledge base information.
+
+CUSTOM INSTRUCTIONS:
+${draft.customInstructions}
+
+═══════════════════════════════════════════════════════════
+END OF CUSTOM INSTRUCTIONS
+═══════════════════════════════════════════════════════════
+`;
+    }
+
+    // Add knowledge base
+    if (knowledgeBaseText) {
+      systemPrompt += `
+
+═══════════════════════════════════════════════════════════
+📚 KNOWLEDGE BASE - READ AND MEMORIZE ALL POLICIES
+═══════════════════════════════════════════════════════════
+
+${knowledgeBaseText}
+
+═══════════════════════════════════════════════════════════
+END OF KNOWLEDGE BASE
+═══════════════════════════════════════════════════════════
+`;
+    }
+
+    // Add available tools section
+    systemPrompt += `
+
+═══════════════════════════════════════════════════════════
+🛠️  AVAILABLE TOOLS
+═══════════════════════════════════════════════════════════
+
+You have access to the following tools to help you gather information:
+
+1. search_customer_and_orders(query)
+   - Search for customer and order information in Shopify
+   - Query can be: email address, customer name, or order number
+   - Returns: customer details and all associated orders
+   - Use this when you need order status, tracking, or customer history
+
+2. get_tracking_info(tracking_number)
+   - Get detailed package tracking information via 17track
+   - Returns: current location, status, and delivery timeline
+   - Use this when customer asks about shipment location or delivery date
+
+═══════════════════════════════════════════════════════════
+⚡ WORKFLOW - EXECUTE IN THIS EXACT ORDER
+═══════════════════════════════════════════════════════════
+
+Step 1: READ THE EMAIL
+- Understand what the customer is asking
+- Extract key information: email addresses, order numbers, tracking numbers
+- Identify the main issue or question
+
+Step 2: GATHER DATA USING TOOLS (if needed)
+- If email mentions order numbers, call search_customer_and_orders
+- If email mentions tracking numbers, call get_tracking_info
+- Collect ALL relevant information before drafting
+
+Step 3: ANALYZE WITH KNOWLEDGE BASE
+- Match the issue to knowledge base categories
+- Apply all relevant policies
+- Calculate dates carefully (e.g., 30 days from delivery for returns)
+
+Step 4: DECIDE: DRAFT or ACTION STEPS
+- shouldDraft = true: Customer needs an email response (99% of cases)
+- shouldDraft = false: Internal action needed (rare)
+
+Step 5: GENERATE RESPONSE
+- For drafts: Write complete, ready-to-send email
+  * ANSWER THE CUSTOMER'S SPECIFIC QUESTION
+  * Be professional, empathetic, and clear
+  * Use customer's name if available
+  * Include specific details (order numbers, dates, etc.)
+  * DO NOT invent or hardcode URLs - only use URLs from knowledge base
+- For action steps: Provide clear numbered steps for the agent
+
+═══════════════════════════════════════════════════════════
+🚨 CRITICAL REQUIREMENTS
+═══════════════════════════════════════════════════════════
+
+✅ USE TOOLS WISELY: Only call tools if you need additional data
+✅ FOLLOW POLICIES: Apply knowledge base rules exactly
+✅ LINK POLICY:
+   ❌ NEVER hardcode or invent URLs
+   ❌ NEVER guess URL patterns
+   ❌ ONLY use URLs provided in knowledge base articles
+   ❌ If URL not in KB, DO NOT include it
+   ✅ If no KB URL exists, use text like "visit our website" or "contact support"
+✅ DATE MATH: Calculate dates carefully (returns: 30 days from DELIVERY, not order)
+✅ PERSONALIZE: Use customer's name if mentioned in email
+✅ BE SPECIFIC: Include exact order numbers, dates (YYYY-MM-DD format)
+✅ JSON ONLY: Final response MUST be PURE JSON - no markdown, no code blocks
+
+═══════════════════════════════════════════════════════════
+📋 OUTPUT FORMAT (JSON)
+═══════════════════════════════════════════════════════════
+
+Your final response must be valid JSON matching this exact structure:
+
+{
+  "internalReasoning": "Step-by-step analysis of email and decision process",
+  "tags": ["array", "of", "relevant", "tags"],
+  "category": "main-category",
+  "reasoning": "High-level summary of the situation for the agent",
+  "shouldDraft": true,
+  "draft": "Complete email draft ready to send...",
+  "actionSteps": null,
+  "orderInfo": {
+    "orderId": "#1234",
+    "orderDate": "2025-10-01",
+    "deliveryDate": "2025-10-10",
+    "isWithinReturnWindow": true
+  }
+}
+
+═══════════════════════════════════════════════════════════
+`;
+
+    // Define tools (same as conversation draft)
+    const tools = [
+      {
+        type: "function" as const,
+        function: {
+          name: "search_customer_and_orders",
+          description: "Search for a Shopify customer and their orders using email, name, or order number. Returns customer details and all associated orders with tracking information.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: {
+                type: "string",
+                description: "Email address, customer name, or order number (e.g., 'john@example.com', 'John Smith', '1001', or '#1001')"
+              }
+            },
+            required: ["query"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "get_tracking_info",
+          description: "Get detailed tracking information for a package using 17track. Provides current location, status, and estimated delivery.",
+          parameters: {
+            type: "object",
+            properties: {
+              tracking_number: {
+                type: "string",
+                description: "The tracking number from the order fulfillment"
+              }
+            },
+            required: ["tracking_number"]
+          }
+        }
+      }
+    ];
+
+    // Prepare messages
+    const messages: any[] = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: "Please analyze this external email and generate an appropriate response draft." }
+    ];
+
+    // AI generation loop (max 5 iterations)
+    const MAX_ITERATIONS = 5;
+    let finalResponse: any = null;
+
+    for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+      console.log(`[StandaloneDraft ${draftId}] AI iteration ${iteration + 1}/${MAX_ITERATIONS}`);
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages,
+        tools,
+        temperature: 0.7,
+        max_tokens: 2000,
+      });
+
+      const assistantMessage = completion.choices[0].message;
+      messages.push(assistantMessage);
+
+      // Check if AI wants to call tools
+      if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+        console.log(`[StandaloneDraft ${draftId}] AI requested ${assistantMessage.tool_calls.length} tool call(s)`);
+        toolCallCount += assistantMessage.tool_calls.length;
+
+        // Execute each tool call
+        for (const toolCall of assistantMessage.tool_calls) {
+          const functionName = toolCall.function.name;
+          const functionArgs = JSON.parse(toolCall.function.arguments);
+          console.log(`[StandaloneDraft ${draftId}] Calling tool: ${functionName}`, functionArgs);
+
+          let toolResult: any;
+
+          if (functionName === "search_customer_and_orders") {
+            try {
+              toolResult = await shopify.searchCustomerAndOrders(functionArgs.query);
+              console.log(`[StandaloneDraft ${draftId}] Shopify search result:`, toolResult.searchType);
+            } catch (error) {
+              toolResult = { error: "Failed to search Shopify", details: String(error) };
+            }
+          } else if (functionName === "get_tracking_info") {
+            try {
+              // Register with 17track
+              const registerResponse = await fetch("https://api.17track.net/track/v2.2/register", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "17token": process.env.SEVENTEENTRACK_API_KEY || "",
+                },
+                body: JSON.stringify([{
+                  number: functionArgs.tracking_number
+                }]),
+              });
+
+              if (!registerResponse.ok) {
+                throw new Error(`17track registration failed: ${registerResponse.statusText}`);
+              }
+
+              // Wait for processing
+              await new Promise(resolve => setTimeout(resolve, 1000));
+
+              // Fetch tracking info
+              const trackResponse = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "17token": process.env.SEVENTEENTRACK_API_KEY || "",
+                },
+                body: JSON.stringify([{
+                  number: functionArgs.tracking_number
+                }]),
+              });
+
+              if (!trackResponse.ok) {
+                throw new Error(`17track fetch failed: ${trackResponse.statusText}`);
+              }
+
+              toolResult = await trackResponse.json();
+            } catch (error) {
+              toolResult = { error: "Failed to fetch tracking", details: String(error) };
+            }
+          }
+
+          // Add tool result to messages
+          messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(toolResult)
+          });
+        }
+
+        // Continue loop to get AI's next response
+        continue;
+      }
+
+      // No tool calls - check if we have final JSON response
+      if (assistantMessage.content) {
+        try {
+          // Try to parse as JSON
+          const content = assistantMessage.content.trim();
+          // Remove markdown code blocks if present
+          const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/);
+          const jsonText = jsonMatch ? jsonMatch[1] : content;
+          finalResponse = JSON.parse(jsonText);
+          console.log(`[StandaloneDraft ${draftId}] Got final JSON response`);
+          break;
+        } catch (e) {
+          console.log(`[StandaloneDraft ${draftId}] Response not JSON, continuing...`);
+        }
+      }
+    }
+
+    // If we still don't have a response, make one final call requesting JSON
+    if (!finalResponse) {
+      console.log(`[StandaloneDraft ${draftId}] Making final JSON-only call`);
+      messages.push({
+        role: "user",
+        content: "Please provide your final response in pure JSON format (no markdown, no code blocks) matching the structure specified."
+      });
+
+      const finalCompletion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages,
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+        max_tokens: 2000,
+      });
+
+      const content = finalCompletion.choices[0].message.content;
+      if (content) {
+        finalResponse = JSON.parse(content);
+      }
+    }
+
+    if (!finalResponse) {
+      throw new Error("Failed to get valid response from AI");
+    }
+
+    // Calculate processing time
+    const processingTime = `${((Date.now() - startTime) / 1000).toFixed(1)}s`;
+
+    // Update draft with results
+    await prisma.standaloneDraft.update({
+      where: { id: draftId },
+      data: {
+        status: "completed",
+        internalReasoning: finalResponse.internalReasoning || null,
+        tags: finalResponse.tags || [],
+        category: finalResponse.category || null,
+        reasoning: finalResponse.reasoning || null,
+        shouldDraft: finalResponse.shouldDraft !== false,
+        draft: finalResponse.draft || null,
+        actionSteps: finalResponse.actionSteps || null,
+        orderInfo: finalResponse.orderInfo || null,
+        processingTime,
+        toolCallsMade: toolCallCount,
+        completedAt: new Date(),
+      },
+    });
+
+    console.log(`[StandaloneDraft ${draftId}] Completed successfully in ${processingTime}`);
+
+  } catch (error) {
+    console.error(`[StandaloneDraft ${draftId}] Processing failed:`, error);
+
+    // Update draft with error
+    await prisma.standaloneDraft.update({
+      where: { id: draftId },
+      data: {
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+        completedAt: new Date(),
+      },
+    });
+  }
+}
+
 const port = process.env.PORT || 3001;
 
 // Start server immediately for fast startup
