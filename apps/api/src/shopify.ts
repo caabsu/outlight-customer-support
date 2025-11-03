@@ -329,10 +329,17 @@ export async function getCustomerOrders(customerId: string, limit: number = 50):
  */
 export async function getOrder(orderId: number): Promise<ShopifyOrder> {
   try {
-    // Explicitly request transactions to ensure they're included in the response
+    // Fetch the complete order without field filtering to ensure transactions are included
+    // The fields parameter can sometimes exclude data even when explicitly requested
     const response = await shopifyRequest<{ order: ShopifyOrder }>(
-      `/orders/${orderId}.json?fields=id,order_number,name,email,created_at,updated_at,financial_status,fulfillment_status,total_price,subtotal_price,total_tax,currency,line_items,customer,shipping_address,billing_address,refunds,transactions`
+      `/orders/${orderId}.json`
     );
+
+    // Log transaction data for debugging
+    if (!response.order.transactions || response.order.transactions.length === 0) {
+      console.warn(`Order ${orderId} has no transactions. This may indicate an API permission issue.`);
+    }
+
     return response.order;
   } catch (error) {
     console.error('Error getting order:', error);
