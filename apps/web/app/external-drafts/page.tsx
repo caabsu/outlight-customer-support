@@ -186,14 +186,14 @@ export default function ExternalDraftsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 text-gray-900" style={{ colorScheme: 'light' }}>
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">External Email Drafts</h1>
-              <p className="mt-1 text-sm text-gray-500">Generate AI drafts for emails from outside your connected inbox</p>
+              <p className="mt-1 text-sm text-gray-600">Generate AI drafts for emails from outside your connected inbox</p>
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -257,7 +257,7 @@ export default function ExternalDraftsPage() {
                     <h3 className="font-semibold text-gray-900 text-sm line-clamp-1">{draft.subject}</h3>
                     {getStatusBadge(draft.status)}
                   </div>
-                  <p className="text-xs text-gray-500 line-clamp-2 mb-2">{draft.emailBody}</p>
+                  <p className="text-xs text-gray-600 line-clamp-2 mb-2">{draft.emailBody}</p>
                   <div className="flex items-center justify-between text-xs text-gray-400">
                     <span>{new Date(draft.createdAt).toLocaleString()}</span>
                     {draft.processingTime && <span className="text-green-600 font-medium">{draft.processingTime}</span>}
@@ -308,7 +308,7 @@ export default function ExternalDraftsPage() {
                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     {/* Original Email */}
                     <div>
-                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Original Email</h3>
+                      <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Original Email</h3>
                       <div className="bg-gray-50 p-3 rounded border border-gray-200 text-sm">
                         <p className="whitespace-pre-wrap text-gray-700">{selectedDraft.emailBody}</p>
                       </div>
@@ -317,7 +317,7 @@ export default function ExternalDraftsPage() {
                     {/* Context Notes */}
                     {selectedDraft.contextNotes && (
                       <div>
-                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Context Notes</h3>
+                        <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Context Notes</h3>
                         <div className="bg-yellow-50 p-3 rounded border border-yellow-200 text-sm">
                           <p className="whitespace-pre-wrap text-gray-700">{selectedDraft.contextNotes}</p>
                         </div>
@@ -350,7 +350,7 @@ export default function ExternalDraftsPage() {
                         {/* Category & Tags */}
                         {(selectedDraft.category || selectedDraft.tags.length > 0) && (
                           <div>
-                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Category & Tags</h3>
+                            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Category & Tags</h3>
                             <div className="flex flex-wrap gap-2">
                               {selectedDraft.category && (
                                 <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
@@ -369,7 +369,7 @@ export default function ExternalDraftsPage() {
                         {/* AI Reasoning */}
                         {selectedDraft.reasoning && (
                           <div>
-                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">AI Reasoning</h3>
+                            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">AI Reasoning</h3>
                             <div className="bg-blue-50 p-3 rounded border border-blue-200 text-sm">
                               <p className="text-gray-700">{selectedDraft.reasoning}</p>
                             </div>
@@ -379,7 +379,7 @@ export default function ExternalDraftsPage() {
                         {/* Internal Reasoning */}
                         {selectedDraft.internalReasoning && (
                           <details className="group">
-                            <summary className="text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer hover:text-gray-700">
+                            <summary className="text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:text-gray-700">
                               Internal Reasoning (Click to expand)
                             </summary>
                             <div className="mt-2 bg-gray-50 p-3 rounded border border-gray-200 text-sm">
@@ -391,7 +391,7 @@ export default function ExternalDraftsPage() {
                         {/* Order Info */}
                         {selectedDraft.orderInfo && (
                           <div>
-                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Order Information</h3>
+                            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Order Information</h3>
                             <div className="bg-green-50 p-3 rounded border border-green-200 text-sm space-y-1">
                               {Object.entries(selectedDraft.orderInfo).map(([key, value]) => (
                                 <div key={key} className="flex justify-between">
@@ -407,7 +407,7 @@ export default function ExternalDraftsPage() {
                         {selectedDraft.draft && (
                           <div>
                             <div className="flex items-center justify-between mb-2">
-                              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Email Draft</h3>
+                              <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Email Draft</h3>
                               <button
                                 onClick={() => copyToClipboard(selectedDraft.draft!)}
                                 className="px-2 py-1 text-xs font-medium bg-gray-600 text-white rounded hover:bg-gray-700"
@@ -424,7 +424,7 @@ export default function ExternalDraftsPage() {
                         {/* Action Steps */}
                         {selectedDraft.actionSteps && (
                           <div>
-                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Action Steps</h3>
+                            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Action Steps</h3>
                             <div className="bg-yellow-50 p-3 rounded border border-yellow-200 text-sm">
                               <ol className="list-decimal list-inside space-y-1">
                                 {(Array.isArray(selectedDraft.actionSteps)
@@ -438,7 +438,7 @@ export default function ExternalDraftsPage() {
                         )}
 
                         {/* Metadata */}
-                        <div className="pt-4 border-t border-gray-200 text-xs text-gray-500 space-y-1">
+                        <div className="pt-4 border-t border-gray-200 text-xs text-gray-600 space-y-1">
                           <div className="flex justify-between">
                             <span>Processing Time:</span>
                             <span className="font-medium text-green-600">{selectedDraft.processingTime}</span>
@@ -488,7 +488,7 @@ export default function ExternalDraftsPage() {
                 <h2 className="text-xl font-bold text-gray-900">Create New Draft</h2>
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-600 hover:text-gray-600"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -529,7 +529,7 @@ export default function ExternalDraftsPage() {
               {/* Context Notes */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Context Notes <span className="text-gray-400 text-xs">(optional)</span>
+                  Context Notes <span className="text-gray-600 text-xs">(optional)</span>
                 </label>
                 <textarea
                   value={contextNotes}
@@ -543,7 +543,7 @@ export default function ExternalDraftsPage() {
               {/* Custom Instructions */}
               <div>
                 <label className="block text-sm font-semibold text-orange-600 mb-1">
-                  🔴 Custom Instructions <span className="text-gray-400 text-xs">(optional, highest priority)</span>
+                  🔴 Custom Instructions <span className="text-gray-600 text-xs">(optional, highest priority)</span>
                 </label>
                 <textarea
                   value={customInstructions}
