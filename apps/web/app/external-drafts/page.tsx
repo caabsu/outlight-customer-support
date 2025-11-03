@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 interface StandaloneDraft {
   id: string;
@@ -188,14 +189,31 @@ export default function ExternalDraftsPage() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900" style={{ colorScheme: 'light' }}>
       {/* Header */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* Navigation Breadcrumb */}
+          <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
+            <Link href="/" className="hover:text-blue-600 transition-colors font-medium">
+              Home
+            </Link>
+            <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            <span className="text-gray-900 font-medium">External Drafts</span>
+          </div>
+
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">External Email Drafts</h1>
               <p className="mt-1 text-sm text-gray-600">Generate AI drafts for emails from outside your connected inbox</p>
             </div>
             <div className="flex items-center gap-3">
+              <Link
+                href="/emails"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors border border-gray-200"
+              >
+                ← Back to Emails
+              </Link>
               <button
                 onClick={() => setAutoRefresh(!autoRefresh)}
                 className={`px-3 py-2 text-sm font-medium rounded-md ${

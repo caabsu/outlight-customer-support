@@ -2,14 +2,14 @@ import Link from "next/link";
 
 export default function Dashboard() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col" style={{ colorScheme: 'light' }}>
       {/* Header */}
-      <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="border-b border-gray-200 bg-white/95 backdrop-blur shadow-sm">
         <div className="container mx-auto px-6 py-6">
-          <h1 className="text-4xl font-serif text-foreground">
+          <h1 className="text-4xl font-serif text-gray-900">
             outlight
           </h1>
-          <p className="text-muted-foreground mt-2 font-sans">Internal Support Tool</p>
+          <p className="text-gray-600 mt-2 font-sans">Internal Support Tool</p>
         </div>
       </header>
 
@@ -17,10 +17,10 @@ export default function Dashboard() {
       <main className="flex-1 container mx-auto px-6 py-12">
         {/* Welcome Section */}
         <div className="max-w-3xl mb-16">
-          <h2 className="text-5xl font-sans font-bold text-foreground mb-6">
-            Welcome to <span className="font-serif">outlight</span>
+          <h2 className="text-5xl font-sans font-bold text-gray-900 mb-6">
+            Welcome to <span className="font-serif text-blue-600">outlight</span>
           </h2>
-          <p className="text-xl font-sans text-muted-foreground leading-relaxed">
+          <p className="text-xl font-sans text-gray-600 leading-relaxed">
             Internal customer support tool for the Outlight lighting brand.
             Manage email conversations, track customer orders, and provide
             exceptional service to our lighting customers, all in one place.
@@ -32,10 +32,10 @@ export default function Dashboard() {
           {/* Emails Card */}
           <Link
             href="/emails"
-            className="group relative overflow-hidden rounded-2xl border border-border bg-secondary p-8 transition-all hover:border-primary hover:shadow-lg hover:shadow-primary/10"
+            className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-8 transition-all hover:border-blue-400 hover:shadow-xl hover:shadow-blue-100"
           >
             <div className="relative z-10">
-              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
@@ -51,14 +51,14 @@ export default function Dashboard() {
                   />
                 </svg>
               </div>
-              <h3 className="text-2xl font-sans font-semibold text-foreground mb-2">
+              <h3 className="text-2xl font-sans font-semibold text-gray-900 mb-2">
                 Emails
               </h3>
-              <p className="text-muted-foreground font-sans mb-4">
+              <p className="text-gray-600 font-sans mb-4">
                 Manage customer conversations, reply to inquiries, and keep
                 track of all support threads.
               </p>
-              <span className="inline-flex items-center text-sm font-medium text-primary group-hover:underline">
+              <span className="inline-flex items-center text-sm font-medium text-blue-600 group-hover:underline">
                 Open Inbox
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -76,16 +76,114 @@ export default function Dashboard() {
                 </svg>
               </span>
             </div>
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+          </Link>
+
+          {/* External Drafts Card */}
+          <Link
+            href="/external-drafts"
+            className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-8 transition-all hover:border-purple-400 hover:shadow-xl hover:shadow-purple-100"
+          >
+            <div className="relative z-10">
+              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="h-6 w-6"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-2xl font-sans font-semibold text-gray-900 mb-2">
+                External Drafts
+              </h3>
+              <p className="text-gray-600 font-sans mb-4">
+                Generate AI-powered drafts for external emails with custom instructions and concurrent processing.
+              </p>
+              <span className="inline-flex items-center text-sm font-medium text-purple-600 group-hover:underline">
+                Create Draft
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="ml-1 h-4 w-4"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
+                  />
+                </svg>
+              </span>
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+          </Link>
+
+          {/* Knowledge Base Card */}
+          <Link
+            href="/knowledge-base"
+            className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-8 transition-all hover:border-green-400 hover:shadow-xl hover:shadow-green-100"
+          >
+            <div className="relative z-10">
+              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-green-50 text-green-600">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="h-6 w-6"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-2xl font-sans font-semibold text-gray-900 mb-2">
+                Knowledge Base
+              </h3>
+              <p className="text-gray-600 font-sans mb-4">
+                Manage support articles, policies, and AI training content for draft generation.
+              </p>
+              <span className="inline-flex items-center text-sm font-medium text-green-600 group-hover:underline">
+                View Articles
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="ml-1 h-4 w-4"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
+                  />
+                </svg>
+              </span>
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-br from-green-50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
           </Link>
 
           {/* Analytics Card */}
           <Link
             href="/analytics"
-            className="group relative overflow-hidden rounded-2xl border border-border bg-secondary p-8 transition-all hover:border-primary hover:shadow-lg hover:shadow-primary/10"
+            className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-8 transition-all hover:border-amber-400 hover:shadow-xl hover:shadow-amber-100"
           >
             <div className="relative z-10">
-              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
@@ -101,14 +199,14 @@ export default function Dashboard() {
                   />
                 </svg>
               </div>
-              <h3 className="text-2xl font-sans font-semibold text-foreground mb-2">
+              <h3 className="text-2xl font-sans font-semibold text-gray-900 mb-2">
                 Analytics
               </h3>
-              <p className="text-muted-foreground font-sans mb-4">
+              <p className="text-gray-600 font-sans mb-4">
                 Track response times, email volume, and customer satisfaction
                 metrics.
               </p>
-              <span className="inline-flex items-center text-sm font-medium text-primary group-hover:underline">
+              <span className="inline-flex items-center text-sm font-medium text-amber-600 group-hover:underline">
                 View Dashboard
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -126,13 +224,13 @@ export default function Dashboard() {
                 </svg>
               </span>
             </div>
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
           </Link>
 
           {/* Settings Card */}
-          <div className="group relative overflow-hidden rounded-2xl border border-border bg-secondary p-8 opacity-60 cursor-not-allowed">
+          <div className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 p-8 opacity-60 cursor-not-allowed">
             <div className="relative z-10">
-              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gray-200 text-gray-400">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
@@ -153,14 +251,14 @@ export default function Dashboard() {
                   />
                 </svg>
               </div>
-              <h3 className="text-2xl font-sans font-semibold text-foreground mb-2">
+              <h3 className="text-2xl font-sans font-semibold text-gray-700 mb-2">
                 Settings
               </h3>
-              <p className="text-muted-foreground font-sans mb-4">
+              <p className="text-gray-500 font-sans mb-4">
                 Configure your account, manage team members, and customize
                 workflows.
               </p>
-              <span className="inline-flex items-center text-sm font-medium text-muted-foreground">
+              <span className="inline-flex items-center text-sm font-medium text-gray-400">
                 Coming Soon
               </span>
             </div>
@@ -169,25 +267,25 @@ export default function Dashboard() {
 
         {/* Quick Stats */}
         <div className="mt-16 max-w-6xl">
-          <h3 className="text-2xl font-sans font-semibold text-foreground mb-6">
+          <h3 className="text-2xl font-sans font-semibold text-gray-900 mb-6">
             Quick Overview
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="rounded-xl border border-border bg-secondary p-6">
-              <div className="text-3xl font-bold text-primary mb-1">—</div>
-              <div className="text-sm text-muted-foreground">
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="text-3xl font-bold text-blue-600 mb-1">—</div>
+              <div className="text-sm text-gray-600">
                 Active Conversations
               </div>
             </div>
-            <div className="rounded-xl border border-border bg-secondary p-6">
-              <div className="text-3xl font-bold text-warning mb-1">—</div>
-              <div className="text-sm text-muted-foreground">
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="text-3xl font-bold text-amber-600 mb-1">—</div>
+              <div className="text-sm text-gray-600">
                 Awaiting Reply
               </div>
             </div>
-            <div className="rounded-xl border border-border bg-secondary p-6">
-              <div className="text-3xl font-bold text-success mb-1">—</div>
-              <div className="text-sm text-muted-foreground">
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="text-3xl font-bold text-green-600 mb-1">—</div>
+              <div className="text-sm text-gray-600">
                 Resolved Today
               </div>
             </div>
@@ -196,9 +294,9 @@ export default function Dashboard() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-border py-8">
-        <div className="container mx-auto px-6 text-center text-sm text-muted-foreground font-sans">
-          <p>&copy; 2025 <span className="font-serif">outlight</span>. Internal tool for our lighting support team.</p>
+      <footer className="border-t border-gray-200 bg-white py-8 mt-auto">
+        <div className="container mx-auto px-6 text-center text-sm text-gray-600 font-sans">
+          <p>&copy; 2025 <span className="font-serif text-blue-600">outlight</span>. Internal tool for our lighting support team.</p>
         </div>
       </footer>
     </div>
