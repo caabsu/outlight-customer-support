@@ -29,8 +29,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`dark ${roboto.variable} ${playfair.variable}`}>
-      <body className="font-sans antialiased">
+    <html lang="en" className={`light ${roboto.variable} ${playfair.variable}`} style={{ colorScheme: 'light' }}>
+      <body className="font-sans antialiased bg-gray-50">
         {children}
       </body>
     </html>
