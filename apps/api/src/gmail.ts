@@ -236,15 +236,24 @@ export async function ingestThread(gmail: any, threadId: string) {
 
   if (conversationMessages.length > 0) {
     const lastMessage = conversationMessages[0];
-    const currentTags = convo.tags || [];
+
+    // CRITICAL FIX: Re-fetch conversation to get current tags (convo object might be stale)
+    const freshConvo = await prisma.conversation.findUnique({
+      where: { id: convo.id },
+      select: { tags: true, archived: true }
+    });
+
+    const currentTags = freshConvo?.tags || [];
 
     // Don't automatically manage "needs-reply" tag if conversation is:
     // - Marked as non-customer-support
     // - Archived (resolved)
+    // - Marked as admin (escalated)
     const isNonSupport = currentTags.includes("non-customer-support");
-    const isArchived = convo.archived;
+    const isArchived = freshConvo?.archived || false;
+    const isAdmin = currentTags.includes("admin");
 
-    if (!isNonSupport && !isArchived) {
+    if (!isNonSupport && !isArchived && !isAdmin) {
       // If last message is inbound, add "needs-reply" tag
       // If last message is outbound, remove "needs-reply" tag
       if (lastMessage.direction === "inbound") {

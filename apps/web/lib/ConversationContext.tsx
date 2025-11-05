@@ -81,6 +81,8 @@ type ConversationContextType = {
   setStatusFilter: (filter: "all" | "needs-reply" | "resolved") => void;
   dateRange: "all" | "today" | "week" | "month";
   setDateRange: (range: "all" | "today" | "week" | "month") => void;
+  adminOnly: boolean;
+  setAdminOnly: (show: boolean) => void;
 };
 
 const ConversationContext = createContext<ConversationContextType | undefined>(
@@ -118,6 +120,7 @@ export function ConversationProvider({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | "needs-reply" | "resolved">("all");
   const [dateRange, setDateRange] = useState<"all" | "today" | "week" | "month">("all");
+  const [adminOnly, setAdminOnly] = useState(false);
 
   const fetchConversations = async (silent = false, retryCount = 0, suppressErrors = false, page = currentPage) => {
     try {
@@ -132,15 +135,19 @@ export function ConversationProvider({
       if (showStarred) params.set('starred', 'true');
       if (excludeNonSupport) params.set('excludeNonSupport', 'true');
       if (showSent) params.set('showSent', 'true');
+      if (adminOnly) params.set('adminOnly', 'true');
 
       // Status filter overrides showNeedsReply
-      if (statusFilter === 'needs-reply') {
-        params.set('needsReply', 'true');
-      } else if (statusFilter === 'resolved') {
-        params.set('resolved', 'true');
-      } else if (showNeedsReply) {
-        // Only apply showNeedsReply if statusFilter is 'all'
-        params.set('needsReply', 'true');
+      // Don't apply needsReply or resolved filters if adminOnly is active
+      if (!adminOnly) {
+        if (statusFilter === 'needs-reply') {
+          params.set('needsReply', 'true');
+        } else if (statusFilter === 'resolved') {
+          params.set('resolved', 'true');
+        } else if (showNeedsReply) {
+          // Only apply showNeedsReply if statusFilter is 'all'
+          params.set('needsReply', 'true');
+        }
       }
 
       if (selectedTags.length > 0) {
@@ -270,7 +277,7 @@ export function ConversationProvider({
   useEffect(() => {
     fetchConversations(true, 0, false, 1); // Silent fetch, reset to page 1
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showArchived, showSent, showStarred, excludeNonSupport, showNeedsReply, selectedTags, statusFilter, dateRange]);
+  }, [showArchived, showSent, showStarred, excludeNonSupport, showNeedsReply, selectedTags, statusFilter, dateRange, adminOnly]);
 
 
   // Try to find selected conversation in list, fallback to pinned conversation
@@ -469,6 +476,8 @@ export function ConversationProvider({
         setStatusFilter,
         dateRange,
         setDateRange,
+        adminOnly,
+        setAdminOnly,
       }}
     >
       {children}

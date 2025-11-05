@@ -58,6 +58,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
       tags,
       dateRange,
       showSent,
+      adminOnly,
       page,
       limit
     } = req.query;
@@ -78,10 +79,22 @@ app.get("/conversations", async (req: Request, res: Response) => {
     // Build NOT conditions array for proper filtering
     const notConditions: any[] = [];
 
-    if (excludeNonSupport === "true") {
+    // Admin-only filter (show ONLY admin tagged conversations)
+    if (adminOnly === "true") {
+      where.tags = {
+        has: "admin"
+      };
+    } else if (excludeNonSupport === "true") {
+      // Default behavior: exclude non-support and admin from view
       notConditions.push({
         tags: {
           has: "non-customer-support"
+        }
+      });
+      // Also exclude "admin" tagged conversations from default view (unless specifically filtered)
+      notConditions.push({
+        tags: {
+          has: "admin"
         }
       });
     }
@@ -91,7 +104,8 @@ app.get("/conversations", async (req: Request, res: Response) => {
     }
 
     // Needs reply filter (has needs-reply tag)
-    if (needsReply === "true") {
+    // Don't apply this if adminOnly is active (admin conversations might not have needs-reply)
+    if (needsReply === "true" && adminOnly !== "true") {
       where.tags = {
         has: "needs-reply"
       };
@@ -503,9 +517,9 @@ app.patch("/conversations/:id/tags", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Tags must be an array" });
     }
 
-    // If "non-customer-support" tag is being added, also remove "needs-reply" tag
+    // If "non-customer-support" or "admin" tag is being added, also remove "needs-reply" tag
     let finalTags = tags;
-    if (tags.includes("non-customer-support")) {
+    if (tags.includes("non-customer-support") || tags.includes("admin")) {
       finalTags = tags.filter(tag => tag !== "needs-reply");
     }
 

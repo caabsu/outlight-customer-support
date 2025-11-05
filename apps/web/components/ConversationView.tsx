@@ -564,6 +564,33 @@ export default function ConversationView() {
     }
   };
 
+  const handleEscalateToAdmin = async () => {
+    if (!selectedConversation) return;
+
+    const currentTags = selectedConversation.tags || [];
+    // Add admin tag and remove needs-reply tag
+    const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "admin"];
+
+    try {
+      // Update tags on backend FIRST
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: updatedTags }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to escalate to admin');
+      }
+
+      // Then refresh to get updated filtered list from server
+      await refreshConversations();
+    } catch (error) {
+      console.error("Failed to escalate to admin:", error);
+      alert('Failed to escalate to admin. Please try again.');
+    }
+  };
+
   const goToNextUnreplied = async () => {
     if (navigatingUnreplied) return; // Prevent multiple clicks
 
@@ -1832,6 +1859,38 @@ export default function ConversationView() {
                       <button
                         onClick={async () => {
                           try {
+                            const currentTags = conv.tags || [];
+                            // Add admin tag and remove needs-reply tag
+                            const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "admin"];
+
+                            const updateResponse = await fetch(`/api/conversations/${conv.id}/tags`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ tags: updatedTags }),
+                            });
+
+                            if (!updateResponse.ok) {
+                              throw new Error('Failed to escalate to admin');
+                            }
+
+                            setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== conv.id));
+                            await refreshConversations();
+                          } catch (error) {
+                            console.error('Failed to escalate to admin:', error);
+                            alert('Failed to escalate conversation to admin. Please try again.');
+                          }
+                        }}
+                        className="px-2 py-1.5 text-[10px] font-sans font-medium text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 rounded transition-colors flex items-center justify-center gap-1"
+                        title="Escalate to Admin"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19.5v-15m0 0l-6.75 6.75M12 4.5l6.75 6.75" />
+                        </svg>
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          try {
                             const updateResponse = await fetch(`/api/conversations/${conv.id}`, {
                               method: 'PATCH',
                               headers: { 'Content-Type': 'application/json' },
@@ -1942,6 +2001,21 @@ export default function ConversationView() {
               <span>Oldest Unreplied</span>
             </div>
           </button>
+
+          {/* Escalate to Admin Button */}
+          {!selectedConversation.tags?.includes("admin") && (
+            <button
+              onClick={handleEscalateToAdmin}
+              className="w-full px-3 py-2.5 bg-white border-2 border-purple-300 hover:bg-purple-50 text-purple-700 rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 19.5v-15m0 0l-6.75 6.75M12 4.5l6.75 6.75" />
+                </svg>
+                <span>Escalate to Admin</span>
+              </div>
+            </button>
+          )}
 
           {/* Mark as Non-Support Button */}
           {!selectedConversation.tags?.includes("non-customer-support") && (
@@ -2659,6 +2733,42 @@ export default function ConversationView() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
                       <span>Open</span>
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        try {
+                          // Add admin tag and remove needs-reply tag
+                          const currentTags = conv.tags || [];
+                          const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "admin"];
+
+                          const updateResponse = await fetch(`/api/conversations/${conv.id}/tags`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ tags: updatedTags }),
+                          });
+
+                          if (!updateResponse.ok) {
+                            throw new Error('Failed to escalate to admin');
+                          }
+
+                          // Remove from history list immediately for instant feedback
+                          setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== conv.id));
+
+                          // Refresh conversations list in the background
+                          await refreshConversations();
+                        } catch (error) {
+                          console.error('Failed to escalate to admin:', error);
+                          alert('Failed to escalate conversation to admin. Please try again.');
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 text-xs font-sans font-medium text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 rounded transition-colors flex items-center justify-center gap-1.5"
+                      title="Escalate to Admin"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19.5v-15m0 0l-6.75 6.75M12 4.5l6.75 6.75" />
+                      </svg>
+                      <span>Admin</span>
                     </button>
 
                     <button
@@ -4262,6 +4372,38 @@ export default function ConversationView() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
                 Open in Main View
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const currentTags = fullViewConversation.tags || [];
+                    // Add admin tag and remove needs-reply tag
+                    const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "admin"];
+
+                    const updateResponse = await fetch(`/api/conversations/${fullViewConversation.id}/tags`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ tags: updatedTags }),
+                    });
+
+                    if (!updateResponse.ok) {
+                      throw new Error('Failed to escalate to admin');
+                    }
+
+                    setHistory(prevHistory => prevHistory.filter((c: ConversationHistory) => c.id !== fullViewConversation.id));
+                    await refreshConversations();
+                    setFullViewConversation(null);
+                  } catch (error) {
+                    console.error('Failed to escalate to admin:', error);
+                    alert('Failed to escalate conversation to admin. Please try again.');
+                  }
+                }}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-sans text-sm font-medium flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19.5v-15m0 0l-6.75 6.75M12 4.5l6.75 6.75" />
+                </svg>
+                Escalate to Admin
               </button>
               <button
                 onClick={async () => {
