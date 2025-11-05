@@ -523,10 +523,14 @@ app.patch("/conversations/:id/tags", async (req: Request, res: Response) => {
       finalTags = tags.filter(tag => tag !== "needs-reply");
     }
 
+    console.log(`[TAGS UPDATE] Conversation ${req.params.id}: ${JSON.stringify(tags)} -> ${JSON.stringify(finalTags)}`);
+
     const updated = await prisma.conversation.update({
       where: { id: req.params.id },
       data: { tags: finalTags },
     });
+
+    console.log(`[TAGS UPDATE] Success. Final tags in DB: ${JSON.stringify(updated.tags)}`);
 
     res.json(updated);
   } catch (error) {

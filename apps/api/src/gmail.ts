@@ -253,11 +253,14 @@ export async function ingestThread(gmail: any, threadId: string) {
     const isArchived = freshConvo?.archived || false;
     const isAdmin = currentTags.includes("admin");
 
+    console.log(`[INGEST] Conversation ${convo.id}: tags=${JSON.stringify(currentTags)}, nonSupport=${isNonSupport}, archived=${isArchived}, admin=${isAdmin}, lastMsg=${lastMessage.direction}`);
+
     if (!isNonSupport && !isArchived && !isAdmin) {
       // If last message is inbound, add "needs-reply" tag
       // If last message is outbound, remove "needs-reply" tag
       if (lastMessage.direction === "inbound") {
         if (!currentTags.includes("needs-reply")) {
+          console.log(`[INGEST] Adding needs-reply tag to conversation ${convo.id}`);
           await prisma.conversation.update({
             where: { id: convo.id },
             data: { tags: [...currentTags, "needs-reply"] }
@@ -266,12 +269,15 @@ export async function ingestThread(gmail: any, threadId: string) {
       } else {
         // Remove needs-reply tag if present
         if (currentTags.includes("needs-reply")) {
+          console.log(`[INGEST] Removing needs-reply tag from conversation ${convo.id}`);
           await prisma.conversation.update({
             where: { id: convo.id },
             data: { tags: currentTags.filter(tag => tag !== "needs-reply") }
           });
         }
       }
+    } else {
+      console.log(`[INGEST] Skipping auto-tag for conversation ${convo.id} (has special tag or archived)`);
     }
   }
 }
