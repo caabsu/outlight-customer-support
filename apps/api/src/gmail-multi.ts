@@ -14,11 +14,13 @@ function getOAuth2Client(workspace: { googleClientId: string; googleClientSecret
 
 // Start OAuth for specific workspace
 export async function googleAuthStart(req: Request, res: Response) {
-  const workspaceId = req.query.workspace as string;
+  const workspaceId = req.params.workspaceId as string;
 
   if (!workspaceId) {
     return res.status(400).send("Missing workspace ID");
   }
+
+  console.log('[OAuth] Starting OAuth for workspace:', workspaceId);
 
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId }
@@ -132,14 +134,18 @@ export async function getAuthedClient(workspaceId: string) {
 
 // Poll emails for specific workspace
 export async function pollOnce(req: Request, res: Response) {
-  const workspaceId = req.body.workspaceId || req.query.workspaceId as string;
+  const workspaceId = req.body.workspaceId || req.params.workspaceId as string;
 
   if (!workspaceId) {
+    console.error('[Poll] Missing workspaceId in request');
     return res.status(400).json({ error: "Missing workspaceId" });
   }
 
+  console.log('[Poll] Polling emails for workspace:', workspaceId);
+
   try {
     const { gmail, workspace } = await getAuthedClient(workspaceId);
+    console.log('[Poll] Got authenticated client for workspace:', workspace.name);
 
     let newCount = 0;
     let existingCount = 0;

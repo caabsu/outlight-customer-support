@@ -51,20 +51,25 @@ app.get("/workspaces", async (req: Request, res: Response) => {
         id: true,
         name: true,
         gmailAccountEmail: true,
-        createdAt: true,
-        oauthTokens: {
-          select: {
-            id: true,
-            expiry: true
-          }
-        }
+        createdAt: true
       }
     });
 
-    res.json(workspaces.map(w => ({
-      ...w,
-      isAuthorized: !!w.oauthTokens
-    })));
+    // Check OAuth tokens for each workspace separately
+    const workspacesWithAuth = await Promise.all(
+      workspaces.map(async (w) => {
+        const token = await prisma.oAuthToken.findUnique({
+          where: { workspaceId: w.id }
+        });
+        return {
+          ...w,
+          isAuthorized: !!token
+        };
+      })
+    );
+
+    console.log('[Workspaces] Returning workspaces:', workspacesWithAuth);
+    res.json(workspacesWithAuth);
   } catch (error) {
     console.error("Error fetching workspaces:", error);
     res.status(500).json({ error: "Failed to fetch workspaces" });
