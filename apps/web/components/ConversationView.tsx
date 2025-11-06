@@ -532,24 +532,23 @@ export default function ConversationView() {
       // Apply optimistic update FIRST to immediately remove from view
       updateConversationOptimistic(selectedConversation.id, { tags: updatedTags });
 
-      // Then update backend
-      const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
+      // Then update backend (no await - let it happen in background)
+      fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: updatedTags }),
+      }).catch(error => {
+        console.error("Failed to mark as non-support:", error);
+        alert('Failed to mark as non-support. Please try again.');
+        // Rollback optimistic update on error
+        refreshConversations();
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to update tags');
-      }
-
-      // Finally refresh to ensure consistency with server
-      await refreshConversations();
+      // Don't call refreshConversations() - it causes the conversation to reappear
+      // The optimistic update already removed it, and next auto-refresh will sync
     } catch (error) {
       console.error("Failed to mark as non-support:", error);
       alert('Failed to mark as non-support. Please try again.');
-      // Rollback optimistic update on error
-      await refreshConversations();
     }
   };
 
@@ -560,24 +559,22 @@ export default function ConversationView() {
       // Apply optimistic update FIRST to immediately remove from view
       updateConversationOptimistic(selectedConversation.id, { archived: true });
 
-      // Then update backend
-      const response = await fetch(`/api/conversations/${selectedConversation.id}`, {
+      // Then update backend (no await - let it happen in background)
+      fetch(`/api/conversations/${selectedConversation.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ archived: true }),
+      }).catch(error => {
+        console.error("Failed to mark as resolved:", error);
+        alert('Failed to mark as resolved. Please try again.');
+        // Rollback optimistic update on error
+        refreshConversations();
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to mark as resolved');
-      }
-
-      // Finally refresh to ensure consistency with server
-      await refreshConversations();
+      // Don't call refreshConversations() - it causes the conversation to reappear
     } catch (error) {
       console.error("Failed to mark as resolved:", error);
       alert('Failed to mark as resolved. Please try again.');
-      // Rollback optimistic update on error
-      await refreshConversations();
     }
   };
 
@@ -592,24 +589,22 @@ export default function ConversationView() {
       // Apply optimistic update FIRST to immediately remove from view (if not in admin-only filter)
       updateConversationOptimistic(selectedConversation.id, { tags: updatedTags });
 
-      // Then update backend
-      const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
+      // Then update backend (no await - let it happen in background)
+      fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: updatedTags }),
+      }).catch(error => {
+        console.error("Failed to escalate to admin:", error);
+        alert('Failed to escalate to admin. Please try again.');
+        // Rollback optimistic update on error
+        refreshConversations();
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to escalate to admin');
-      }
-
-      // Finally refresh to ensure consistency with server
-      await refreshConversations();
+      // Don't call refreshConversations() - it causes the conversation to reappear
     } catch (error) {
       console.error("Failed to escalate to admin:", error);
       alert('Failed to escalate to admin. Please try again.');
-      // Rollback optimistic update on error
-      await refreshConversations();
     }
   };
 

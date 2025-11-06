@@ -121,6 +121,8 @@ export interface ShopifyOrder {
   hasChargeback?: boolean;
   totalRefunded?: string;
   isFullyRefunded?: boolean;
+  refundCount?: number;
+  lineItemEditCount?: number;
 }
 
 export interface ShopifyLineItem {
@@ -330,9 +332,18 @@ export async function getCustomerOrders(customerId: string, limit: number = 50):
           const transactions = orderDetailsResponse.order.transactions || [];
           const hasChargeback = transactions.some(t => t.kind === 'chargeback' || t.kind === 'chargeback_pending');
 
-          // Calculate total refunded amount
-          const refunds = refundsResponse.refunds || [];
-          const totalRefunded = refunds.reduce((sum, refund) => {
+          // Filter refunds to ONLY include actual refunds with financial transactions
+          // Shopify creates "refund" objects for manual line item edits with NO transactions
+          // We need to exclude these fake refunds to avoid confusing the AI
+          const allRefunds = refundsResponse.refunds || [];
+          const actualRefunds = allRefunds.filter(refund => {
+            // Only include refunds that have actual refund transactions (money returned)
+            const hasRefundTransaction = refund.transactions?.some(t => t.kind === 'refund');
+            return hasRefundTransaction;
+          });
+
+          // Calculate total refunded amount from actual refunds only
+          const totalRefunded = actualRefunds.reduce((sum, refund) => {
             const refundAmount = refund.transactions
               .filter(t => t.kind === 'refund')
               .reduce((refundSum, t) => refundSum + parseFloat(t.amount), 0);
@@ -342,14 +353,17 @@ export async function getCustomerOrders(customerId: string, limit: number = 50):
           return {
             ...order,
             fulfillments: fulfillmentsResponse.fulfillments || [],
-            refunds: refunds,
+            refunds: actualRefunds,  // Only include actual refunds, not line item edits
             transactions: transactions,
             // Add calculated fields for easier AI understanding
             cancelled_at: orderDetailsResponse.order.cancelled_at,
             cancel_reason: orderDetailsResponse.order.cancel_reason,
             hasChargeback: hasChargeback,
             totalRefunded: totalRefunded.toFixed(2),
-            isFullyRefunded: totalRefunded >= parseFloat(order.total_price)
+            isFullyRefunded: totalRefunded >= parseFloat(order.total_price),
+            // Add count for debugging
+            refundCount: actualRefunds.length,
+            lineItemEditCount: allRefunds.length - actualRefunds.length
           };
         } catch (err) {
           // If additional data fetch fails, return order with basic info
