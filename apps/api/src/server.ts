@@ -612,24 +612,33 @@ app.patch("/conversations/:id/tags", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Tags must be an array" });
     }
 
-    // If "non-customer-support" or "admin" tag is being added, also remove "needs-reply" tag
+    // Get current conversation state for logging
+    const current = await prisma.conversation.findUnique({
+      where: { id: req.params.id },
+      select: { tags: true, subject: true, gmailThreadId: true }
+    });
+
+    console.log(`[TAGS UPDATE] 📝 Conversation ${req.params.id} | Subject: "${current?.subject}" | Thread: ${current?.gmailThreadId?.substring(0, 8)}...`);
+    console.log(`[TAGS UPDATE] 🏷️  Current tags: ${JSON.stringify(current?.tags || [])}`);
+    console.log(`[TAGS UPDATE] 🎯 Requested tags: ${JSON.stringify(tags)}`);
+
+    // CRITICAL: If "non-customer-support" or "admin" tag is being added, also remove "needs-reply" tag
     let finalTags = tags;
     if (tags.includes("non-customer-support") || tags.includes("admin")) {
       finalTags = tags.filter(tag => tag !== "needs-reply");
+      console.log(`[TAGS UPDATE] 🚫 Removed needs-reply (special tag added): ${JSON.stringify(finalTags)}`);
     }
-
-    console.log(`[TAGS UPDATE] Conversation ${req.params.id}: ${JSON.stringify(tags)} -> ${JSON.stringify(finalTags)}`);
 
     const updated = await prisma.conversation.update({
       where: { id: req.params.id },
       data: { tags: finalTags },
     });
 
-    console.log(`[TAGS UPDATE] Success. Final tags in DB: ${JSON.stringify(updated.tags)}`);
+    console.log(`[TAGS UPDATE] ✅ Saved to DB: ${JSON.stringify(updated.tags)}`);
 
     res.json(updated);
   } catch (error) {
-    console.error("Error updating tags:", error);
+    console.error("[TAGS UPDATE] ❌ Error:", error);
     res.status(500).json({ error: "Failed to update tags" });
   }
 });

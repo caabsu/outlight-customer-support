@@ -326,38 +326,54 @@ async function ingestThread(gmail: any, workspace: any, threadId: string) {
   if (conversationMessages.length > 0) {
     const lastMessage = conversationMessages[0];
 
+    // CRITICAL: Always fetch fresh conversation data to avoid race conditions
+    // This ensures we have the absolute latest tags before making auto-tag decisions
     const freshConvo = await prisma.conversation.findUnique({
       where: { id: convo.id },
-      select: { tags: true, archived: true }
+      select: { tags: true, archived: true, gmailThreadId: true, subject: true }
     });
 
-    const currentTags = freshConvo?.tags || [];
+    if (!freshConvo) {
+      console.error(`[INGEST] Conversation ${convo.id} not found during auto-tag check`);
+      return;
+    }
+
+    const currentTags = freshConvo.tags || [];
     const isNonSupport = currentTags.includes("non-customer-support");
-    const isArchived = freshConvo?.archived || false;
+    const isArchived = freshConvo.archived || false;
     const isAdmin = currentTags.includes("admin");
+    const hasNeedsReply = currentTags.includes("needs-reply");
 
-    console.log(`[INGEST] Workspace ${workspace.name}, Conversation ${convo.id}: tags=${JSON.stringify(currentTags)}, nonSupport=${isNonSupport}, archived=${isArchived}, admin=${isAdmin}, lastMsg=${lastMessage.direction}`);
+    console.log(`[INGEST] ${workspace.name} | ${freshConvo.subject} | Thread: ${freshConvo.gmailThreadId.substring(0, 8)}... | Tags: ${JSON.stringify(currentTags)} | LastMsg: ${lastMessage.direction} | NonSupport: ${isNonSupport} | Archived: ${isArchived} | Admin: ${isAdmin}`);
 
-    if (!isNonSupport && !isArchived && !isAdmin) {
-      if (lastMessage.direction === "inbound") {
-        if (!currentTags.includes("needs-reply")) {
-          console.log(`[INGEST] Adding needs-reply tag to conversation ${convo.id}`);
-          await prisma.conversation.update({
-            where: { id: convo.id },
-            data: { tags: [...currentTags, "needs-reply"] }
-          });
-        }
+    // RULE: Never auto-tag if conversation has special tags or is archived
+    if (isNonSupport || isArchived || isAdmin) {
+      console.log(`[INGEST] ⏭️  Skipping auto-tag (special status)`);
+      return;
+    }
+
+    // RULE: Add "needs-reply" if last message is inbound
+    if (lastMessage.direction === "inbound") {
+      if (!hasNeedsReply) {
+        console.log(`[INGEST] ➕ Adding needs-reply tag`);
+        await prisma.conversation.update({
+          where: { id: convo.id },
+          data: { tags: [...currentTags, "needs-reply"] }
+        });
       } else {
-        if (currentTags.includes("needs-reply")) {
-          console.log(`[INGEST] Removing needs-reply tag from conversation ${convo.id}`);
-          await prisma.conversation.update({
-            where: { id: convo.id },
-            data: { tags: currentTags.filter(tag => tag !== "needs-reply") }
-          });
-        }
+        console.log(`[INGEST] ✓ Already has needs-reply tag`);
       }
     } else {
-      console.log(`[INGEST] Skipping auto-tag for conversation ${convo.id} (has special tag or archived)`);
+      // RULE: Remove "needs-reply" if last message is outbound
+      if (hasNeedsReply) {
+        console.log(`[INGEST] ➖ Removing needs-reply tag (replied)`);
+        await prisma.conversation.update({
+          where: { id: convo.id },
+          data: { tags: currentTags.filter(tag => tag !== "needs-reply") }
+        });
+      } else {
+        console.log(`[INGEST] ✓ No needs-reply tag to remove`);
+      }
     }
   }
 }
