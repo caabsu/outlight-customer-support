@@ -312,7 +312,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
       }
 
       // If not showing archived, REMOVE archived conversations
-      if (showArchived !== "true" && conv.archived) {
+      if (archived !== "true" && conv.archived) {
         console.log(`[Filter Safety] BLOCKING archived conversation: ${conv.id} "${conv.subject}"`);
         return false;
       }
@@ -327,7 +327,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
     const paginatedConversations = conversations.slice(skip, skip + limitNum);
 
     // Log final result for debugging
-    console.log(`[GET /conversations] Workspace: ${workspaceId} | Filters: excludeNonSupport=${excludeNonSupport}, adminOnly=${adminOnly}, archived=${showArchived} | Total after filters: ${totalCount} | Page ${pageNum}/${Math.ceil(totalCount / limitNum)}`);
+    console.log(`[GET /conversations] Workspace: ${workspaceId} | Filters: excludeNonSupport=${excludeNonSupport}, adminOnly=${adminOnly}, archived=${archived} | Total after filters: ${totalCount} | Page ${pageNum}/${Math.ceil(totalCount / limitNum)}`);
 
     res.json({
       conversations: paginatedConversations,
