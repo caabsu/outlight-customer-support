@@ -11,9 +11,11 @@ import * as gmailMulti from "./gmail-multi";
 import { prisma } from "./db";
 import * as shopify from "./shopify";
 
-// Initialize OpenAI
+// Initialize OpenAI with timeout configuration
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+  timeout: 240000, // 4 minutes max per API call (to fit within Railway's 5min limit)
+  maxRetries: 0, // Don't retry on timeout - fail fast
 });
 
 const app = express();
@@ -1964,6 +1966,8 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
   req.setTimeout(300000); // 5 minutes
   res.setTimeout(300000);
 
+  const startTime = Date.now();
+
   try {
     const conversationId = req.params.id;
     const forceRegenerate = req.body?.forceRegenerate === true;
@@ -2337,7 +2341,10 @@ Remember:
         completionParams.response_format = { type: "json_object" };
       }
 
+      const apiCallStart = Date.now();
+      console.log(`[Draft] Making OpenAI API call (attempt ${toolCallCount + 1}, elapsed: ${((Date.now() - startTime) / 1000).toFixed(1)}s)`);
       const completion = await openai.chat.completions.create(completionParams);
+      console.log(`[Draft] API call completed in ${((Date.now() - apiCallStart) / 1000).toFixed(1)}s`);
       const assistantMessage = completion.choices[0].message;
       messages.push(assistantMessage);
 
@@ -2425,17 +2432,19 @@ Remember:
 
     // If we hit max iterations without getting a final result, make one more call with JSON mode
     if (!finalResult && toolCallCount >= MAX_TOOL_CALLS) {
-      console.log(`[Draft] Max tool calls reached, requesting final JSON response`);
+      console.log(`[Draft] Max tool calls reached (elapsed: ${((Date.now() - startTime) / 1000).toFixed(1)}s), requesting final JSON response`);
       messages.push({
         role: "user",
         content: "Please provide the final response in the required JSON format."
       });
 
+      const finalApiCallStart = Date.now();
       const finalCompletion = await openai.chat.completions.create({
         model: "gpt-5-mini-2025-08-07", // Faster, more cost-efficient version of GPT-5
         messages,
         response_format: { type: "json_object" }
       });
+      console.log(`[Draft] Final API call completed in ${((Date.now() - finalApiCallStart) / 1000).toFixed(1)}s`);
 
       try {
         finalResult = JSON.parse(finalCompletion.choices[0].message.content || "{}");
@@ -2489,6 +2498,9 @@ Remember:
       // Don't fail the request if draft save fails
     }
 
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[Draft] ✅ Draft generation completed in ${totalTime}s (${toolCallCount} tool calls)`);
+
     res.json({
       ...finalResult,
       conversationId,
@@ -2498,7 +2510,8 @@ Remember:
       usedCustomContext: !!(additionalContext && additionalContext.trim())
     });
   } catch (error) {
-    console.error("Error generating draft:", error);
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.error(`[Draft] ❌ Error generating draft after ${totalTime}s:`, error);
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to generate draft"
     });

@@ -957,22 +957,47 @@ export default function ConversationView() {
 
       console.log(`[Draft] Fetching from: ${apiUrl}`);
 
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          additionalContext: contextToUse || undefined
-        }),
-      });
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes
 
-      console.log(`[Draft] Response status: ${response.status} ${response.statusText}`);
+      try {
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            additionalContext: contextToUse || undefined
+          }),
+          signal: controller.signal,
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Draft] API error: ${response.status} - ${errorText}`);
-        throw new Error(`Failed to generate draft: ${response.status} ${errorText}`);
+        clearTimeout(timeoutId);
+
+        console.log(`[Draft] Response status: ${response.status} ${response.statusText}`);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[Draft] API error: ${response.status} - ${errorText}`);
+
+          // Better error messages for specific status codes
+          if (response.status === 502) {
+            throw new Error(`Server timeout - draft generation took too long. Please try again with a shorter email thread or simpler request.`);
+          } else if (response.status === 504) {
+            throw new Error(`Gateway timeout - please try again in a moment.`);
+          } else {
+            throw new Error(`Failed to generate draft: ${response.status} ${errorText}`);
+          }
+        }
+
+        return response;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error('Request timeout - draft generation took too long. Please try again.');
+        }
+        throw error;
       }
 
       const data = await response.json();
