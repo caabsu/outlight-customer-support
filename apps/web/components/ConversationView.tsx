@@ -125,7 +125,9 @@ export default function ConversationView() {
     selectedTags,
     statusFilter,
     dateRange,
-    showSent
+    showSent,
+    // Workspace
+    currentWorkspaceId
   } = useConversations();
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
@@ -625,7 +627,13 @@ export default function ConversationView() {
       // STEP 2: No next unreplied on current page - search other pages (API call)
       setNavigatingUnreplied(true);
 
-      const response = await fetch(`/api/conversations/next-unreplied/${selectedConversation?.id || ''}`);
+      if (!currentWorkspaceId) {
+        console.error("No workspace selected");
+        setNavigatingUnreplied(false);
+        return;
+      }
+
+      const response = await fetch(`/api/conversations/next-unreplied/${selectedConversation?.id || ''}?workspaceId=${currentWorkspaceId}`);
 
       if (!response.ok) {
         console.error("Failed to fetch next unreplied");
@@ -732,8 +740,14 @@ export default function ConversationView() {
     if (navigatingUnreplied) return; // Prevent multiple clicks
 
     try {
+      if (!currentWorkspaceId) {
+        console.error("No workspace selected");
+        alert("Please select a workspace first");
+        return;
+      }
+
       // Get globally oldest unreplied from API
-      const response = await fetch(`/api/conversations/next-unreplied`);
+      const response = await fetch(`/api/conversations/next-unreplied?workspaceId=${currentWorkspaceId}`);
 
       if (!response.ok) {
         console.error("Failed to fetch oldest unreplied:", response.status, response.statusText);

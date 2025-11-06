@@ -299,9 +299,15 @@ app.get("/conversations", async (req: Request, res: Response) => {
 
 // IMPORTANT: Specific routes must come BEFORE parameterized routes in Express
 // Get oldest unreplied conversation (no ID parameter)
-app.get("/conversations/next-unreplied", async (_req: Request, res: Response) => {
+app.get("/conversations/next-unreplied", async (req: Request, res: Response) => {
   try {
-    const unreplied = await getUnrepliedConversations();
+    const { workspaceId } = req.query;
+
+    if (!workspaceId) {
+      return res.status(400).json({ error: "workspaceId is required" });
+    }
+
+    const unreplied = await getUnrepliedConversations(workspaceId as string);
     res.json(unreplied[0] || null);
   } catch (error) {
     console.error("Error fetching next unreplied:", error);
@@ -313,7 +319,13 @@ app.get("/conversations/next-unreplied", async (_req: Request, res: Response) =>
 app.get("/conversations/next-unreplied/:currentId", async (req: Request, res: Response) => {
   try {
     const { currentId } = req.params;
-    const unreplied = await getUnrepliedConversations();
+    const { workspaceId } = req.query;
+
+    if (!workspaceId) {
+      return res.status(400).json({ error: "workspaceId is required" });
+    }
+
+    const unreplied = await getUnrepliedConversations(workspaceId as string);
 
     // Find the next one after current
     const currentIndex = unreplied.findIndex(c => c.id === currentId);
@@ -454,14 +466,21 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
 });
 
 // Helper function to get unreplied conversations
-async function getUnrepliedConversations() {
+async function getUnrepliedConversations(workspaceId?: string) {
+  const whereClause: any = {
+    archived: false,
+    NOT: {
+      tags: { has: "non-customer-support" }
+    }
+  };
+
+  // Add workspace filter if provided
+  if (workspaceId) {
+    whereClause.workspaceId = workspaceId;
+  }
+
   const conversations = await prisma.conversation.findMany({
-    where: {
-      archived: false,
-      NOT: {
-        tags: { has: "non-customer-support" }
-      }
-    },
+    where: whereClause,
     include: {
       messages: {
         orderBy: { sentAt: "desc" },
