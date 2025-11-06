@@ -923,12 +923,17 @@ export default function ConversationView() {
 
   // Generate AI draft
   const generateDraft = async (customContext?: string) => {
-    if (!selectedConversation) return;
+    if (!selectedConversation) {
+      console.error("[Draft] No conversation selected");
+      return;
+    }
 
     const conversationId = selectedConversation.id;
     // Capture the custom context for this specific conversation at call time
     const thisConversationContext = customContextByConversationId[conversationId] || "";
     const contextToUse = customContext !== undefined ? customContext : thisConversationContext;
+
+    console.log(`[Draft] Starting generation for conversation ${conversationId}, hasCustomContext: ${!!contextToUse}`);
 
     // Set loading state for this specific conversation
     setLoadingDraftByConversationId(prev => ({
@@ -936,7 +941,6 @@ export default function ConversationView() {
       [conversationId]: true
     }));
     setDraftError(null);
-    // Don't auto-open popup - let user click to view when ready
 
     // Clear current conversation's draft while loading
     setDraftsByConversationId(prev => ({
@@ -951,6 +955,8 @@ export default function ConversationView() {
         ? `http://localhost:3001/conversations/${conversationId}/draft`
         : `/api/conversations/${conversationId}/draft`;
 
+      console.log(`[Draft] Fetching from: ${apiUrl}`);
+
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
@@ -961,17 +967,27 @@ export default function ConversationView() {
         }),
       });
 
+      console.log(`[Draft] Response status: ${response.status} ${response.statusText}`);
+
       if (!response.ok) {
-        throw new Error("Failed to generate draft");
+        const errorText = await response.text();
+        console.error(`[Draft] API error: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to generate draft: ${response.status} ${errorText}`);
       }
 
       const data = await response.json();
+      console.log(`[Draft] Received draft data:`, data);
 
       // Store draft by conversation ID
       setDraftsByConversationId(prev => ({
         ...prev,
         [conversationId]: data
       }));
+
+      // Auto-open the draft popup when generation completes successfully
+      console.log(`[Draft] Opening draft popup`);
+      setShowDraftPopup(true);
+      setDraftMinimized(false);
 
       // Update conversation tags optimistically if draft added new tags
       if (data.tags && data.tags.length > 0) {
@@ -982,14 +998,19 @@ export default function ConversationView() {
         });
       }
     } catch (error) {
-      console.error("Error generating draft:", error);
-      setDraftError(error instanceof Error ? error.message : "Failed to generate draft");
+      console.error("[Draft] Error generating draft:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate draft";
+      setDraftError(errorMessage);
+      // Show error in popup so user can see what went wrong
+      setShowDraftPopup(true);
+      setDraftMinimized(false);
     } finally {
       // Clear loading state for this specific conversation
       setLoadingDraftByConversationId(prev => ({
         ...prev,
         [conversationId]: false
       }));
+      console.log(`[Draft] Generation complete for conversation ${conversationId}`);
     }
   };
 
