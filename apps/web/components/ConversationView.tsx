@@ -529,7 +529,10 @@ export default function ConversationView() {
     const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "non-customer-support"];
 
     try {
-      // Update tags on backend FIRST
+      // Apply optimistic update FIRST to immediately remove from view
+      updateConversationOptimistic(selectedConversation.id, { tags: updatedTags });
+
+      // Then update backend
       const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -540,11 +543,13 @@ export default function ConversationView() {
         throw new Error('Failed to update tags');
       }
 
-      // Then refresh to get updated filtered list from server
+      // Finally refresh to ensure consistency with server
       await refreshConversations();
     } catch (error) {
       console.error("Failed to mark as non-support:", error);
       alert('Failed to mark as non-support. Please try again.');
+      // Rollback optimistic update on error
+      await refreshConversations();
     }
   };
 
@@ -552,7 +557,10 @@ export default function ConversationView() {
     if (!selectedConversation) return;
 
     try {
-      // Update backend FIRST
+      // Apply optimistic update FIRST to immediately remove from view
+      updateConversationOptimistic(selectedConversation.id, { archived: true });
+
+      // Then update backend
       const response = await fetch(`/api/conversations/${selectedConversation.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -563,11 +571,13 @@ export default function ConversationView() {
         throw new Error('Failed to mark as resolved');
       }
 
-      // Then refresh to get updated filtered list from server
+      // Finally refresh to ensure consistency with server
       await refreshConversations();
     } catch (error) {
       console.error("Failed to mark as resolved:", error);
       alert('Failed to mark as resolved. Please try again.');
+      // Rollback optimistic update on error
+      await refreshConversations();
     }
   };
 
@@ -579,7 +589,10 @@ export default function ConversationView() {
     const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "admin"];
 
     try {
-      // Update tags on backend FIRST
+      // Apply optimistic update FIRST to immediately remove from view (if not in admin-only filter)
+      updateConversationOptimistic(selectedConversation.id, { tags: updatedTags });
+
+      // Then update backend
       const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -590,11 +603,13 @@ export default function ConversationView() {
         throw new Error('Failed to escalate to admin');
       }
 
-      // Then refresh to get updated filtered list from server
+      // Finally refresh to ensure consistency with server
       await refreshConversations();
     } catch (error) {
       console.error("Failed to escalate to admin:", error);
       alert('Failed to escalate to admin. Please try again.');
+      // Rollback optimistic update on error
+      await refreshConversations();
     }
   };
 

@@ -220,16 +220,19 @@ export function ConversationProvider({
       setConversations(conversationsList);
       setPagination(paginationData);
 
-      // Update pinned conversation if it's in the new list (to get fresh data)
+      // CRITICAL: Always clear pinned conversation if it doesn't match current filters
+      // This prevents non-support/archived conversations from staying visible after filtering
       if (pinnedConversation) {
         const updatedPinned = conversationsList.find((c: Conversation) => c.id === pinnedConversation.id);
         if (updatedPinned) {
+          // Update pinned with fresh data from server
           setPinnedConversation(updatedPinned);
         } else {
-          // Conversation not in list - it may have been archived or marked as non-support
-          // Clear the pinned conversation so it disappears from view
+          // Conversation not in filtered list - clear it immediately
+          // This happens when conversation is marked as non-support, archived, or no longer matches filters
+          console.log('[Filter] Clearing pinned conversation (not in filtered results):', pinnedConversation.id);
           setPinnedConversation(null);
-          setSelectedId(null); // Also clear selection
+          setSelectedId(null); // Also clear selection to force re-render
         }
       }
 
@@ -351,12 +354,60 @@ export function ConversationProvider({
   };
 
   const updateConversationOptimistic = (id: string, updates: Partial<Conversation>) => {
-    setConversations((prev) =>
-      prev.map((conv) => (conv.id === id ? { ...conv, ...updates } : conv))
-    );
-    // Also update pinned conversation if it's the one being updated
-    if (pinnedConversation?.id === id) {
-      setPinnedConversation((prev) => prev ? { ...prev, ...updates } : null);
+    // First, apply the updates
+    const updatedConv = conversations.find(c => c.id === id);
+    if (!updatedConv) return;
+
+    const newConv = { ...updatedConv, ...updates };
+
+    // Check if updated conversation should be filtered out based on current filters
+    const shouldRemove = (() => {
+      // Check excludeNonSupport filter
+      if (excludeNonSupport && newConv.tags?.includes('non-customer-support')) {
+        console.log('[Filter] Removing conversation (non-customer-support):', id);
+        return true;
+      }
+
+      // Check adminOnly filter
+      if (adminOnly && !newConv.tags?.includes('admin')) {
+        console.log('[Filter] Removing conversation (not admin):', id);
+        return true;
+      }
+
+      // Check if it should be hidden from default view (has admin tag but adminOnly is false)
+      if (!adminOnly && excludeNonSupport && newConv.tags?.includes('admin')) {
+        console.log('[Filter] Removing conversation (admin tag in default view):', id);
+        return true;
+      }
+
+      // Check archived filter
+      if (!showArchived && newConv.archived) {
+        console.log('[Filter] Removing conversation (archived):', id);
+        return true;
+      }
+
+      return false;
+    })();
+
+    if (shouldRemove) {
+      // Remove from list immediately
+      setConversations((prev) => prev.filter((conv) => conv.id !== id));
+
+      // Clear pinned and selection if it's the current conversation
+      if (pinnedConversation?.id === id) {
+        setPinnedConversation(null);
+        setSelectedId(null);
+      }
+    } else {
+      // Just update in place
+      setConversations((prev) =>
+        prev.map((conv) => (conv.id === id ? newConv : conv))
+      );
+
+      // Also update pinned conversation if it's the one being updated
+      if (pinnedConversation?.id === id) {
+        setPinnedConversation(newConv);
+      }
     }
   };
 
