@@ -459,20 +459,25 @@ export function ConversationProvider({
   // Workspace functions
   const loadWorkspaces = async () => {
     try {
+      console.log('[Workspace] Fetching workspaces from /api/workspaces...');
       const res = await fetch('/api/workspaces');
       if (!res.ok) {
-        console.error('Failed to load workspaces:', res.statusText);
+        console.error('[Workspace] Failed to load workspaces:', res.status, res.statusText);
         return;
       }
       const data = await res.json();
+      console.log('[Workspace] Received workspaces:', data);
       setWorkspaces(data);
 
       // Auto-select first workspace if none selected
       if (!currentWorkspaceId && data.length > 0) {
+        console.log('[Workspace] Auto-selecting first workspace:', data[0].id, data[0].name);
         setCurrentWorkspaceId(data[0].id);
+      } else if (data.length === 0) {
+        console.error('[Workspace] NO WORKSPACES FOUND! Database may be empty.');
       }
     } catch (error) {
-      console.error('Failed to load workspaces:', error);
+      console.error('[Workspace] Failed to load workspaces:', error);
     }
   };
 

@@ -10,7 +10,23 @@ export default function WorkspaceSwitcher() {
   } = useConversations();
 
   if (workspaces.length === 0) {
-    return null; // Don't show anything until workspaces are loaded
+    // Show loading/error state instead of hiding
+    return (
+      <div className="px-4 py-4 border-b-2 border-red-200 bg-gradient-to-br from-red-50 to-orange-50">
+        <div className="flex items-center gap-2 mb-2">
+          <svg className="w-5 h-5 text-red-600 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider">
+            Workspace
+          </h3>
+        </div>
+        <div className="px-4 py-3 bg-white border-2 border-red-300 rounded-lg">
+          <p className="text-sm font-semibold text-red-800">⚠️ No workspaces found!</p>
+          <p className="text-xs text-red-600 mt-1">Check browser console for errors.</p>
+        </div>
+      </div>
+    );
   }
 
   const currentWorkspace = workspaces.find(w => w.id === currentWorkspaceId);
