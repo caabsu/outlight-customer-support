@@ -86,8 +86,15 @@ app.get("/oauth/google/callback", gmailMulti.googleAuthCallback);
 app.post("/gmail/poll/workspace/:workspaceId", async (req: Request, res: Response) => {
   const workspaceId = req.params.workspaceId;
   console.log('[Server] Poll request for workspace:', workspaceId);
+
+  if (!workspaceId) {
+    return res.status(400).json({ error: "Missing workspaceId in URL" });
+  }
+
+  // Pass workspaceId through body for gmailMulti.pollOnce
+  req.body = req.body || {};
   req.body.workspaceId = workspaceId;
-  req.params.workspaceId = workspaceId; // Ensure it's in params too
+
   await gmailMulti.pollOnce(req, res);
 });
 
