@@ -100,15 +100,19 @@ export async function getAuthedClient(workspaceId: string) {
     throw new Error("Workspace not found");
   }
 
-  const token = workspace.oauthTokens;
-  if (!token) {
+  // oauthTokens is a one-to-one relation, so we need to get the first element
+  const tokens = await prisma.oAuthToken.findUnique({
+    where: { workspaceId: workspace.id }
+  });
+
+  if (!tokens || !tokens.accessToken || !tokens.refreshToken) {
     throw new Error(`No OAuth tokens for workspace ${workspace.name}. Authorize first.`);
   }
 
   const oAuth2Client = getOAuth2Client(workspace);
   oAuth2Client.setCredentials({
-    access_token: token.accessToken,
-    refresh_token: token.refreshToken,
+    access_token: tokens.accessToken,
+    refresh_token: tokens.refreshToken,
   });
 
   const { credentials } = await oAuth2Client.refreshAccessToken();
