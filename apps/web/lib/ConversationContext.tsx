@@ -214,8 +214,43 @@ export function ConversationProvider({
       }
 
       // Handle new pagination response format
-      const conversationsList = data.conversations || data;
+      let conversationsList = data.conversations || data;
       const paginationData = data.pagination || null;
+
+      // CRITICAL SAFETY CHECK: Aggressively filter conversations client-side as final defense
+      // This catches ANY conversations that somehow bypassed backend filters
+      const beforeFilter = conversationsList.length;
+      conversationsList = conversationsList.filter((conv: Conversation) => {
+        // If excludeNonSupport is active, REMOVE any conversation with non-customer-support OR admin tags
+        if (excludeNonSupport) {
+          if (conv.tags?.includes("non-customer-support")) {
+            console.log(`[Client Filter Safety] BLOCKING non-customer-support: ${conv.id} "${conv.subject}"`);
+            return false;
+          }
+          if (conv.tags?.includes("admin") && !adminOnly) {
+            console.log(`[Client Filter Safety] BLOCKING admin in default view: ${conv.id} "${conv.subject}"`);
+            return false;
+          }
+        }
+
+        // If adminOnly is active, ONLY show conversations with admin tag
+        if (adminOnly && !conv.tags?.includes("admin")) {
+          console.log(`[Client Filter Safety] BLOCKING non-admin in admin view: ${conv.id} "${conv.subject}"`);
+          return false;
+        }
+
+        // If not showing archived, REMOVE archived conversations
+        if (!showArchived && conv.archived) {
+          console.log(`[Client Filter Safety] BLOCKING archived: ${conv.id} "${conv.subject}"`);
+          return false;
+        }
+
+        return true;
+      });
+
+      if (beforeFilter !== conversationsList.length) {
+        console.warn(`[Client Filter Safety] 🚨 FILTERED OUT ${beforeFilter - conversationsList.length} conversations that bypassed backend filters!`);
+      }
 
       setConversations(conversationsList);
       setPagination(paginationData);

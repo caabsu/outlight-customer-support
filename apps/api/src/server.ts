@@ -143,22 +143,25 @@ app.get("/conversations", async (req: Request, res: Response) => {
       where.archived = false;
     }
 
-    // Build NOT conditions array for proper filtering
+    // Build comprehensive filter with AND/NOT logic to avoid conflicts
+    const andConditions: any[] = [];
     const notConditions: any[] = [];
 
-    // Admin-only filter (show ONLY admin tagged conversations)
+    // CRITICAL: Admin-only filter (show ONLY admin tagged conversations)
     if (adminOnly === "true") {
-      where.tags = {
-        has: "admin"
-      };
+      andConditions.push({
+        tags: {
+          has: "admin"
+        }
+      });
     } else if (excludeNonSupport === "true") {
-      // Default behavior: exclude non-support and admin from view
+      // CRITICAL: Default behavior - exclude non-support AND admin from view
+      // These MUST be in NOT array to exclude them
       notConditions.push({
         tags: {
           has: "non-customer-support"
         }
       });
-      // Also exclude "admin" tagged conversations from default view (unless specifically filtered)
       notConditions.push({
         tags: {
           has: "admin"
@@ -173,9 +176,11 @@ app.get("/conversations", async (req: Request, res: Response) => {
     // Needs reply filter (has needs-reply tag)
     // Don't apply this if adminOnly is active (admin conversations might not have needs-reply)
     if (needsReply === "true" && adminOnly !== "true") {
-      where.tags = {
-        has: "needs-reply"
-      };
+      andConditions.push({
+        tags: {
+          has: "needs-reply"
+        }
+      });
     }
 
     // Resolved filter (does NOT have needs-reply tag)
@@ -187,19 +192,24 @@ app.get("/conversations", async (req: Request, res: Response) => {
       });
     }
 
-    // Apply NOT conditions if any exist
-    if (notConditions.length > 0) {
-      where.NOT = notConditions.length === 1 ? notConditions[0] : notConditions;
-    }
-
     // Specific tags filter (must have ALL specified tags)
     if (tags && typeof tags === 'string' && tags.length > 0) {
       const tagArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
       if (tagArray.length > 0) {
-        where.AND = tagArray.map(tag => ({
+        andConditions.push(...tagArray.map(tag => ({
           tags: { has: tag }
-        }));
+        })));
       }
+    }
+
+    // CRITICAL: Apply AND conditions (must have all)
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
+
+    // CRITICAL: Apply NOT conditions (must not have any)
+    if (notConditions.length > 0) {
+      where.NOT = notConditions;
     }
 
     // Date range filter
@@ -278,11 +288,46 @@ app.get("/conversations", async (req: Request, res: Response) => {
       });
     }
 
-    // Get total count after all filters
+    // CRITICAL SAFETY CHECK: Final aggressive filtering to catch ANY conversations that slipped through
+    // This is the absolute last line of defense against filter bypass bugs
+    conversations = conversations.filter(conv => {
+      // If excludeNonSupport is active, REMOVE any conversation with non-customer-support OR admin tags
+      if (excludeNonSupport === "true") {
+        if (conv.tags?.includes("non-customer-support")) {
+          console.log(`[Filter Safety] BLOCKING non-customer-support conversation: ${conv.id} "${conv.subject}"`);
+          return false;
+        }
+        if (conv.tags?.includes("admin") && adminOnly !== "true") {
+          console.log(`[Filter Safety] BLOCKING admin conversation in default view: ${conv.id} "${conv.subject}"`);
+          return false;
+        }
+      }
+
+      // If adminOnly is active, ONLY show conversations with admin tag
+      if (adminOnly === "true") {
+        if (!conv.tags?.includes("admin")) {
+          console.log(`[Filter Safety] BLOCKING non-admin conversation in admin view: ${conv.id} "${conv.subject}"`);
+          return false;
+        }
+      }
+
+      // If not showing archived, REMOVE archived conversations
+      if (showArchived !== "true" && conv.archived) {
+        console.log(`[Filter Safety] BLOCKING archived conversation: ${conv.id} "${conv.subject}"`);
+        return false;
+      }
+
+      return true;
+    });
+
+    // Get total count after ALL filters including safety check
     const totalCount = conversations.length;
 
     // Apply pagination AFTER all filters
     const paginatedConversations = conversations.slice(skip, skip + limitNum);
+
+    // Log final result for debugging
+    console.log(`[GET /conversations] Workspace: ${workspaceId} | Filters: excludeNonSupport=${excludeNonSupport}, adminOnly=${adminOnly}, archived=${showArchived} | Total after filters: ${totalCount} | Page ${pageNum}/${Math.ceil(totalCount / limitNum)}`);
 
     res.json({
       conversations: paginatedConversations,
