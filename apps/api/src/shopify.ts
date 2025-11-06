@@ -113,6 +113,14 @@ export interface ShopifyOrder {
   billing_address?: ShopifyAddress;
   refunds?: ShopifyRefund[];
   transactions?: ShopifyTransaction[];
+  fulfillments?: any[];
+  // Cancellation info
+  cancelled_at?: string | null;
+  cancel_reason?: string | null;
+  // Calculated fields for AI assistance
+  hasChargeback?: boolean;
+  totalRefunded?: string;
+  isFullyRefunded?: boolean;
 }
 
 export interface ShopifyLineItem {
@@ -287,37 +295,79 @@ export async function getCustomer(customerId: string): Promise<ShopifyCustomer> 
 }
 
 /**
- * Get all orders for a customer
+ * Get all orders for a customer with complete details
+ * Includes: fulfillments, refunds, transactions, and cancellation status
  */
 export async function getCustomerOrders(customerId: string, limit: number = 50): Promise<ShopifyOrder[]> {
   try {
-    // First get the customer's orders
+    // First get the customer's orders with all fields
     const response = await shopifyRequest<{ orders: ShopifyOrder[] }>(
       `/customers/${customerId}/orders.json?limit=${limit}&status=any`
     );
 
     const orders = response.orders || [];
 
-    // Then fetch fulfillments for each order to get tracking information
-    const ordersWithFulfillments = await Promise.all(
+    // Then fetch complete details for each order (fulfillments, refunds, transactions)
+    const ordersWithCompleteData = await Promise.all(
       orders.map(async (order) => {
         try {
+          // Fetch fulfillments (tracking info)
           const fulfillmentsResponse = await shopifyRequest<{ fulfillments: any[] }>(
             `/orders/${order.id}/fulfillments.json`
           );
+
+          // Fetch refunds
+          const refundsResponse = await shopifyRequest<{ refunds: ShopifyRefund[] }>(
+            `/orders/${order.id}/refunds.json`
+          );
+
+          // Fetch complete order details to get transactions
+          const orderDetailsResponse = await shopifyRequest<{ order: ShopifyOrder }>(
+            `/orders/${order.id}.json`
+          );
+
+          // Check for chargebacks in transactions
+          const transactions = orderDetailsResponse.order.transactions || [];
+          const hasChargeback = transactions.some(t => t.kind === 'chargeback' || t.kind === 'chargeback_pending');
+
+          // Calculate total refunded amount
+          const refunds = refundsResponse.refunds || [];
+          const totalRefunded = refunds.reduce((sum, refund) => {
+            const refundAmount = refund.transactions
+              .filter(t => t.kind === 'refund')
+              .reduce((refundSum, t) => refundSum + parseFloat(t.amount), 0);
+            return sum + refundAmount;
+          }, 0);
+
           return {
             ...order,
-            fulfillments: fulfillmentsResponse.fulfillments || []
+            fulfillments: fulfillmentsResponse.fulfillments || [],
+            refunds: refunds,
+            transactions: transactions,
+            // Add calculated fields for easier AI understanding
+            cancelled_at: orderDetailsResponse.order.cancelled_at,
+            cancel_reason: orderDetailsResponse.order.cancel_reason,
+            hasChargeback: hasChargeback,
+            totalRefunded: totalRefunded.toFixed(2),
+            isFullyRefunded: totalRefunded >= parseFloat(order.total_price)
           };
         } catch (err) {
-          // If fulfillments fail, return order without them
-          console.error(`Failed to fetch fulfillments for order ${order.id}:`, err);
-          return { ...order, fulfillments: [] };
+          // If additional data fetch fails, return order with basic info
+          console.error(`Failed to fetch complete details for order ${order.id}:`, err);
+          return {
+            ...order,
+            fulfillments: [],
+            refunds: [],
+            transactions: [],
+            hasChargeback: false,
+            totalRefunded: "0.00",
+            isFullyRefunded: false
+          };
         }
       })
     );
 
-    return ordersWithFulfillments;
+    return ordersWithCompleteData;
   } catch (error) {
     console.error('Error getting customer orders:', error);
     throw error;
@@ -387,16 +437,24 @@ export async function createRefund(
     shipping?: { full_refund?: boolean; amount?: string };
   } = {}
 ): Promise<ShopifyRefund> {
+  console.log(`[Shopify Refund] Starting refund for order ${orderId}`);
+  console.log(`[Shopify Refund] Line items to refund:`, refundLineItems);
+  console.log(`[Shopify Refund] Options:`, options);
+
   try {
     // First, calculate the refund to get the correct amount
+    console.log(`[Shopify Refund] Step 1: Calculating refund amount...`);
     const calculation = await calculateRefund(orderId, refundLineItems);
+    console.log(`[Shopify Refund] Calculated refund:`, {
+      lineItemsCount: calculation.refund_line_items.length,
+      transactionsCount: calculation.transactions.length
+    });
 
     // Fetch the order to get the original transaction
+    console.log(`[Shopify Refund] Step 2: Fetching order details...`);
     const order = await getOrder(orderId);
-
-    // Log transactions for debugging
-    console.log(`Order ${orderId} transactions:`, JSON.stringify(order.transactions, null, 2));
-    console.log(`Order ${orderId} financial_status:`, order.financial_status);
+    console.log(`[Shopify Refund] Order ${orderId} financial_status: ${order.financial_status}`);
+    console.log(`[Shopify Refund] Order ${orderId} transactions:`, JSON.stringify(order.transactions, null, 2));
 
     // Find the successful payment transaction
     // Different payment gateways use different transaction types:
@@ -410,20 +468,29 @@ export async function createRefund(
     if (!parentTransaction) {
       // Provide detailed error message showing what transactions exist
       const transactionSummary = order.transactions?.map(t => `${t.kind} (${t.status})`).join(', ') || 'none';
-      throw new Error(
-        `No successful payment transaction found for this order. ` +
+      const errorMsg =
+        `No successful payment transaction found for order #${order.name}. ` +
         `Order financial status: ${order.financial_status}. ` +
         `Transactions found: ${transactionSummary}. ` +
-        `Note: Refunds require a completed payment (sale, capture, or authorization with success status).`
-      );
+        `Note: Refunds require a completed payment (sale, capture, or authorization with success status).`;
+      console.error(`[Shopify Refund] ERROR: ${errorMsg}`);
+      throw new Error(errorMsg);
     }
 
-    console.log(`Using parent transaction:`, { id: parentTransaction.id, kind: parentTransaction.kind, gateway: parentTransaction.gateway });
+    console.log(`[Shopify Refund] Step 3: Using parent transaction:`, {
+      id: parentTransaction.id,
+      kind: parentTransaction.kind,
+      gateway: parentTransaction.gateway,
+      status: parentTransaction.status,
+      amount: parentTransaction.amount
+    });
 
     // Calculate the refund amount from the calculated transactions
     const refundAmount = calculation.transactions
       .filter(t => t.kind === 'refund')
       .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+
+    console.log(`[Shopify Refund] Step 4: Total refund amount: $${refundAmount.toFixed(2)}`);
 
     const refundData: any = {
       refund: {
@@ -448,8 +515,10 @@ export async function createRefund(
     // Add shipping refund if specified
     if (options.shipping) {
       refundData.refund.shipping = options.shipping;
+      console.log(`[Shopify Refund] Including shipping refund:`, options.shipping);
     }
 
+    console.log(`[Shopify Refund] Step 5: Submitting refund request to Shopify...`);
     const response = await shopifyRequest<{ refund: ShopifyRefund }>(
       `/orders/${orderId}/refunds.json`,
       {
@@ -458,9 +527,18 @@ export async function createRefund(
       }
     );
 
+    console.log(`[Shopify Refund] ✅ SUCCESS: Refund created for order ${orderId}`, {
+      refundId: response.refund.id,
+      refundedAmount: refundAmount.toFixed(2)
+    });
+
     return response.refund;
   } catch (error) {
-    console.error('Error creating refund:', error);
+    console.error(`[Shopify Refund] ❌ FAILED: Error creating refund for order ${orderId}:`, error);
+    if (error instanceof Error) {
+      console.error(`[Shopify Refund] Error message:`, error.message);
+      console.error(`[Shopify Refund] Error stack:`, error.stack);
+    }
     throw error;
   }
 }
