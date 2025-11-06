@@ -961,8 +961,9 @@ export default function ConversationView() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes
 
+      let response;
       try {
-        const response = await fetch(apiUrl, {
+        response = await fetch(apiUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -990,8 +991,6 @@ export default function ConversationView() {
             throw new Error(`Failed to generate draft: ${response.status} ${errorText}`);
           }
         }
-
-        return response;
       } catch (error) {
         clearTimeout(timeoutId);
         if (error instanceof Error && error.name === 'AbortError') {
