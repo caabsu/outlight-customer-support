@@ -7,6 +7,7 @@ dotenv.config(); // This will load .env if .env.local doesn't exist
 import OpenAI from "openai";
 
 import { googleAuthStart, googleAuthCallback, pollOnce, sendReply, sendNewEmail } from "./gmail";
+import * as gmailMulti from "./gmail-multi";
 import { prisma } from "./db";
 import * as shopify from "./shopify";
 
@@ -41,8 +42,49 @@ app.get("/", (_req: Request, res: Response) => {
 
 app.get("/health", (_req: Request, res: Response) => res.json({ ok: true }));
 
+// ==================== WORKSPACE ENDPOINTS ====================
+// Get all workspaces
+app.get("/workspaces", async (req: Request, res: Response) => {
+  try {
+    const workspaces = await prisma.workspace.findMany({
+      select: {
+        id: true,
+        name: true,
+        gmailAccountEmail: true,
+        createdAt: true,
+        oauthTokens: {
+          select: {
+            id: true,
+            expiry: true
+          }
+        }
+      }
+    });
+
+    res.json(workspaces.map(w => ({
+      ...w,
+      isAuthorized: !!w.oauthTokens
+    })));
+  } catch (error) {
+    console.error("Error fetching workspaces:", error);
+    res.status(500).json({ error: "Failed to fetch workspaces" });
+  }
+});
+
+// OAuth for specific workspace
+app.get("/oauth/google/workspace/:workspaceId", gmailMulti.googleAuthStart);
+
+// OAuth callback (workspace-aware)
+app.get("/oauth/google/callback", gmailMulti.googleAuthCallback);
+
+// Poll emails for specific workspace
+app.post("/gmail/poll/workspace/:workspaceId", async (req: Request, res: Response) => {
+  req.body.workspaceId = req.params.workspaceId;
+  await gmailMulti.pollOnce(req, res);
+});
+
+// ==================== LEGACY ENDPOINTS (Keep for backward compatibility) ====================
 app.get("/oauth/google", googleAuthStart);
-app.get("/oauth/google/callback", googleAuthCallback);
 app.post("/gmail/poll", pollOnce);
 
 // Get all conversations with messages (with filters)
@@ -59,11 +101,19 @@ app.get("/conversations", async (req: Request, res: Response) => {
       dateRange,
       showSent,
       adminOnly,
+      workspaceId,
       page,
       limit
     } = req.query;
 
-    const where: any = {};
+    // Workspace is required
+    if (!workspaceId) {
+      return res.status(400).json({ error: "workspaceId is required" });
+    }
+
+    const where: any = {
+      workspaceId: workspaceId as string
+    };
 
     if (starred === "true") {
       where.starred = true;
@@ -604,16 +654,30 @@ app.get("/debug/reply-to", async (req: Request, res: Response) => {
 // Send a reply to a conversation or send a new email
 app.post("/messages", async (req: Request, res: Response) => {
   try {
-    const { conversationId, to, body, subject } = req.body;
+    const { conversationId, to, body, subject, workspaceId } = req.body;
 
     if (!to || !body) {
       return res.status(400).json({ error: "Missing required fields: to and body" });
     }
 
     let result;
+    let actualWorkspaceId = workspaceId;
+
     if (conversationId) {
-      // Send as reply in existing thread
-      result = await sendReply(conversationId, to, body);
+      // Get conversation to find workspace
+      const conversation = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { workspaceId: true }
+      });
+
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      actualWorkspaceId = conversation.workspaceId;
+
+      // Send as reply in existing thread using multi-workspace service
+      result = await gmailMulti.sendReply(actualWorkspaceId, conversationId, to, body);
 
       // Delete draft for this conversation since we sent a message
       try {
@@ -627,7 +691,10 @@ app.post("/messages", async (req: Request, res: Response) => {
       }
     } else {
       // Send as new standalone email (not part of a thread)
-      result = await sendNewEmail(to, subject || "No Subject", body);
+      if (!actualWorkspaceId) {
+        return res.status(400).json({ error: "workspaceId is required for new emails" });
+      }
+      result = await gmailMulti.sendNewEmail(actualWorkspaceId, to, subject || "No Subject", body);
     }
 
     res.json({ success: true, messageId: result.id });
