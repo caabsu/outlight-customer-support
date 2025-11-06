@@ -469,15 +469,18 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
 async function getUnrepliedConversations(workspaceId?: string) {
   const whereClause: any = {
     archived: false,
-    NOT: {
-      tags: { has: "non-customer-support" }
-    }
+    NOT: [
+      { tags: { has: "non-customer-support" } },
+      { tags: { has: "admin" } }
+    ]
   };
 
   // Add workspace filter if provided
   if (workspaceId) {
     whereClause.workspaceId = workspaceId;
   }
+
+  console.log('[UNREPLIED] Query where clause:', JSON.stringify(whereClause));
 
   const conversations = await prisma.conversation.findMany({
     where: whereClause,
@@ -490,10 +493,16 @@ async function getUnrepliedConversations(workspaceId?: string) {
     orderBy: { lastMessageAt: "asc" }, // Oldest first
   });
 
+  console.log(`[UNREPLIED] Found ${conversations.length} non-archived, non-special conversations`);
+
   // Filter to only those where last message is inbound
-  return conversations.filter(c =>
+  const unreplied = conversations.filter(c =>
     c.messages.length > 0 && c.messages[0].direction === "inbound"
   );
+
+  console.log(`[UNREPLIED] Filtered to ${unreplied.length} unreplied conversations`);
+
+  return unreplied;
 }
 
 // Toggle starred
