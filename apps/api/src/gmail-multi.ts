@@ -151,7 +151,14 @@ export async function pollOnce(req: Request, res: Response) {
     let existingCount = 0;
     const allThreadIds = new Set<string>();
 
-    // Fetch from inbox
+    // Calculate date 7 days ago for filtering
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const afterDate = Math.floor(sevenDaysAgo.getTime() / 1000);
+
+    console.log(`[Poll] Fetching emails from last 7 days (after ${sevenDaysAgo.toISOString()})...`);
+
+    // Fetch from inbox with date filter (last 7 days)
     let pageToken: string | undefined;
     let pageCount = 0;
     const maxPages = 50;
@@ -159,31 +166,35 @@ export async function pollOnce(req: Request, res: Response) {
     do {
       const inboxRes = await gmail.users.threads.list({
         userId: "me",
-        labelIds: ["INBOX"],
+        q: `in:inbox after:${afterDate}`, // Gmail search query for last 7 days
         maxResults: 100,
         pageToken,
       });
 
       const threads = inboxRes.data.threads || [];
+      console.log(`[Poll] Inbox page ${pageCount + 1}: Found ${threads.length} threads`);
       threads.forEach((t) => t.id && allThreadIds.add(t.id));
 
       pageToken = inboxRes.data.nextPageToken || undefined;
       pageCount++;
     } while (pageToken && pageCount < maxPages);
 
-    // Fetch from sent
+    console.log(`[Poll] Total inbox threads from last 7 days: ${allThreadIds.size}`);
+
+    // Fetch from sent with date filter (last 7 days)
     pageToken = undefined;
     pageCount = 0;
 
     do {
       const sentRes = await gmail.users.threads.list({
         userId: "me",
-        labelIds: ["SENT"],
+        q: `in:sent after:${afterDate}`, // Gmail search query for last 7 days
         maxResults: 100,
         pageToken,
       });
 
       const threads = sentRes.data.threads || [];
+      console.log(`[Poll] Sent page ${pageCount + 1}: Found ${threads.length} threads`);
       threads.forEach((t) => t.id && allThreadIds.add(t.id));
 
       pageToken = sentRes.data.nextPageToken || undefined;
