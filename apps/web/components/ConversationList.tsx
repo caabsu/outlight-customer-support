@@ -2,6 +2,7 @@
 
 import { useConversations, type Conversation } from "@/lib/ConversationContext";
 import { useState } from "react";
+import WorkspaceSwitcher from "./WorkspaceSwitcher";
 
 export default function ConversationList() {
   const {
@@ -211,6 +212,9 @@ export default function ConversationList() {
         </div>
       ) : (
         <>
+      {/* Workspace Switcher */}
+      <WorkspaceSwitcher />
+
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-3">

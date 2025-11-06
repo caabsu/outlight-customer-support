@@ -37,6 +37,13 @@ type Pagination = {
   totalPages: number;
 };
 
+type Workspace = {
+  id: string;
+  name: string;
+  gmailAccountEmail: string;
+  isAuthorized: boolean;
+};
+
 type ConversationContextType = {
   conversations: Conversation[];
   selectedConversation: Conversation | null;
@@ -83,6 +90,11 @@ type ConversationContextType = {
   setDateRange: (range: "all" | "today" | "week" | "month") => void;
   adminOnly: boolean;
   setAdminOnly: (show: boolean) => void;
+  // Workspace
+  currentWorkspaceId: string | null;
+  setCurrentWorkspaceId: (id: string) => void;
+  workspaces: Workspace[];
+  loadWorkspaces: () => Promise<void>;
 };
 
 const ConversationContext = createContext<ConversationContextType | undefined>(
@@ -122,12 +134,23 @@ export function ConversationProvider({
   const [dateRange, setDateRange] = useState<"all" | "today" | "week" | "month">("all");
   const [adminOnly, setAdminOnly] = useState(false);
 
+  // Workspace state
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+
   const fetchConversations = async (silent = false, retryCount = 0, suppressErrors = false, page = currentPage) => {
+    // Don't fetch without a workspace selected
+    if (!currentWorkspaceId) {
+      if (!silent) setLoading(false);
+      return;
+    }
+
     try {
       if (!silent) setLoading(true);
 
       // Build query params from filter state
       const params = new URLSearchParams();
+      params.set('workspaceId', currentWorkspaceId); // REQUIRED: workspace filter
       params.set('page', page.toString());
       params.set('limit', '50');
 
@@ -338,6 +361,9 @@ export function ConversationProvider({
   };
 
   const pollAndRefresh = async () => {
+    // Don't poll without a workspace selected
+    if (!currentWorkspaceId) return;
+
     try {
       setRefreshing(true);
       setRefreshProgress(10);
@@ -348,7 +374,7 @@ export function ConversationProvider({
 
       try {
         setRefreshProgress(30);
-        const pollRes = await fetch("/api/gmail/poll", {
+        const pollRes = await fetch(`/api/gmail/poll/workspace/${currentWorkspaceId}`, {
           method: "POST",
           signal: controller.signal
         });
@@ -430,6 +456,38 @@ export function ConversationProvider({
     setShowEmailComposer(false);
   };
 
+  // Workspace functions
+  const loadWorkspaces = async () => {
+    try {
+      const res = await fetch('/api/workspaces');
+      if (!res.ok) {
+        console.error('Failed to load workspaces:', res.statusText);
+        return;
+      }
+      const data = await res.json();
+      setWorkspaces(data);
+
+      // Auto-select first workspace if none selected
+      if (!currentWorkspaceId && data.length > 0) {
+        setCurrentWorkspaceId(data[0].id);
+      }
+    } catch (error) {
+      console.error('Failed to load workspaces:', error);
+    }
+  };
+
+  // Load workspaces on mount
+  useEffect(() => {
+    loadWorkspaces();
+  }, []);
+
+  // Refetch conversations when workspace changes
+  useEffect(() => {
+    if (currentWorkspaceId) {
+      fetchConversations(true, 0, false, 1);
+    }
+  }, [currentWorkspaceId]);
+
   return (
     <ConversationContext.Provider
       value={{
@@ -478,6 +536,11 @@ export function ConversationProvider({
         setDateRange,
         adminOnly,
         setAdminOnly,
+        // Workspace
+        currentWorkspaceId,
+        setCurrentWorkspaceId,
+        workspaces,
+        loadWorkspaces,
       }}
     >
       {children}
