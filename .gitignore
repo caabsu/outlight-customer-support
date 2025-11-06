@@ -12,3 +12,4 @@ dist
 # OS/editor
 .DS_Store
 Thumbs.db
+SEED-WORKSPACES.sql
