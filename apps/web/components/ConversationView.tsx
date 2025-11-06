@@ -2376,18 +2376,29 @@ export default function ConversationView() {
           <div className="relative">
             <button
               onClick={() => {
+                console.log("[Draft Button] Clicked - loadingDraft:", loadingDraft, "draftData:", draftData, "showDraftPopup:", showDraftPopup);
+
                 if (loadingDraft) {
+                  console.log("[Draft Button] Already loading, ignoring click");
                   return;
                 }
 
+                // Check if draftData is valid (has required properties)
+                const hasValidDraft = draftData && draftData.draft;
+                console.log("[Draft Button] hasValidDraft:", hasValidDraft);
+
                 if (draftMinimized && showDraftPopup) {
+                  console.log("[Draft Button] Unminimizing popup");
                   setDraftMinimized(false);
-                } else if (draftData && showDraftPopup && !draftMinimized) {
+                } else if (hasValidDraft && showDraftPopup && !draftMinimized) {
+                  console.log("[Draft Button] Minimizing popup");
                   setDraftMinimized(true);
-                } else if (draftData && !showDraftPopup) {
+                } else if (hasValidDraft && !showDraftPopup) {
+                  console.log("[Draft Button] Opening existing draft");
                   setShowDraftPopup(true);
                   setDraftMinimized(false);
-                } else if (!draftData && !loadingDraft) {
+                } else if (!hasValidDraft && !loadingDraft) {
+                  console.log("[Draft Button] No valid draft, generating new one");
                   generateDraft();
                 }
               }}
@@ -2402,9 +2413,9 @@ export default function ConversationView() {
                 </div>
               )}
               <div className="flex items-center gap-2">
-                <span>{loadingDraft ? 'Generating...' : (draftData ? 'AI Draft' : 'Draft')}</span>
+                <span>{loadingDraft ? 'Generating...' : (draftData && draftData.draft ? 'AI Draft' : 'Draft')}</span>
                 {/* Draft ready indicator */}
-                {draftData && !showDraftPopup && !loadingDraft && (
+                {draftData && draftData.draft && !showDraftPopup && !loadingDraft && (
                   <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
@@ -2414,7 +2425,7 @@ export default function ConversationView() {
                   <span className="text-[9px] px-1.5 py-0.5 bg-orange-500 text-white rounded font-semibold">CUSTOM</span>
                 )}
                 {/* Custom context active indicator - BEFORE generation */}
-                {!draftData && !loadingDraft && currentCustomContext && (
+                {!(draftData && draftData.draft) && !loadingDraft && currentCustomContext && (
                   <span className="text-[9px] px-1.5 py-0.5 bg-orange-400 text-white rounded font-semibold flex items-center gap-0.5">
                     <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
@@ -3931,7 +3942,58 @@ export default function ConversationView() {
                 </div>
               )}
 
-              {!loadingDraft && !draftError && draftData && (
+              {!loadingDraft && !draftError && !draftData && (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <svg className="w-16 h-16 text-slate-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p className="text-sm font-sans text-slate-600 mb-2">No draft generated yet</p>
+                  <button
+                    onClick={() => {
+                      setShowDraftPopup(false);
+                      generateDraft();
+                    }}
+                    className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-all font-sans text-sm font-medium"
+                  >
+                    Generate Draft
+                  </button>
+                </div>
+              )}
+
+              {!loadingDraft && !draftError && draftData && !draftData.draft && (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <svg className="w-16 h-16 text-amber-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <p className="text-sm font-sans text-slate-600 mb-2">Draft data is incomplete</p>
+                  <p className="text-xs font-sans text-slate-500 mb-4">The draft exists but is missing required content</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        if (selectedConversation?.id && confirm('Delete this incomplete draft and generate a new one?')) {
+                          setShowDraftPopup(false);
+                          setDraftsByConversationId(prev => ({
+                            ...prev,
+                            [selectedConversation.id]: null
+                          }));
+                          generateDraft();
+                        }
+                      }}
+                      className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-all font-sans text-sm font-medium"
+                    >
+                      Regenerate Draft
+                    </button>
+                    <button
+                      onClick={() => setShowDraftPopup(false)}
+                      className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-all font-sans text-sm font-medium"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!loadingDraft && !draftError && draftData && draftData.draft && (
                 <div className="space-y-4">
                   {/* Category and Tags */}
                   <div className="flex items-center gap-2 flex-wrap">
