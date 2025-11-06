@@ -741,26 +741,37 @@ export default function ConversationView() {
 
     try {
       if (!currentWorkspaceId) {
-        console.error("No workspace selected");
+        console.error("[Oldest Unreplied] No workspace selected");
         alert("Please select a workspace first");
         return;
       }
 
+      console.log(`[Oldest Unreplied] Fetching for workspace: ${currentWorkspaceId}`);
+
       // Get globally oldest unreplied from API
-      const response = await fetch(`/api/conversations/next-unreplied?workspaceId=${currentWorkspaceId}`);
+      const url = `/api/conversations/next-unreplied?workspaceId=${currentWorkspaceId}`;
+      console.log(`[Oldest Unreplied] Fetching: ${url}`);
+      const response = await fetch(url);
+
+      console.log(`[Oldest Unreplied] Response status: ${response.status} ${response.statusText}`);
 
       if (!response.ok) {
-        console.error("Failed to fetch oldest unreplied:", response.status, response.statusText);
-        alert("Failed to fetch oldest unreplied email. Please try again.");
+        const errorText = await response.text();
+        console.error("[Oldest Unreplied] Failed to fetch:", response.status, response.statusText, errorText);
+        alert(`Failed to fetch oldest unreplied email: ${response.status} ${errorText}`);
         return;
       }
 
       const oldestConversation = await response.json();
+      console.log(`[Oldest Unreplied] Received conversation:`, oldestConversation);
 
       if (!oldestConversation || !oldestConversation.id) {
+        console.log("[Oldest Unreplied] No unreplied emails found");
         alert("No unreplied emails!");
         return;
       }
+
+      console.log(`[Oldest Unreplied] Found conversation ${oldestConversation.id}: ${oldestConversation.subject}`);
 
       // Check if it's on current page
       const isOnCurrentPage = conversations.some(conv => conv.id === oldestConversation.id);
