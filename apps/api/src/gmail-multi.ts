@@ -1,0 +1,461 @@
+import { google } from "googleapis";
+import { prisma } from "./db";
+import type { Request, Response } from "express";
+
+// Get OAuth2 client for a specific workspace
+function getOAuth2Client(workspace: { googleClientId: string; googleClientSecret: string }) {
+  const oAuth2Client = new google.auth.OAuth2(
+    workspace.googleClientId,
+    workspace.googleClientSecret,
+    process.env.GOOGLE_REDIRECT_URI!
+  );
+  return oAuth2Client;
+}
+
+// Start OAuth for specific workspace
+export async function googleAuthStart(req: Request, res: Response) {
+  const workspaceId = req.query.workspace as string;
+
+  if (!workspaceId) {
+    return res.status(400).send("Missing workspace ID");
+  }
+
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId }
+  });
+
+  if (!workspace) {
+    return res.status(404).send("Workspace not found");
+  }
+
+  const oAuth2Client = getOAuth2Client(workspace);
+  const scopes = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.send",
+  ];
+
+  const url = oAuth2Client.generateAuthUrl({
+    access_type: "offline",
+    scope: scopes,
+    prompt: "consent",
+    state: workspaceId // Pass workspace ID through OAuth flow
+  });
+
+  res.redirect(url);
+}
+
+// OAuth callback
+export async function googleAuthCallback(req: Request, res: Response) {
+  const code = req.query.code as string;
+  const workspaceId = req.query.state as string;
+
+  if (!workspaceId) {
+    return res.status(400).send("Missing workspace ID");
+  }
+
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId }
+  });
+
+  if (!workspace) {
+    return res.status(404).send("Workspace not found");
+  }
+
+  const oAuth2Client = getOAuth2Client(workspace);
+  const { tokens } = await oAuth2Client.getToken(code);
+
+  if (!tokens.refresh_token || !tokens.access_token || !tokens.expiry_date) {
+    return res.status(400).send("Missing tokens from Google");
+  }
+
+  await prisma.oAuthToken.upsert({
+    where: { workspaceId: workspace.id },
+    update: {
+      accessToken: tokens.access_token!,
+      refreshToken: tokens.refresh_token!,
+      expiry: new Date(tokens.expiry_date!),
+    },
+    create: {
+      workspaceId: workspace.id,
+      provider: "gmail",
+      accountEmail: workspace.gmailAccountEmail,
+      accessToken: tokens.access_token!,
+      refreshToken: tokens.refresh_token!,
+      expiry: new Date(tokens.expiry_date!),
+    },
+  });
+
+  res.send(`<html><body><h1>✅ Authentication successful for ${workspace.name}!</h1><p>You can close this window and return to the app.</p></body></html>`);
+}
+
+// Get authenticated Gmail client for workspace
+export async function getAuthedClient(workspaceId: string) {
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    include: { oauthTokens: true }
+  });
+
+  if (!workspace) {
+    throw new Error("Workspace not found");
+  }
+
+  const token = workspace.oauthTokens;
+  if (!token) {
+    throw new Error(`No OAuth tokens for workspace ${workspace.name}. Authorize first.`);
+  }
+
+  const oAuth2Client = getOAuth2Client(workspace);
+  oAuth2Client.setCredentials({
+    access_token: token.accessToken,
+    refresh_token: token.refreshToken,
+  });
+
+  const { credentials } = await oAuth2Client.refreshAccessToken();
+  await prisma.oAuthToken.update({
+    where: { workspaceId: workspace.id },
+    data: {
+      accessToken: credentials.access_token!,
+      expiry: new Date(credentials.expiry_date!)
+    },
+  });
+
+  return {
+    gmail: google.gmail({ version: "v1", auth: oAuth2Client }),
+    workspace
+  };
+}
+
+// Poll emails for specific workspace
+export async function pollOnce(req: Request, res: Response) {
+  const workspaceId = req.body.workspaceId || req.query.workspaceId as string;
+
+  if (!workspaceId) {
+    return res.status(400).json({ error: "Missing workspaceId" });
+  }
+
+  try {
+    const { gmail, workspace } = await getAuthedClient(workspaceId);
+
+    let newCount = 0;
+    let existingCount = 0;
+    const allThreadIds = new Set<string>();
+
+    // Fetch from inbox
+    let pageToken: string | undefined;
+    let pageCount = 0;
+    const maxPages = 50;
+
+    do {
+      const inboxRes = await gmail.users.threads.list({
+        userId: "me",
+        labelIds: ["INBOX"],
+        maxResults: 100,
+        pageToken,
+      });
+
+      const threads = inboxRes.data.threads || [];
+      threads.forEach((t) => t.id && allThreadIds.add(t.id));
+
+      pageToken = inboxRes.data.nextPageToken || undefined;
+      pageCount++;
+    } while (pageToken && pageCount < maxPages);
+
+    // Fetch from sent
+    pageToken = undefined;
+    pageCount = 0;
+
+    do {
+      const sentRes = await gmail.users.threads.list({
+        userId: "me",
+        labelIds: ["SENT"],
+        maxResults: 100,
+        pageToken,
+      });
+
+      const threads = sentRes.data.threads || [];
+      threads.forEach((t) => t.id && allThreadIds.add(t.id));
+
+      pageToken = sentRes.data.nextPageToken || undefined;
+      pageCount++;
+    } while (pageToken && pageCount < maxPages);
+
+    // Ingest each thread
+    const threadIds = Array.from(allThreadIds);
+    console.log(`[POLL] Workspace ${workspace.name}: Found ${threadIds.length} threads`);
+
+    await Promise.allSettled(
+      threadIds.map(async (threadId) => {
+        try {
+          const existing = await prisma.conversation.findUnique({
+            where: {
+              workspaceId_gmailThreadId: {
+                workspaceId: workspace.id,
+                gmailThreadId: threadId
+              }
+            }
+          });
+
+          if (existing) {
+            existingCount++;
+          } else {
+            newCount++;
+          }
+
+          await ingestThread(gmail, workspace, threadId);
+        } catch (err) {
+          console.error(`Failed to ingest thread ${threadId}:`, err);
+        }
+      })
+    );
+
+    res.json({
+      success: true,
+      workspace: workspace.name,
+      total: threadIds.length,
+      new: newCount,
+      existing: existingCount
+    });
+  } catch (error: any) {
+    console.error("Error polling Gmail:", error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+// Ingest a single thread
+async function ingestThread(gmail: any, workspace: any, threadId: string) {
+  const tr = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
+  const messages = tr.data.messages ?? [];
+  if (!messages.length) return;
+
+  const first = messages[0];
+  const subject = getHeader(first, "subject") || "";
+  const fromEmail = parseEmail(getHeader(first, "from") || "");
+
+  const customer = await prisma.customer.upsert({
+    where: {
+      workspaceId_primaryEmail: {
+        workspaceId: workspace.id,
+        primaryEmail: fromEmail
+      }
+    },
+    update: { lastSeenAt: new Date() },
+    create: {
+      workspaceId: workspace.id,
+      primaryEmail: fromEmail,
+      name: null
+    },
+  });
+
+  const lastInternal = messages[messages.length - 1].internalDate!;
+  const convo = await prisma.conversation.upsert({
+    where: {
+      workspaceId_gmailThreadId: {
+        workspaceId: workspace.id,
+        gmailThreadId: threadId
+      }
+    },
+    update: { subject, customerId: customer.id, lastMessageAt: new Date(Number(lastInternal)) },
+    create: {
+      workspaceId: workspace.id,
+      gmailThreadId: threadId,
+      subject,
+      customerId: customer.id,
+      status: "open",
+      firstMessageAt: new Date(Number(first.internalDate!)),
+      lastMessageAt: new Date(Number(lastInternal)),
+    },
+  });
+
+  // Process all messages in parallel
+  await Promise.all(messages.map(async (m: any) => {
+    const dir = (getHeader(m, "from") || "").includes(workspace.gmailAccountEmail) ? "outbound" : "inbound";
+    const sentAt = new Date(Number(m.internalDate!));
+    const { html, text } = flattenParts(m.payload);
+    const replyTo = getHeader(m, "reply-to");
+
+    await prisma.message.upsert({
+      where: { gmailMessageId: m.id! },
+      update: {
+        replyToEmail: replyTo ? parseEmail(replyTo) : null,
+      },
+      create: {
+        conversationId: convo.id,
+        gmailMessageId: m.id!,
+        direction: dir,
+        fromEmail: getHeader(m, "from") || "",
+        toEmails: (getHeader(m, "to") || "").split(",").map(s => s.trim()).filter(Boolean) as any,
+        ccEmails: (getHeader(m, "cc") || "").split(",").map(s => s.trim()).filter(Boolean) as any,
+        sentAt,
+        bodyHtml: html?.join("\n") || null,
+        bodyText: text?.join("\n") || null,
+        attachments: [] as any,
+        replyToEmail: replyTo ? parseEmail(replyTo) : null,
+      },
+    });
+  }));
+
+  // Auto-tag based on last message direction
+  const conversationMessages = await prisma.message.findMany({
+    where: { conversationId: convo.id },
+    orderBy: { sentAt: "desc" },
+    take: 1
+  });
+
+  if (conversationMessages.length > 0) {
+    const lastMessage = conversationMessages[0];
+
+    const freshConvo = await prisma.conversation.findUnique({
+      where: { id: convo.id },
+      select: { tags: true, archived: true }
+    });
+
+    const currentTags = freshConvo?.tags || [];
+    const isNonSupport = currentTags.includes("non-customer-support");
+    const isArchived = freshConvo?.archived || false;
+    const isAdmin = currentTags.includes("admin");
+
+    console.log(`[INGEST] Workspace ${workspace.name}, Conversation ${convo.id}: tags=${JSON.stringify(currentTags)}, nonSupport=${isNonSupport}, archived=${isArchived}, admin=${isAdmin}, lastMsg=${lastMessage.direction}`);
+
+    if (!isNonSupport && !isArchived && !isAdmin) {
+      if (lastMessage.direction === "inbound") {
+        if (!currentTags.includes("needs-reply")) {
+          console.log(`[INGEST] Adding needs-reply tag to conversation ${convo.id}`);
+          await prisma.conversation.update({
+            where: { id: convo.id },
+            data: { tags: [...currentTags, "needs-reply"] }
+          });
+        }
+      } else {
+        if (currentTags.includes("needs-reply")) {
+          console.log(`[INGEST] Removing needs-reply tag from conversation ${convo.id}`);
+          await prisma.conversation.update({
+            where: { id: convo.id },
+            data: { tags: currentTags.filter(tag => tag !== "needs-reply") }
+          });
+        }
+      }
+    } else {
+      console.log(`[INGEST] Skipping auto-tag for conversation ${convo.id} (has special tag or archived)`);
+    }
+  }
+}
+
+// Send reply
+export async function sendReply(workspaceId: string, conversationId: string, to: string, body: string) {
+  const { gmail, workspace } = await getAuthedClient(workspaceId);
+
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: {
+      messages: { orderBy: { sentAt: "desc" } },
+      customer: true
+    }
+  });
+
+  if (!conversation) {
+    throw new Error("Conversation not found");
+  }
+
+  const threadId = conversation.gmailThreadId;
+  const lastMessage = conversation.messages[0];
+
+  const raw = [
+    `To: ${to}`,
+    `Subject: Re: ${conversation.subject || ""}`,
+    `In-Reply-To: ${lastMessage.gmailMessageId}`,
+    `References: ${lastMessage.gmailMessageId}`,
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    body,
+  ].join("\r\n");
+
+  const encodedMessage = Buffer.from(raw).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  const result = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: {
+      raw: encodedMessage,
+      threadId: threadId,
+    },
+  });
+
+  const now = new Date();
+  await prisma.message.create({
+    data: {
+      conversationId: conversation.id,
+      gmailMessageId: result.data.id!,
+      direction: "outbound",
+      fromEmail: workspace.gmailAccountEmail,
+      toEmails: [to] as any,
+      ccEmails: [] as any,
+      sentAt: now,
+      bodyHtml: body,
+      bodyText: body,
+      attachments: [] as any,
+    },
+  });
+
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+      lastMessageAt: now,
+      tags: (conversation.tags || []).filter(tag => tag !== "needs-reply")
+    },
+  });
+
+  return result.data;
+}
+
+// Send new email
+export async function sendNewEmail(workspaceId: string, to: string, subject: string, body: string) {
+  const { gmail, workspace } = await getAuthedClient(workspaceId);
+
+  const raw = [
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    body,
+  ].join("\r\n");
+
+  const encodedMessage = Buffer.from(raw).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  const result = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: {
+      raw: encodedMessage,
+    },
+  });
+
+  return result.data;
+}
+
+// Helper functions
+function getHeader(msg: any, name: string): string | undefined {
+  const h = msg.payload?.headers?.find((x: any) => (x.name || "").toLowerCase() === name.toLowerCase());
+  return h?.value;
+}
+
+function parseEmail(from: string): string {
+  const m = from.match(/<(.+?)>/);
+  return m ? m[1] : from;
+}
+
+function flattenParts(payload: any): { html?: string[]; text?: string[] } {
+  const out: { html?: string[]; text?: string[] } = {};
+  const walk = (p: any) => {
+    if (!p) return;
+    if (p.mimeType === "text/html" && p.body?.data) {
+      out.html = out.html || [];
+      out.html.push(Buffer.from(p.body.data, "base64").toString("utf8"));
+    }
+    if (p.mimeType === "text/plain" && p.body?.data) {
+      out.text = out.text || [];
+      out.text.push(Buffer.from(p.body.data, "base64").toString("utf8"));
+    }
+    (p.parts || []).forEach(walk);
+  };
+  walk(payload);
+  return out;
+}

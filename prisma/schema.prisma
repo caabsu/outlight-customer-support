@@ -5,6 +5,19 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Workspace {
+  id               String         @id @default(uuid())
+  name             String
+  gmailAccountEmail String        @unique
+  googleClientId   String
+  googleClientSecret String
+  createdAt        DateTime       @default(now())
+  customers        Customer[]
+  conversations    Conversation[]
+  oauthTokens      OAuthToken[]
 }
 
 model User {
@@ -18,16 +31,22 @@ model User {
 
 model Customer {
   id            String         @id @default(uuid())
-  primaryEmail  String         @unique
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId   String
+  primaryEmail  String
   name          String?
   createdAt     DateTime       @default(now())
   lastSeenAt    DateTime?
   conversations Conversation[]
+
+  @@unique([workspaceId, primaryEmail])
 }
 
 model Conversation {
   id                    String         @id @default(uuid())
-  gmailThreadId         String         @unique
+  workspace             Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId           String
+  gmailThreadId         String
   subject               String?
   customer              Customer       @relation(fields: [customerId], references: [id])
   customerId            String
@@ -46,6 +65,8 @@ model Conversation {
   aiSummaryGeneratedAt  DateTime?
   messages              Message[]
   draftResponse         DraftResponse?
+
+  @@unique([workspaceId, gmailThreadId])
 }
 
 model Message {
@@ -66,9 +87,11 @@ model Message {
 }
 
 model OAuthToken {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId  String    @unique
   provider     String
-  accountEmail String   @unique
+  accountEmail String
   accessToken  String
   refreshToken String
   expiry       DateTime
