@@ -250,6 +250,11 @@ export default function ConversationView() {
     params.set('page', page.toString());
     params.set('limit', limit.toString());
 
+    // CRITICAL: Always include workspaceId for proper filtering
+    if (currentWorkspaceId) {
+      params.set('workspaceId', currentWorkspaceId);
+    }
+
     if (showArchived) params.set('archived', 'true');
     if (showStarred) params.set('starred', 'true');
     if (excludeNonSupport) params.set('excludeNonSupport', 'true');
@@ -775,12 +780,15 @@ export default function ConversationView() {
 
       // Check if it's on current page
       const isOnCurrentPage = conversations.some(conv => conv.id === oldestConversation.id);
+      console.log(`[Oldest Unreplied] Is on current page (${pagination?.page}): ${isOnCurrentPage}`);
 
       if (isOnCurrentPage) {
         // INSTANT - already on current page
+        console.log(`[Oldest Unreplied] Selecting conversation on current page`);
         selectConversation(oldestConversation.id);
       } else if (pagination) {
         // Cross-page navigation - show loading
+        console.log(`[Oldest Unreplied] Starting cross-page navigation (total pages: ${pagination.totalPages})`);
         setNavigatingUnreplied(true);
         // Need to find which page has this conversation
         const oldestDate = new Date(oldestConversation.lastMessageAt).getTime();
@@ -790,28 +798,36 @@ export default function ConversationView() {
         let foundPage = 0;
 
         // Search strategy: oldest emails are usually on later pages
+        console.log(`[Oldest Unreplied] Date comparison - oldest: ${new Date(oldestDate).toISOString()}, current page oldest: ${new Date(currentPageOldest).toISOString()}, current page newest: ${new Date(currentPageNewest).toISOString()}`);
+
         if (oldestDate < currentPageOldest) {
           // Search forward through later pages (most likely)
+          console.log(`[Oldest Unreplied] Searching forward from page ${pagination.page + 1} to ${pagination.totalPages}`);
           for (let page = pagination.page + 1; page <= pagination.totalPages; page++) {
             const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
+              console.log(`[Oldest Unreplied] Searching page ${page}: ${convs.length} conversations`);
               if (convs.some((c: any) => c.id === oldestConversation.id)) {
                 foundPage = page;
+                console.log(`[Oldest Unreplied] Found on page ${page}!`);
                 break;
               }
             }
           }
         } else if (oldestDate > currentPageNewest) {
           // Search backward through earlier pages
+          console.log(`[Oldest Unreplied] Searching backward from page ${pagination.page - 1} to 1`);
           for (let page = pagination.page - 1; page >= 1; page--) {
             const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
+              console.log(`[Oldest Unreplied] Searching page ${page}: ${convs.length} conversations`);
               if (convs.some((c: any) => c.id === oldestConversation.id)) {
                 foundPage = page;
+                console.log(`[Oldest Unreplied] Found on page ${page}!`);
                 break;
               }
             }
@@ -820,14 +836,17 @@ export default function ConversationView() {
 
         // Full search fallback
         if (foundPage === 0) {
+          console.log(`[Oldest Unreplied] Smart search failed, doing full search of all ${pagination.totalPages} pages`);
           for (let page = 1; page <= pagination.totalPages; page++) {
             if (page === pagination.page) continue;
             const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
+              console.log(`[Oldest Unreplied] Full search page ${page}: ${convs.length} conversations`);
               if (convs.some((c: any) => c.id === oldestConversation.id)) {
                 foundPage = page;
+                console.log(`[Oldest Unreplied] Found on page ${page}!`);
                 break;
               }
             }
@@ -836,16 +855,24 @@ export default function ConversationView() {
 
         if (foundPage > 0 && foundPage !== pagination.page) {
           // Navigate to the page with the conversation
+          console.log(`[Oldest Unreplied] Navigating to page ${foundPage}`);
           await goToPage(foundPage);
           setTimeout(() => {
+            console.log(`[Oldest Unreplied] Selecting conversation after page load`);
             selectConversation(oldestConversation.id);
             setNavigatingUnreplied(false);
           }, 200);
+        } else if (foundPage === 0) {
+          console.error(`[Oldest Unreplied] Could not find conversation on any page!`);
+          alert("Could not find the oldest unreplied email. It may have been archived or deleted.");
+          setNavigatingUnreplied(false);
         } else {
+          console.log(`[Oldest Unreplied] Selecting on current page (foundPage: ${foundPage})`);
           selectConversation(oldestConversation.id);
           setNavigatingUnreplied(false);
         }
       } else {
+        console.log(`[Oldest Unreplied] No pagination, selecting directly`);
         selectConversation(oldestConversation.id);
         setNavigatingUnreplied(false);
       }
