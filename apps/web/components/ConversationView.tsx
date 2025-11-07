@@ -349,12 +349,25 @@ export default function ConversationView() {
         return res.json();
       })
       .then((data) => {
-        // Only save to state if this is a cached draft from database
-        if (data.fromDatabase) {
+        // CRITICAL FIX: Only save to state if this is a cached draft from database AND has valid draft content
+        // This prevents partial/incomplete drafts from being loaded and causing UI issues
+        if (data.fromDatabase && data.draft && data.draft.trim().length > 0) {
+          console.log(`[Draft Auto-Load] Successfully loaded valid draft for conversation ${selectedConversation.id}`);
           setDraftsByConversationId(prev => ({
             ...prev,
             [selectedConversation.id]: data
           }));
+        } else if (data.fromDatabase && (!data.draft || data.draft.trim().length === 0)) {
+          console.log(`[Draft Auto-Load] Skipping incomplete draft (no content) for conversation ${selectedConversation.id}`);
+          // Remove the incomplete draft from database
+          const deleteUrl = process.env.NODE_ENV === 'development'
+            ? `http://localhost:3001/conversations/${selectedConversation.id}/draft`
+            : `/api/conversations/${selectedConversation.id}/draft`;
+          fetch(deleteUrl, {
+            method: "DELETE",
+          }).catch(() => {
+            // Silently fail - draft deletion is not critical
+          });
         }
       })
       .catch((err) => {

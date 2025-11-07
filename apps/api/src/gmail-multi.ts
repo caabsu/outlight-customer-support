@@ -156,7 +156,7 @@ export async function pollOnce(req: Request, res: Response) {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const afterDate = Math.floor(sevenDaysAgo.getTime() / 1000);
 
-    console.log(`[Poll] Fetching emails from last 7 days (after ${sevenDaysAgo.toISOString()})...`);
+    console.log(`[SYNC] ${workspace.name}: Fetching emails from last 7 days (after ${sevenDaysAgo.toISOString()})...`);
 
     // Fetch from inbox with date filter (last 7 days)
     let pageToken: string | undefined;
@@ -172,7 +172,7 @@ export async function pollOnce(req: Request, res: Response) {
       });
 
       const threads = inboxRes.data.threads || [];
-      console.log(`[Poll] Inbox page ${pageCount + 1}: Found ${threads.length} threads`);
+      console.log(`[SYNC] ${workspace.name}: Inbox page ${pageCount + 1}: Found ${threads.length} threads`);
       threads.forEach((t) => t.id && allThreadIds.add(t.id));
 
       pageToken = inboxRes.data.nextPageToken || undefined;
@@ -323,8 +323,13 @@ async function ingestThread(gmail: any, workspace: any, threadId: string) {
     take: 1
   });
 
-  if (conversationMessages.length > 0) {
-    const lastMessage = conversationMessages[0];
+  if (conversationMessages.length === 0) {
+    console.log(`[INGEST] No messages found for conversation ${convo.id}, skipping auto-tag`);
+    return;
+  }
+
+  const lastMessage = conversationMessages[0];
+  if (lastMessage) {
 
     // CRITICAL: Always fetch fresh conversation data to avoid race conditions
     // This ensures we have the absolute latest tags before making auto-tag decisions
@@ -355,22 +360,33 @@ async function ingestThread(gmail: any, workspace: any, threadId: string) {
     // RULE: Add "needs-reply" if last message is inbound
     if (lastMessage.direction === "inbound") {
       if (!hasNeedsReply) {
-        console.log(`[INGEST] ➕ Adding needs-reply tag`);
-        await prisma.conversation.update({
-          where: { id: convo.id },
-          data: { tags: [...currentTags, "needs-reply"] }
-        });
+        console.log(`[INGEST] ➕ Adding needs-reply tag to conversation ${convo.id}`);
+        try {
+          await prisma.conversation.update({
+            where: { id: convo.id },
+            data: { tags: [...currentTags, "needs-reply"] }
+          });
+          console.log(`[INGEST] ✅ Successfully added needs-reply tag`);
+        } catch (error) {
+          console.error(`[INGEST] ❌ Failed to add needs-reply tag:`, error);
+        }
       } else {
         console.log(`[INGEST] ✓ Already has needs-reply tag`);
       }
-    } else {
-      // RULE: Remove "needs-reply" if last message is outbound
+    }
+    // RULE: Remove "needs-reply" if last message is outbound
+    else if (lastMessage.direction === "outbound") {
       if (hasNeedsReply) {
-        console.log(`[INGEST] ➖ Removing needs-reply tag (replied)`);
-        await prisma.conversation.update({
-          where: { id: convo.id },
-          data: { tags: currentTags.filter(tag => tag !== "needs-reply") }
-        });
+        console.log(`[INGEST] ➖ Removing needs-reply tag from conversation ${convo.id} (replied)`);
+        try {
+          await prisma.conversation.update({
+            where: { id: convo.id },
+            data: { tags: currentTags.filter(tag => tag !== "needs-reply") }
+          });
+          console.log(`[INGEST] ✅ Successfully removed needs-reply tag`);
+        } catch (error) {
+          console.error(`[INGEST] ❌ Failed to remove needs-reply tag:`, error);
+        }
       } else {
         console.log(`[INGEST] ✓ No needs-reply tag to remove`);
       }

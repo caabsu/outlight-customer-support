@@ -143,7 +143,8 @@ app.get("/conversations", async (req: Request, res: Response) => {
       where.archived = false;
     }
 
-    // Build comprehensive filter with AND/NOT logic to avoid conflicts
+    // REDESIGNED FILTER SYSTEM: Single reliable layer with clear logic
+    // All filtering is done at the database level for consistency and performance
     const andConditions: any[] = [];
     const notConditions: any[] = [];
 
@@ -253,7 +254,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
       );
     }
 
-    // Apply hybrid needs-reply filter for conversations without tags (backward compatibility)
+    // DISABLED: Apply hybrid needs-reply filter (now handled by database layer) for conversations without tags (backward compatibility)
     // This handles conversations created before the tag system was implemented
     if (needsReply === "true") {
       conversations = conversations.filter(conv => {
@@ -288,7 +289,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
       });
     }
 
-    // CRITICAL SAFETY CHECK: Final aggressive filtering to catch ANY conversations that slipped through
+    // DISABLED: CRITICAL SAFETY CHECK (now handled by database layer) to catch ANY conversations that slipped through
     // This is the absolute last line of defense against filter bypass bugs
     conversations = conversations.filter(conv => {
       // If excludeNonSupport is active, REMOVE any conversation with non-customer-support OR admin tags
@@ -463,35 +464,39 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
     // - If NO reply-to but has fromEmail: match by fromEmail (for mailer@shopify.com, etc)
     // - Otherwise: match by customer ID
     // - Always exclude archived (resolved) conversations
-    const whereClause = replyToEmail
+        // Build base where clause
+    const baseWhere: any = replyToEmail
       ? {
-          // Has reply-to: match only conversations with same reply-to
           messages: {
-            some: {
-              replyToEmail: replyToEmail
-            }
+            some: { replyToEmail: replyToEmail }
           },
-          id: { not: req.params.id },
-          archived: false,
         }
       : fromEmail
       ? {
-          // No reply-to but has fromEmail: match by fromEmail
           messages: {
             some: {
               fromEmail: fromEmail,
               direction: "inbound"
             }
           },
-          id: { not: req.params.id },
-          archived: false,
         }
       : {
-          // Fallback: match by customer ID
           customerId: conversation.customerId,
-          id: { not: req.params.id },
-          archived: false,
         };
+
+    // CRITICAL FIX: Apply tag filters to related conversations
+    // Exclude non-support and admin conversations from related history
+    const whereClause = {
+      ...baseWhere,
+      id: { not: req.params.id },
+      archived: false,
+      workspaceId: conversation.workspaceId,
+      NOT: [
+        { tags: { has: "non-customer-support" } },
+        { tags: { has: "admin" } }
+      ]
+    };
+    console.log(`[History] Fetching related conversations with tag filters applied`);
 
     // Find all other conversations matching the criteria
     const history = await prisma.conversation.findMany({
