@@ -208,9 +208,12 @@ app.get("/conversations", async (req: Request, res: Response) => {
       where.AND = andConditions;
     }
 
-    // CRITICAL: Apply NOT conditions (must not have any)
+    // CRITICAL BUG FIX: Prisma NOT array bug - wrap in OR to exclude ANY
     if (notConditions.length > 0) {
-      where.NOT = notConditions;
+      where.NOT = {
+        OR: notConditions
+      };
+      console.log(`[Filter] NOT filter with OR: excluding ANY of ${notConditions.length} tags`);
     }
 
     // Date range filter
