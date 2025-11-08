@@ -176,7 +176,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
 
     // Needs reply filter (has needs-reply tag)
     // Don't apply this if adminOnly is active (admin conversations might not have needs-reply)
-    if (needsReply === "true" && adminOnly !== "true") {
+    if (needsReply === "true") {
       andConditions.push({
         tags: {
           has: "needs-reply"

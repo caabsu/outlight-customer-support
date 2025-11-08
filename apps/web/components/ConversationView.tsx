@@ -1058,10 +1058,15 @@ export default function ConversationView() {
         [conversationId]: data
       }));
 
-      // Auto-open the draft popup when generation completes successfully
-      console.log(`[Draft] Opening draft popup`);
-      setShowDraftPopup(true);
-      setDraftMinimized(false);
+      // CRITICAL FIX: Only auto-open the draft popup if we're still on the same conversation
+      // This prevents the popup from opening for the wrong conversation if user switched
+      if (selectedConversation?.id === conversationId) {
+        console.log(`[Draft] Opening draft popup for current conversation ${conversationId}`);
+        setShowDraftPopup(true);
+        setDraftMinimized(false);
+      } else {
+        console.log(`[Draft] Draft generated for conversation ${conversationId}, but user switched to ${selectedConversation?.id}. Not opening popup.`);
+      }
 
       // Update conversation tags optimistically if draft added new tags
       if (data.tags && data.tags.length > 0) {
@@ -1075,9 +1080,14 @@ export default function ConversationView() {
       console.error("[Draft] Error generating draft:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to generate draft";
       setDraftError(errorMessage);
-      // Show error in popup so user can see what went wrong
-      setShowDraftPopup(true);
-      setDraftMinimized(false);
+      // CRITICAL FIX: Only show error in popup if we're still on the same conversation
+      if (selectedConversation?.id === conversationId) {
+        console.log(`[Draft] Showing error popup for current conversation ${conversationId}`);
+        setShowDraftPopup(true);
+        setDraftMinimized(false);
+      } else {
+        console.log(`[Draft] Error for conversation ${conversationId}, but user switched to ${selectedConversation?.id}. Not opening popup.`);
+      }
     } finally {
       // Clear loading state for this specific conversation
       setLoadingDraftByConversationId(prev => ({
