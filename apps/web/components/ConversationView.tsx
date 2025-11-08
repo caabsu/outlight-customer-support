@@ -2467,9 +2467,9 @@ export default function ConversationView() {
                   return;
                 }
 
-                // Check if draftData is valid (has required properties)
-                const hasValidDraft = draftData && draftData.draft;
-                console.log("[Draft Button] hasValidDraft:", hasValidDraft);
+                // CRITICAL FIX: Check if draftData is valid (has content AND non-empty)
+                const hasValidDraft = draftData && draftData.draft && draftData.draft.trim().length > 0;
+                console.log("[Draft Button] hasValidDraft:", hasValidDraft, "draftLength:", draftData?.draft?.length);
 
                 if (draftMinimized && showDraftPopup) {
                   console.log("[Draft Button] Unminimizing popup");
