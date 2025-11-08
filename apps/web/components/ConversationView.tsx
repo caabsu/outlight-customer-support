@@ -515,16 +515,14 @@ export default function ConversationView() {
       setDraftMinimized(false);
       setDraftError(null);
 
-      // Save the current conversation ID to re-select it after refresh
-      const currentConversationId = selectedConversation?.id;
-
-      // Refresh conversations to show the new message
+      // CRITICAL FIX: Don't re-select conversation after sending
+      // If filters are active (needs-reply), the conversation should disappear after sending
+      // Let the refresh handle selection naturally
       await refreshConversations();
 
-      // Re-select the conversation to keep it visible (using fetchAndSelectConversation to pin it)
-      if (currentConversationId) {
-        await fetchAndSelectConversation(currentConversationId);
-      }
+      // Note: We intentionally do NOT call fetchAndSelectConversation here
+      // because it pins the conversation, keeping it visible even if it doesn't match filters
+      // The conversation will naturally disappear if it no longer matches active filters
     } catch (error) {
       console.error("Failed to send message:", error);
       // Show error to user
