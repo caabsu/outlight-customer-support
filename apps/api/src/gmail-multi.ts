@@ -315,20 +315,43 @@ async function ingestThread(gmail: any, workspace: any, threadId: string, inboun
   const subject = getHeader(first, "subject") || "";
   const fromEmail = parseEmail(getHeader(first, "from") || "");
 
-  const customer = await prisma.customer.upsert({
-    where: {
-      workspaceId_primaryEmail: {
-        workspaceId: workspace.id,
-        primaryEmail: fromEmail
+  // Upsert customer with retry logic to handle race conditions
+  let customer;
+  let retries = 0;
+  const maxRetries = 3;
+
+  while (retries < maxRetries) {
+    try {
+      customer = await prisma.customer.upsert({
+        where: {
+          workspaceId_primaryEmail: {
+            workspaceId: workspace.id,
+            primaryEmail: fromEmail
+          }
+        },
+        update: { lastSeenAt: new Date() },
+        create: {
+          workspaceId: workspace.id,
+          primaryEmail: fromEmail,
+          name: null
+        },
+      });
+      break; // Success, exit retry loop
+    } catch (error: any) {
+      // Handle unique constraint race condition
+      if (error.code === 'P2002' && retries < maxRetries - 1) {
+        retries++;
+        console.log(`[INGEST] Retry ${retries}/${maxRetries} for customer upsert: ${fromEmail}`);
+        await new Promise(resolve => setTimeout(resolve, 100 * retries)); // Exponential backoff
+        continue;
       }
-    },
-    update: { lastSeenAt: new Date() },
-    create: {
-      workspaceId: workspace.id,
-      primaryEmail: fromEmail,
-      name: null
-    },
-  });
+      throw error; // Re-throw if not a constraint error or max retries reached
+    }
+  }
+
+  if (!customer) {
+    throw new Error(`Failed to upsert customer after ${maxRetries} retries: ${fromEmail}`);
+  }
 
   const lastInternal = messages[messages.length - 1].internalDate!;
   const convo = await prisma.conversation.upsert({
