@@ -166,7 +166,7 @@ export async function pollOnce(req: Request, res: Response) {
     do {
       const inboxRes = await gmail.users.threads.list({
         userId: "me",
-        q: `in:inbox after:${afterDate}`, // Gmail search query for last 7 days
+        q: `in:inbox -in:draft after:${afterDate}`, // Gmail search query for last 7 days, excluding drafts
         maxResults: 100,
         pageToken,
       });
@@ -188,7 +188,7 @@ export async function pollOnce(req: Request, res: Response) {
     do {
       const sentRes = await gmail.users.threads.list({
         userId: "me",
-        q: `in:sent after:${afterDate}`, // Gmail search query for last 7 days
+        q: `in:sent -in:draft after:${afterDate}`, // Gmail search query for last 7 days, excluding drafts
         maxResults: 100,
         pageToken,
       });
@@ -290,6 +290,13 @@ async function ingestThread(gmail: any, workspace: any, threadId: string) {
 
   // Process all messages in parallel
   await Promise.all(messages.map(async (m: any) => {
+    // CRITICAL: Skip draft messages - they should not be treated as sent/received emails
+    const labelIds = m.labelIds || [];
+    if (labelIds.includes("DRAFT")) {
+      console.log(`[INGEST] Skipping draft message ${m.id} in thread ${threadId}`);
+      return;
+    }
+
     const dir = (getHeader(m, "from") || "").includes(workspace.gmailAccountEmail) ? "outbound" : "inbound";
     const sentAt = new Date(Number(m.internalDate!));
     const { html, text } = flattenParts(m.payload);
