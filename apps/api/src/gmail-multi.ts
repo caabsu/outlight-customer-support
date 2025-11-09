@@ -255,6 +255,7 @@ export async function pollOnce(req: Request, res: Response) {
     const errors: any[] = [];
     let skippedCount = 0;
     const BATCH_SIZE = 20; // Process 20 threads at a time in parallel
+    const allResults: PromiseSettledResult<void>[] = [];
 
     // Process threads in parallel batches
     for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
@@ -293,13 +294,12 @@ export async function pollOnce(req: Request, res: Response) {
         }
       });
 
-      await Promise.allSettled(batchPromises);
+      const batchResults = await Promise.allSettled(batchPromises);
+      allResults.push(...batchResults);
     }
 
-    const results = threadIds.map(() => ({ status: 'fulfilled' as const, value: undefined }));
-
     // Log summary of failed threads
-    const failedCount = results.filter(r => r.status === 'rejected').length;
+    const failedCount = allResults.filter(r => r.status === 'rejected').length;
     if (failedCount > 0) {
       console.error(`[POLL] ⚠️  ${failedCount} threads failed to ingest out of ${threadIds.length}`);
       console.error(`[POLL] Failed threads:`, errors);
