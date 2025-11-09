@@ -300,12 +300,24 @@ async function ingestThread(gmail: any, workspace: any, threadId: string, inboun
       console.log(`[INGEST] ⏭️  Skipping thread ${threadId} - last inbound: ${lastInboundDate?.toISOString() || 'never'}, subject: ${subject.substring(0, 50)}`);
 
       // Delete conversation if it exists (it's now too old)
-      await prisma.conversation.deleteMany({
+      // First delete messages, then delete conversation (foreign key constraint)
+      const existingConvo = await prisma.conversation.findUnique({
         where: {
-          workspaceId: workspace.id,
-          gmailThreadId: threadId
+          workspaceId_gmailThreadId: {
+            workspaceId: workspace.id,
+            gmailThreadId: threadId
+          }
         }
       });
+
+      if (existingConvo) {
+        await prisma.message.deleteMany({
+          where: { conversationId: existingConvo.id }
+        });
+        await prisma.conversation.delete({
+          where: { id: existingConvo.id }
+        });
+      }
 
       return true; // Thread was skipped
     }
@@ -315,42 +327,41 @@ async function ingestThread(gmail: any, workspace: any, threadId: string, inboun
   const subject = getHeader(first, "subject") || "";
   const fromEmail = parseEmail(getHeader(first, "from") || "");
 
-  // Upsert customer with retry logic to handle race conditions
+  // Upsert customer - if race condition occurs, just fetch existing
   let customer;
-  let retries = 0;
-  const maxRetries = 3;
-
-  while (retries < maxRetries) {
-    try {
-      customer = await prisma.customer.upsert({
+  try {
+    customer = await prisma.customer.upsert({
+      where: {
+        workspaceId_primaryEmail: {
+          workspaceId: workspace.id,
+          primaryEmail: fromEmail
+        }
+      },
+      update: { lastSeenAt: new Date() },
+      create: {
+        workspaceId: workspace.id,
+        primaryEmail: fromEmail,
+        name: null
+      },
+    });
+  } catch (error: any) {
+    // If unique constraint race condition, just fetch the existing customer
+    if (error.code === 'P2002') {
+      console.log(`[INGEST] Race condition for ${fromEmail}, fetching existing customer`);
+      customer = await prisma.customer.findUnique({
         where: {
           workspaceId_primaryEmail: {
             workspaceId: workspace.id,
             primaryEmail: fromEmail
           }
-        },
-        update: { lastSeenAt: new Date() },
-        create: {
-          workspaceId: workspace.id,
-          primaryEmail: fromEmail,
-          name: null
-        },
+        }
       });
-      break; // Success, exit retry loop
-    } catch (error: any) {
-      // Handle unique constraint race condition
-      if (error.code === 'P2002' && retries < maxRetries - 1) {
-        retries++;
-        console.log(`[INGEST] Retry ${retries}/${maxRetries} for customer upsert: ${fromEmail}`);
-        await new Promise(resolve => setTimeout(resolve, 100 * retries)); // Exponential backoff
-        continue;
+      if (!customer) {
+        throw new Error(`Customer not found after race condition: ${fromEmail}`);
       }
-      throw error; // Re-throw if not a constraint error or max retries reached
+    } else {
+      throw error;
     }
-  }
-
-  if (!customer) {
-    throw new Error(`Failed to upsert customer after ${maxRetries} retries: ${fromEmail}`);
   }
 
   const lastInternal = messages[messages.length - 1].internalDate!;
