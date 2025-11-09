@@ -368,9 +368,28 @@ async function ingestThread(gmail: any, workspace: any, threadId: string): Promi
 
     console.log(`[INGEST] ${workspace.name} | ${freshConvo.subject} | Thread: ${freshConvo.gmailThreadId.substring(0, 8)}... | Tags: ${JSON.stringify(currentTags)} | LastMsg: ${lastMessage.direction} | NonSupport: ${isNonSupport} | Archived: ${isArchived} | Admin: ${isAdmin}`);
 
-    // RULE: Never auto-tag if conversation has special tags or is archived
-    if (isNonSupport || isArchived || isAdmin) {
-      console.log(`[INGEST] ⏭️  Skipping auto-tag (special status)`);
+    // RULE: Skip archived conversations entirely
+    if (isArchived) {
+      console.log(`[INGEST] ⏭️  Skipping auto-tag (archived)`);
+      return;
+    }
+
+    // RULE: For non-support or admin conversations, ensure needs-reply is removed if present
+    if (isNonSupport || isAdmin) {
+      if (hasNeedsReply) {
+        console.log(`[INGEST] 🧹 Removing stale needs-reply tag from non-support/admin conversation ${convo.id}`);
+        try {
+          await prisma.conversation.update({
+            where: { id: convo.id },
+            data: { tags: currentTags.filter(tag => tag !== "needs-reply") }
+          });
+          console.log(`[INGEST] ✅ Successfully removed stale needs-reply tag`);
+        } catch (error) {
+          console.error(`[INGEST] ❌ Failed to remove stale needs-reply tag:`, error);
+        }
+      } else {
+        console.log(`[INGEST] ✓ Non-support/admin conversation correctly has no needs-reply tag`);
+      }
       return;
     }
 
