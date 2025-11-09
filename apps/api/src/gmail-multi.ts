@@ -151,18 +151,17 @@ export async function pollOnce(req: Request, res: Response) {
     let existingCount = 0;
     const allThreadIds = new Set<string>();
 
-    // Fetch a reasonable window of threads (45 days)
-    // We'll filter by last INBOUND message date during ingestion
-    // 45 days balances catching old threads with new replies vs. timeout limits
-    const fortyFiveDaysAgo = new Date();
-    fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
-    const afterDate = Math.floor(fortyFiveDaysAgo.getTime() / 1000);
+    // Fetch 60-day window to catch old threads with new customer replies
+    // Process in batches to avoid timeout
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+    const afterDate = Math.floor(sixtyDaysAgo.getTime() / 1000);
 
     // We only want threads with inbound messages from the last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    console.log(`[SYNC] ${workspace.name}: Fetching threads from last 45 days, filtering for inbound activity within 30 days...`);
+    console.log(`[SYNC] ${workspace.name}: Fetching threads from last 60 days, filtering for inbound activity within 30 days...`);
 
     // Fetch ALL emails (not just inbox/sent) excluding spam, trash, and drafts
     // This ensures we get emails even if they've been archived or have special labels
@@ -173,7 +172,7 @@ export async function pollOnce(req: Request, res: Response) {
     do {
       const allEmailsRes = await gmail.users.threads.list({
         userId: "me",
-        // Get ALL emails from last 45 days, excluding spam, trash, and drafts
+        // Get ALL emails from last 60 days, excluding spam, trash, and drafts
         q: `-in:spam -in:trash -in:draft after:${afterDate}`,
         maxResults: 100,
         pageToken,
@@ -187,9 +186,9 @@ export async function pollOnce(req: Request, res: Response) {
       pageCount++;
     } while (pageToken && pageCount < maxPages);
 
-    console.log(`[Poll] Total threads fetched from last 45 days: ${allThreadIds.size}`);
+    console.log(`[Poll] Total threads fetched from last 60 days: ${allThreadIds.size}`);
 
-    // Ingest each thread (limit to 500 to avoid timeouts)
+    // Process threads in batches to avoid timeout
     const allThreadIds_array = Array.from(allThreadIds);
     const threadIds = allThreadIds_array.slice(0, 500);
 
@@ -197,41 +196,51 @@ export async function pollOnce(req: Request, res: Response) {
       console.log(`[POLL] ⚠️  Limiting to 500 most recent threads (found ${allThreadIds_array.length})`);
     }
 
-    console.log(`[POLL] Workspace ${workspace.name}: Processing ${threadIds.length} threads`);
+    console.log(`[POLL] Workspace ${workspace.name}: Processing ${threadIds.length} threads in batches...`);
 
     const errors: any[] = [];
     let skippedCount = 0;
+    const BATCH_SIZE = 50; // Process 50 threads at a time
+    const results: PromiseSettledResult<void>[] = [];
 
-    const results = await Promise.allSettled(
-      threadIds.map(async (threadId) => {
-        try {
-          const existing = await prisma.conversation.findUnique({
-            where: {
-              workspaceId_gmailThreadId: {
-                workspaceId: workspace.id,
-                gmailThreadId: threadId
+    // Process in batches
+    for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
+      const batch = threadIds.slice(i, i + BATCH_SIZE);
+      console.log(`[POLL] Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(threadIds.length / BATCH_SIZE)} (${batch.length} threads)`);
+
+      const batchResults = await Promise.allSettled(
+        batch.map(async (threadId) => {
+          try {
+            const existing = await prisma.conversation.findUnique({
+              where: {
+                workspaceId_gmailThreadId: {
+                  workspaceId: workspace.id,
+                  gmailThreadId: threadId
+                }
               }
+            });
+
+            if (existing) {
+              existingCount++;
+            } else {
+              newCount++;
             }
-          });
 
-          if (existing) {
-            existingCount++;
-          } else {
-            newCount++;
+            // Pass the 30-day threshold to filter by last inbound message
+            const wasSkipped = await ingestThread(gmail, workspace, threadId, thirtyDaysAgo);
+            if (wasSkipped) {
+              skippedCount++;
+            }
+          } catch (err) {
+            console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
+            errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
+            throw err;
           }
+        })
+      );
 
-          // Pass the 30-day threshold to filter by last inbound message
-          const wasSkipped = await ingestThread(gmail, workspace, threadId, thirtyDaysAgo);
-          if (wasSkipped) {
-            skippedCount++;
-          }
-        } catch (err) {
-          console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
-          errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
-          throw err;
-        }
-      })
-    );
+      results.push(...batchResults);
+    }
 
     // Log summary of failed threads
     const failedCount = results.filter(r => r.status === 'rejected').length;
