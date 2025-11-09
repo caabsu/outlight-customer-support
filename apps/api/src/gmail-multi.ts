@@ -155,12 +155,10 @@ export async function pollOnce(req: Request, res: Response) {
 
     console.log(`[SYNC] ${workspace.name}: Fetching most recent threads (NO DATE FILTER - sorted by recent activity)...`);
 
-    // Fetch threads sorted by most recent activity (NO after: filter)
-    // Gmail naturally returns threads sorted by most recent message
-    // This will catch old threads with new replies
+    // Fetch ALL threads (no limits, no date filters)
+    // Gmail returns threads sorted by most recent activity
     let pageToken: string | undefined;
     let pageCount = 0;
-    const maxPages = 5; // Fetch 500 threads (5 pages × 100 per page)
 
     do {
       const allEmailsRes = await gmail.users.threads.list({
@@ -178,122 +176,57 @@ export async function pollOnce(req: Request, res: Response) {
 
       pageToken = allEmailsRes.data.nextPageToken || undefined;
       pageCount++;
-    } while (pageToken && pageCount < maxPages);
 
-    console.log(`[Poll] Total threads fetched (sorted by recent activity): ${allThreadIds.size}`);
+      // Safety limit: stop at 10 pages (1000 threads) to avoid extreme timeouts
+      if (pageCount >= 10) {
+        console.log(`[SYNC] Reached 10 page limit, stopping fetch`);
+        break;
+      }
+    } while (pageToken);
 
-    // Process threads in batches to avoid timeout
+    console.log(`[SYNC] Total threads fetched: ${allThreadIds.size}`);
+
+    // Process ALL threads (no limit)
     const allThreadIds_array = Array.from(allThreadIds);
-    const threadIds = allThreadIds_array.slice(0, 100);
+    const threadIds = allThreadIds_array;
 
-    if (allThreadIds_array.length > 100) {
-      console.log(`[POLL] ⚠️  Limiting to 100 most recent threads (found ${allThreadIds_array.length})`);
-    }
-
-    // STEP 1: Extract all unique customer emails from threads (metadata only - fast!)
-    console.log(`[POLL] Step 1/3: Extracting customer emails from ${threadIds.length} threads...`);
-    const customerEmails = new Set<string>();
-
-    const metadataPromises = threadIds.map(async (threadId) => {
-      try {
-        const thread = await gmail.users.threads.get({
-          userId: "me",
-          id: threadId,
-          format: "metadata",
-          metadataHeaders: ["From"]
-        });
-
-        const messages = thread.data.messages || [];
-        for (const m of messages) {
-          const headers = m.payload?.headers || [];
-          const from = headers.find((h: any) => h.name.toLowerCase() === "from")?.value || "";
-
-          if (from && !from.includes(workspace.gmailAccountEmail)) {
-            const emailMatch = from.match(/<(.+?)>/) || [null, from];
-            const email = (emailMatch[1] || from).trim().toLowerCase();
-            if (email.includes("@")) {
-              customerEmails.add(email);
-            }
-          }
-        }
-      } catch (err) {
-        // Ignore - we'll handle errors in the main processing
-      }
-    });
-
-    await Promise.allSettled(metadataPromises);
-    console.log(`[POLL] Found ${customerEmails.size} unique customers`);
-
-    // STEP 2: Pre-create all customers to avoid race conditions
-    console.log(`[POLL] Step 2/3: Pre-creating ${customerEmails.size} customers...`);
-    const customerPromises = Array.from(customerEmails).map(async (email) => {
-      try {
-        await prisma.customer.upsert({
-          where: {
-            workspaceId_primaryEmail: {
-              workspaceId: workspace.id,
-              primaryEmail: email
-            }
-          },
-          update: { lastSeenAt: new Date() },
-          create: {
-            workspaceId: workspace.id,
-            primaryEmail: email,
-            name: null
-          }
-        });
-      } catch (err) {
-        // Ignore - will retry during thread processing
-      }
-    });
-
-    await Promise.allSettled(customerPromises);
-    console.log(`[POLL] Step 3/3: Processing ${threadIds.length} threads in parallel batches...`);
+    console.log(`[POLL] Processing ${threadIds.length} threads SEQUENTIALLY (reliable, no race conditions)...`);
 
     const errors: any[] = [];
-    const BATCH_SIZE = 20; // Process 20 threads at a time in parallel
-    const allResults: PromiseSettledResult<void>[] = [];
 
-    // Process threads in parallel batches
-    for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
-      const batch = threadIds.slice(i, i + BATCH_SIZE);
-      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-      const totalBatches = Math.ceil(threadIds.length / BATCH_SIZE);
+    // Process threads SEQUENTIALLY - simple and reliable
+    for (let i = 0; i < threadIds.length; i++) {
+      const threadId = threadIds[i];
 
-      console.log(`[POLL] Batch ${batchNum}/${totalBatches} (${batch.length} threads)...`);
+      // Log progress every 50 threads
+      if (i % 50 === 0 && i > 0) {
+        console.log(`[POLL] Progress: ${i}/${threadIds.length} threads`);
+      }
 
-      const batchPromises = batch.map(async (threadId) => {
-        try {
-          const existing = await prisma.conversation.findUnique({
-            where: {
-              workspaceId_gmailThreadId: {
-                workspaceId: workspace.id,
-                gmailThreadId: threadId
-              }
+      try {
+        const existing = await prisma.conversation.findUnique({
+          where: {
+            workspaceId_gmailThreadId: {
+              workspaceId: workspace.id,
+              gmailThreadId: threadId
             }
-          });
-
-          if (existing) {
-            existingCount++;
-          } else {
-            newCount++;
           }
+        });
 
-          // Ingest all threads (no filtering)
-          await ingestThread(gmail, workspace, threadId);
-        } catch (err) {
-          console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
-          errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
-          throw err;
+        if (existing) {
+          existingCount++;
+        } else {
+          newCount++;
         }
-      });
 
-      const batchResults = await Promise.allSettled(batchPromises);
-      allResults.push(...batchResults);
+        await ingestThread(gmail, workspace, threadId);
+      } catch (err) {
+        console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
+        errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
+      }
     }
 
-    // Log summary of failed threads
-    const failedCount = allResults.filter(r => r.status === 'rejected').length;
+    const failedCount = errors.length;
     if (failedCount > 0) {
       console.error(`[POLL] ⚠️  ${failedCount} threads failed to ingest out of ${threadIds.length}`);
       console.error(`[POLL] Failed threads:`, errors);
@@ -324,51 +257,8 @@ async function ingestThread(gmail: any, workspace: any, threadId: string): Promi
   const subject = getHeader(first, "subject") || "";
   const fromEmail = parseEmail(getHeader(first, "from") || "");
 
-  // Get customer (should already be pre-created, but create if missing)
-  let customer = await prisma.customer.findUnique({
-    where: {
-      workspaceId_primaryEmail: {
-        workspaceId: workspace.id,
-        primaryEmail: fromEmail
-      }
-    }
-  });
-
-  if (!customer) {
-    // Customer doesn't exist yet, try to create it
-    try {
-      customer = await prisma.customer.create({
-        data: {
-          workspaceId: workspace.id,
-          primaryEmail: fromEmail,
-          name: null
-        }
-      });
-    } catch (error: any) {
-      // Race condition - another thread created it, fetch it
-      if (error.code === 'P2002') {
-        customer = await prisma.customer.findUnique({
-          where: {
-            workspaceId_primaryEmail: {
-              workspaceId: workspace.id,
-              primaryEmail: fromEmail
-            }
-          }
-        });
-        if (!customer) {
-          throw new Error(`Customer ${fromEmail} not found after race condition`);
-        }
-      } else {
-        throw error;
-      }
-    }
-  } else {
-    // Update last seen
-    await prisma.customer.update({
-      where: { id: customer.id },
-      data: { lastSeenAt: new Date() }
-    });
-  }
+  // Get or create customer with retry logic
+  const customer = await upsertCustomerWithRetry(workspace.id, fromEmail);
 
   const lastInternal = messages[messages.length - 1].internalDate!;
   const convo = await prisma.conversation.upsert({
@@ -610,6 +500,36 @@ export async function sendNewEmail(workspaceId: string, to: string, subject: str
 }
 
 // Helper functions
+async function upsertCustomerWithRetry(workspaceId: string, email: string, maxRetries = 3): Promise<any> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await prisma.customer.upsert({
+        where: {
+          workspaceId_primaryEmail: {
+            workspaceId: workspaceId,
+            primaryEmail: email
+          }
+        },
+        update: { lastSeenAt: new Date() },
+        create: {
+          workspaceId: workspaceId,
+          primaryEmail: email,
+          name: null
+        }
+      });
+    } catch (error: any) {
+      if (error.code === 'P2002' && attempt < maxRetries) {
+        // Unique constraint violation - wait a bit and retry
+        console.log(`[RETRY] Customer upsert conflict for ${email}, attempt ${attempt}/${maxRetries}`);
+        await new Promise(resolve => setTimeout(resolve, 50 * attempt));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error(`Failed to upsert customer ${email} after ${maxRetries} attempts`);
+}
+
 function getHeader(msg: any, name: string): string | undefined {
   const h = msg.payload?.headers?.find((x: any) => (x.name || "").toLowerCase() === name.toLowerCase());
   return h?.value;
