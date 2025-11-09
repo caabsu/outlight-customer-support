@@ -324,21 +324,51 @@ async function ingestThread(gmail: any, workspace: any, threadId: string): Promi
   const subject = getHeader(first, "subject") || "";
   const fromEmail = parseEmail(getHeader(first, "from") || "");
 
-  // Get or create customer (already pre-created in pollOnce, but upsert as fallback)
-  const customer = await prisma.customer.upsert({
+  // Get customer (should already be pre-created, but create if missing)
+  let customer = await prisma.customer.findUnique({
     where: {
       workspaceId_primaryEmail: {
         workspaceId: workspace.id,
         primaryEmail: fromEmail
       }
-    },
-    update: { lastSeenAt: new Date() },
-    create: {
-      workspaceId: workspace.id,
-      primaryEmail: fromEmail,
-      name: null
-    },
+    }
   });
+
+  if (!customer) {
+    // Customer doesn't exist yet, try to create it
+    try {
+      customer = await prisma.customer.create({
+        data: {
+          workspaceId: workspace.id,
+          primaryEmail: fromEmail,
+          name: null
+        }
+      });
+    } catch (error: any) {
+      // Race condition - another thread created it, fetch it
+      if (error.code === 'P2002') {
+        customer = await prisma.customer.findUnique({
+          where: {
+            workspaceId_primaryEmail: {
+              workspaceId: workspace.id,
+              primaryEmail: fromEmail
+            }
+          }
+        });
+        if (!customer) {
+          throw new Error(`Customer ${fromEmail} not found after race condition`);
+        }
+      } else {
+        throw error;
+      }
+    }
+  } else {
+    // Update last seen
+    await prisma.customer.update({
+      where: { id: customer.id },
+      data: { lastSeenAt: new Date() }
+    });
+  }
 
   const lastInternal = messages[messages.length - 1].internalDate!;
   const convo = await prisma.conversation.upsert({
