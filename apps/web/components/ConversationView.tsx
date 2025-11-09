@@ -1948,7 +1948,7 @@ export default function ConversationView() {
               ))}
             </>
           ) : filteredHistory.length > 0 ? (
-            filteredHistory.slice(0, 4).map((conv) => {
+            filteredHistory.map((conv) => {
               const isExpanded = expandedPreviews.has(conv.id);
               const lastMessage = conv.messages && conv.messages.length > 0 ? conv.messages[conv.messages.length - 1] : null;
               const messagePreview = lastMessage
@@ -2849,6 +2849,44 @@ export default function ConversationView() {
                 }`}
               >
                 📩 Needs Reply {showNeedsReplyOnly ? '✓' : ''}
+              </button>
+              <button
+                onClick={async () => {
+                  if (filteredHistory.length === 0) return;
+
+                  const confirmed = confirm(`Mark all ${filteredHistory.length} filtered conversation(s) as non-support?`);
+                  if (!confirmed) return;
+
+                  try {
+                    // Update all filtered conversations
+                    const updatePromises = filteredHistory.map(conv => {
+                      const currentTags = conv.tags || [];
+                      const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "non-customer-support"];
+
+                      return fetch(`/api/conversations/${conv.id}/tags`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tags: updatedTags }),
+                      });
+                    });
+
+                    await Promise.all(updatePromises);
+
+                    // Remove all marked conversations from history
+                    const markedIds = new Set(filteredHistory.map(c => c.id));
+                    setHistory(prevHistory => prevHistory.filter(c => !markedIds.has(c.id)));
+
+                    // Refresh conversations list
+                    await refreshConversations();
+                  } catch (error) {
+                    console.error('Failed to bulk mark as non-support:', error);
+                    alert('Failed to mark conversations as non-support. Please try again.');
+                  }
+                }}
+                className="px-3 py-1.5 rounded text-xs font-sans font-medium transition-colors bg-red-100 text-red-700 border border-red-200 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={filteredHistory.length === 0}
+              >
+                🚫 Bulk Mark Non-Support ({filteredHistory.length})
               </button>
               <span className="text-xs font-sans text-muted-foreground">
                 Showing {filteredHistory.length} of {history.length} conversations
