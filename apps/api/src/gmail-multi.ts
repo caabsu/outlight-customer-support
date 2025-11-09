@@ -151,29 +151,25 @@ export async function pollOnce(req: Request, res: Response) {
     let existingCount = 0;
     const allThreadIds = new Set<string>();
 
-    // Fetch 60-day window to catch old threads with new customer replies
-    // Process in batches to avoid timeout
-    const sixtyDaysAgo = new Date();
-    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-    const afterDate = Math.floor(sixtyDaysAgo.getTime() / 1000);
-
     // We only want threads with inbound messages from the last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    console.log(`[SYNC] ${workspace.name}: Fetching threads from last 60 days, filtering for inbound activity within 30 days...`);
+    console.log(`[SYNC] ${workspace.name}: Fetching most recent threads (NO DATE FILTER - sorted by recent activity)...`);
 
-    // Fetch ALL emails (not just inbox/sent) excluding spam, trash, and drafts
-    // This ensures we get emails even if they've been archived or have special labels
+    // Fetch threads sorted by most recent activity (NO after: filter)
+    // Gmail naturally returns threads sorted by most recent message
+    // This will catch old threads with new replies
     let pageToken: string | undefined;
     let pageCount = 0;
-    const maxPages = 10; // Limit to 1000 threads max (10 pages × 100 per page) to avoid timeouts
+    const maxPages = 5; // Fetch 500 threads (5 pages × 100 per page)
 
     do {
       const allEmailsRes = await gmail.users.threads.list({
         userId: "me",
-        // Get ALL emails from last 60 days, excluding spam, trash, and drafts
-        q: `-in:spam -in:trash -in:draft after:${afterDate}`,
+        // NO DATE FILTER - just exclude spam, trash, and drafts
+        // Gmail returns threads sorted by most recent activity
+        q: `-in:spam -in:trash -in:draft`,
         maxResults: 100,
         pageToken,
       });
@@ -186,54 +182,118 @@ export async function pollOnce(req: Request, res: Response) {
       pageCount++;
     } while (pageToken && pageCount < maxPages);
 
-    console.log(`[Poll] Total threads fetched from last 60 days: ${allThreadIds.size}`);
+    console.log(`[Poll] Total threads fetched (sorted by recent activity): ${allThreadIds.size}`);
 
     // Process threads in batches to avoid timeout
     const allThreadIds_array = Array.from(allThreadIds);
-    const threadIds = allThreadIds_array.slice(0, 30);
+    const threadIds = allThreadIds_array.slice(0, 100);
 
-    if (allThreadIds_array.length > 30) {
-      console.log(`[POLL] ⚠️  Limiting to 30 most recent threads (found ${allThreadIds_array.length})`);
+    if (allThreadIds_array.length > 100) {
+      console.log(`[POLL] ⚠️  Limiting to 100 most recent threads (found ${allThreadIds_array.length})`);
     }
 
-    console.log(`[POLL] Workspace ${workspace.name}: Processing ${threadIds.length} threads sequentially...`);
+    // STEP 1: Extract all unique customer emails from threads (metadata only - fast!)
+    console.log(`[POLL] Step 1/3: Extracting customer emails from ${threadIds.length} threads...`);
+    const customerEmails = new Set<string>();
+
+    const metadataPromises = threadIds.map(async (threadId) => {
+      try {
+        const thread = await gmail.users.threads.get({
+          userId: "me",
+          id: threadId,
+          format: "metadata",
+          metadataHeaders: ["From"]
+        });
+
+        const messages = thread.data.messages || [];
+        for (const m of messages) {
+          const headers = m.payload?.headers || [];
+          const from = headers.find((h: any) => h.name.toLowerCase() === "from")?.value || "";
+
+          if (from && !from.includes(workspace.gmailAccountEmail)) {
+            const emailMatch = from.match(/<(.+?)>/) || [null, from];
+            const email = (emailMatch[1] || from).trim().toLowerCase();
+            if (email.includes("@")) {
+              customerEmails.add(email);
+            }
+          }
+        }
+      } catch (err) {
+        // Ignore - we'll handle errors in the main processing
+      }
+    });
+
+    await Promise.allSettled(metadataPromises);
+    console.log(`[POLL] Found ${customerEmails.size} unique customers`);
+
+    // STEP 2: Pre-create all customers to avoid race conditions
+    console.log(`[POLL] Step 2/3: Pre-creating ${customerEmails.size} customers...`);
+    const customerPromises = Array.from(customerEmails).map(async (email) => {
+      try {
+        await prisma.customer.upsert({
+          where: {
+            workspaceId_primaryEmail: {
+              workspaceId: workspace.id,
+              primaryEmail: email
+            }
+          },
+          update: { lastSeenAt: new Date() },
+          create: {
+            workspaceId: workspace.id,
+            primaryEmail: email,
+            name: null
+          }
+        });
+      } catch (err) {
+        // Ignore - will retry during thread processing
+      }
+    });
+
+    await Promise.allSettled(customerPromises);
+    console.log(`[POLL] Step 3/3: Processing ${threadIds.length} threads in parallel batches...`);
 
     const errors: any[] = [];
     let skippedCount = 0;
+    const BATCH_SIZE = 20; // Process 20 threads at a time in parallel
 
-    // Process threads SEQUENTIALLY to avoid race conditions and stay under timeout
-    for (let i = 0; i < threadIds.length; i++) {
-      const threadId = threadIds[i];
+    // Process threads in parallel batches
+    for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
+      const batch = threadIds.slice(i, i + BATCH_SIZE);
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(threadIds.length / BATCH_SIZE);
 
-      if (i % 10 === 0 && i > 0) {
-        console.log(`[POLL] Progress: ${i}/${threadIds.length} threads processed`);
-      }
+      console.log(`[POLL] Batch ${batchNum}/${totalBatches} (${batch.length} threads)...`);
 
-      try {
-        const existing = await prisma.conversation.findUnique({
-          where: {
-            workspaceId_gmailThreadId: {
-              workspaceId: workspace.id,
-              gmailThreadId: threadId
+      const batchPromises = batch.map(async (threadId) => {
+        try {
+          const existing = await prisma.conversation.findUnique({
+            where: {
+              workspaceId_gmailThreadId: {
+                workspaceId: workspace.id,
+                gmailThreadId: threadId
+              }
             }
+          });
+
+          if (existing) {
+            existingCount++;
+          } else {
+            newCount++;
           }
-        });
 
-        if (existing) {
-          existingCount++;
-        } else {
-          newCount++;
+          // Pass the 30-day threshold to filter by last inbound message
+          const wasSkipped = await ingestThread(gmail, workspace, threadId, thirtyDaysAgo);
+          if (wasSkipped) {
+            skippedCount++;
+          }
+        } catch (err) {
+          console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
+          errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
+          throw err;
         }
+      });
 
-        // Pass the 30-day threshold to filter by last inbound message
-        const wasSkipped = await ingestThread(gmail, workspace, threadId, thirtyDaysAgo);
-        if (wasSkipped) {
-          skippedCount++;
-        }
-      } catch (err) {
-        console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
-        errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
-      }
+      await Promise.allSettled(batchPromises);
     }
 
     const results = threadIds.map(() => ({ status: 'fulfilled' as const, value: undefined }));
