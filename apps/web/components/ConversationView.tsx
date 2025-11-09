@@ -1836,7 +1836,7 @@ export default function ConversationView() {
               setReplyText(e.currentTarget.textContent || "");
             }}
             data-placeholder="Type your reply..."
-            className="w-full min-h-32 p-4 font-sans bg-white rounded-lg border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none"
+            className="w-full min-h-32 max-h-64 p-4 font-sans bg-white rounded-lg border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none"
             style={{
               whiteSpace: 'pre-wrap',
               wordWrap: 'break-word'
@@ -3173,7 +3173,7 @@ export default function ConversationView() {
                   setComposerBody(e.currentTarget.textContent || "");
                 }}
                 data-placeholder="Type your message here..."
-                className="w-full min-h-[300px] px-4 py-3 font-sans bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-slate-900 overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none"
+                className="w-full min-h-[300px] max-h-[500px] px-4 py-3 font-sans bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-slate-900 overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none"
                 style={{
                   whiteSpace: 'pre-wrap',
                   wordWrap: 'break-word'
