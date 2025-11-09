@@ -151,13 +151,17 @@ export async function pollOnce(req: Request, res: Response) {
     let existingCount = 0;
     const allThreadIds = new Set<string>();
 
-    // Calculate date 30 days ago for filtering
-    // We use 30 days to catch old threads with recent replies
+    // Fetch a wide window of threads (90 days)
+    // We'll filter by last INBOUND message date during ingestion
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const afterDate = Math.floor(ninetyDaysAgo.getTime() / 1000);
+
+    // We only want threads with inbound messages from the last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const afterDate = Math.floor(thirtyDaysAgo.getTime() / 1000);
 
-    console.log(`[SYNC] ${workspace.name}: Fetching emails from last 30 days (after ${thirtyDaysAgo.toISOString()})...`);
+    console.log(`[SYNC] ${workspace.name}: Fetching threads from last 90 days, filtering for inbound activity within 30 days...`);
 
     // Fetch ALL emails (not just inbox/sent) excluding spam, trash, and drafts
     // This ensures we get emails even if they've been archived or have special labels
@@ -168,7 +172,7 @@ export async function pollOnce(req: Request, res: Response) {
     do {
       const allEmailsRes = await gmail.users.threads.list({
         userId: "me",
-        // Get ALL emails from last 30 days, excluding spam, trash, and drafts
+        // Get ALL emails from last 90 days, excluding spam, trash, and drafts
         q: `-in:spam -in:trash -in:draft after:${afterDate}`,
         maxResults: 100,
         pageToken,
@@ -182,13 +186,15 @@ export async function pollOnce(req: Request, res: Response) {
       pageCount++;
     } while (pageToken && pageCount < maxPages);
 
-    console.log(`[Poll] Total threads from last 30 days: ${allThreadIds.size}`);
+    console.log(`[Poll] Total threads fetched from last 90 days: ${allThreadIds.size}`);
 
     // Ingest each thread
     const threadIds = Array.from(allThreadIds);
     console.log(`[POLL] Workspace ${workspace.name}: Found ${threadIds.length} threads`);
 
     const errors: any[] = [];
+    let skippedCount = 0;
+
     const results = await Promise.allSettled(
       threadIds.map(async (threadId) => {
         try {
@@ -207,7 +213,11 @@ export async function pollOnce(req: Request, res: Response) {
             newCount++;
           }
 
-          await ingestThread(gmail, workspace, threadId);
+          // Pass the 30-day threshold to filter by last inbound message
+          const wasSkipped = await ingestThread(gmail, workspace, threadId, thirtyDaysAgo);
+          if (wasSkipped) {
+            skippedCount++;
+          }
         } catch (err) {
           console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
           errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
@@ -223,12 +233,17 @@ export async function pollOnce(req: Request, res: Response) {
       console.error(`[POLL] Failed threads:`, errors);
     }
 
+    if (skippedCount > 0) {
+      console.log(`[POLL] ⏭️  Skipped ${skippedCount} threads (no recent inbound activity)`);
+    }
+
     res.json({
       success: true,
       workspace: workspace.name,
       total: threadIds.length,
       new: newCount,
       existing: existingCount,
+      skipped: skippedCount,
       failed: failedCount,
       errors: errors.length > 0 ? errors : undefined
     });
@@ -239,10 +254,46 @@ export async function pollOnce(req: Request, res: Response) {
 }
 
 // Ingest a single thread
-async function ingestThread(gmail: any, workspace: any, threadId: string) {
+// Returns true if thread was skipped (no recent inbound activity), false otherwise
+async function ingestThread(gmail: any, workspace: any, threadId: string, inboundThreshold?: Date): Promise<boolean> {
   const tr = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
   const messages = tr.data.messages ?? [];
-  if (!messages.length) return;
+  if (!messages.length) return false;
+
+  // If threshold is provided, check if last inbound message is recent enough
+  if (inboundThreshold) {
+    let lastInboundDate: Date | null = null;
+
+    // Find the most recent inbound message
+    for (const m of messages) {
+      const from = getHeader(m, "from") || "";
+      const isInbound = !from.includes(workspace.gmailAccountEmail);
+
+      if (isInbound) {
+        const messageDate = new Date(Number(m.internalDate));
+        if (!lastInboundDate || messageDate > lastInboundDate) {
+          lastInboundDate = messageDate;
+        }
+      }
+    }
+
+    // Skip thread if no inbound messages or last inbound is too old
+    if (!lastInboundDate || lastInboundDate < inboundThreshold) {
+      const first = messages[0];
+      const subject = getHeader(first, "subject") || "";
+      console.log(`[INGEST] ⏭️  Skipping thread ${threadId} - last inbound: ${lastInboundDate?.toISOString() || 'never'}, subject: ${subject.substring(0, 50)}`);
+
+      // Delete conversation if it exists (it's now too old)
+      await prisma.conversation.deleteMany({
+        where: {
+          workspaceId: workspace.id,
+          gmailThreadId: threadId
+        }
+      });
+
+      return true; // Thread was skipped
+    }
+  }
 
   const first = messages[0];
   const subject = getHeader(first, "subject") || "";
@@ -331,7 +382,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string) {
   if (ingestedCount === 0) {
     console.log(`[INGEST] ⚠️  Thread ${threadId} had only draft messages, deleting conversation ${convo.id}`);
     await prisma.conversation.delete({ where: { id: convo.id } });
-    return;
+    return false;
   }
 
   // Auto-tag based on last message direction
@@ -343,7 +394,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string) {
 
   if (conversationMessages.length === 0) {
     console.log(`[INGEST] ⚠️  No messages found for conversation ${convo.id}, skipping auto-tag`);
-    return;
+    return false;
   }
 
   const lastMessage = conversationMessages[0];
@@ -358,7 +409,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string) {
 
     if (!freshConvo) {
       console.error(`[INGEST] Conversation ${convo.id} not found during auto-tag check`);
-      return;
+      return false;
     }
 
     const currentTags = freshConvo.tags || [];
@@ -372,7 +423,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string) {
     // RULE: Never auto-tag if conversation has special tags or is archived
     if (isNonSupport || isArchived || isAdmin) {
       console.log(`[INGEST] ⏭️  Skipping auto-tag (special status)`);
-      return;
+      return false;
     }
 
     // RULE: Add "needs-reply" if last message is inbound
@@ -410,6 +461,8 @@ async function ingestThread(gmail: any, workspace: any, threadId: string) {
       }
     }
   }
+
+  return false; // Thread was successfully ingested
 }
 
 // Send reply
