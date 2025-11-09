@@ -151,12 +151,10 @@ export async function pollOnce(req: Request, res: Response) {
     let existingCount = 0;
     const allThreadIds = new Set<string>();
 
-    // Fetch 60 days of emails
-    const sixtyDaysAgo = new Date();
-    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-    const afterDate = Math.floor(sixtyDaysAgo.getTime() / 1000);
-
-    console.log(`[SYNC] ${workspace.name}: Fetching threads from last 60 days...`);
+    // Fetch threads sorted by most recent activity (Gmail's default)
+    // No date filter - this ensures threads with recent replies are included
+    // even if they were originally created a long time ago
+    console.log(`[SYNC] ${workspace.name}: Fetching most recently active threads...`);
 
     let pageToken: string | undefined;
     let pageCount = 0;
@@ -164,7 +162,7 @@ export async function pollOnce(req: Request, res: Response) {
     do {
       const allEmailsRes = await gmail.users.threads.list({
         userId: "me",
-        q: `-in:spam -in:trash -in:draft after:${afterDate}`,
+        q: `-in:spam -in:trash -in:draft`,
         maxResults: 100,
         pageToken,
       });
