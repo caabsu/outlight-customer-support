@@ -190,31 +190,84 @@ export async function pollOnce(req: Request, res: Response) {
 
     // Process threads in batches to avoid timeout
     const allThreadIds_array = Array.from(allThreadIds);
-    const threadIds = allThreadIds_array.slice(0, 50);
+    const threadIds = allThreadIds_array.slice(0, 200);
 
-    if (allThreadIds_array.length > 50) {
-      console.log(`[POLL] ⚠️  Limiting to 50 most recent threads (found ${allThreadIds_array.length})`);
+    if (allThreadIds_array.length > 200) {
+      console.log(`[POLL] ⚠️  Limiting to 200 most recent threads (found ${allThreadIds_array.length})`);
     }
 
-    console.log(`[POLL] Workspace ${workspace.name}: Processing ${threadIds.length} threads in batches...`);
+    console.log(`[POLL] Workspace ${workspace.name}: Processing ${threadIds.length} threads...`);
+
+    // STEP 1: Pre-fetch all threads and extract unique customer emails
+    console.log(`[POLL] Step 1: Fetching thread metadata to extract customer emails...`);
+    const customerEmails = new Set<string>();
+
+    for (const threadId of threadIds) {
+      try {
+        const thread = await gmail.users.threads.get({
+          userId: "me",
+          id: threadId,
+          format: "metadata",
+          metadataHeaders: ["From", "To"]
+        });
+
+        const messages = thread.data.messages || [];
+        for (const m of messages) {
+          const headers = m.payload?.headers || [];
+          const from = headers.find((h: any) => h.name.toLowerCase() === "from")?.value || "";
+
+          if (from && !from.includes(workspace.gmailAccountEmail)) {
+            // Extract email from "Name <email>" format
+            const emailMatch = from.match(/<(.+?)>/) || [null, from];
+            const email = emailMatch[1] || from;
+            if (email.includes("@")) {
+              customerEmails.add(email.trim().toLowerCase());
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`[POLL] Failed to fetch thread ${threadId} metadata:`, err);
+      }
+    }
+
+    console.log(`[POLL] Found ${customerEmails.size} unique customer emails`);
+
+    // STEP 2: Pre-create all customers to avoid race conditions
+    console.log(`[POLL] Step 2: Pre-creating ${customerEmails.size} customers...`);
+    for (const email of customerEmails) {
+      try {
+        await prisma.customer.upsert({
+          where: {
+            workspaceId_primaryEmail: {
+              workspaceId: workspace.id,
+              primaryEmail: email
+            }
+          },
+          update: { lastSeenAt: new Date() },
+          create: {
+            workspaceId: workspace.id,
+            primaryEmail: email,
+            name: null
+          }
+        });
+      } catch (err) {
+        console.error(`[POLL] Failed to create customer ${email}:`, err);
+      }
+    }
+
+    console.log(`[POLL] Step 3: Processing ${threadIds.length} threads in parallel...`);
 
     const errors: any[] = [];
     let skippedCount = 0;
     const BATCH_SIZE = 50; // Process 50 threads at a time
     const results: PromiseSettledResult<void>[] = [];
 
-    // Process threads SEQUENTIALLY to avoid customer upsert race conditions
-    console.log(`[POLL] Processing ${threadIds.length} threads sequentially to avoid race conditions...`);
+    // Process threads in batches
+    for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
+      const batch = threadIds.slice(i, i + BATCH_SIZE);
+      console.log(`[POLL] Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(threadIds.length / BATCH_SIZE)} (${batch.length} threads)`);
 
-    for (let i = 0; i < threadIds.length; i++) {
-      const threadId = threadIds[i];
-
-      // Log progress every 50 threads
-      if (i % 50 === 0) {
-        console.log(`[POLL] Progress: ${i}/${threadIds.length} threads processed`);
-      }
-
-      try {
+      const batchPromises = batch.map(async (threadId) => {
         const existing = await prisma.conversation.findUnique({
           where: {
             workspaceId_gmailThreadId: {
@@ -235,13 +288,18 @@ export async function pollOnce(req: Request, res: Response) {
         if (wasSkipped) {
           skippedCount++;
         }
+      });
 
-        results.push({ status: 'fulfilled', value: undefined } as PromiseSettledResult<void>);
-      } catch (err) {
-        console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
-        errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
-        results.push({ status: 'rejected', reason: err } as PromiseSettledResult<void>);
-      }
+      const batchResults = await Promise.allSettled(batchPromises);
+      results.push(...batchResults);
+
+      // Track errors
+      batchResults.forEach((result, idx) => {
+        if (result.status === 'rejected') {
+          console.error(`[POLL] ❌ Failed to ingest thread ${batch[idx]}:`, result.reason);
+          errors.push({ threadId: batch[idx], error: result.reason instanceof Error ? result.reason.message : String(result.reason) });
+        }
+      });
     }
 
     // Log summary of failed threads
@@ -329,7 +387,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string, inboun
   const subject = getHeader(first, "subject") || "";
   const fromEmail = parseEmail(getHeader(first, "from") || "");
 
-  // Upsert customer (no race condition possible with sequential processing)
+  // Get or create customer (already pre-created in pollOnce, but upsert as fallback)
   const customer = await prisma.customer.upsert({
     where: {
       workspaceId_primaryEmail: {
