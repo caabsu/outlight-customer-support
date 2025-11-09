@@ -15,14 +15,20 @@ async function fullResync() {
   console.log('='.repeat(80));
 
   try {
+    // Only sync info@outlight.us (Info Support workspace)
     const workspaces = await prisma.workspace.findMany({
+      where: {
+        gmailAccountEmail: 'info@outlight.us'
+      },
       select: { id: true, name: true, gmailAccountEmail: true }
     });
 
-    console.log(`\n📋 Found ${workspaces.length} workspaces to sync:\n`);
-    workspaces.forEach((w, i) => {
-      console.log(`${i + 1}. ${w.name} (${w.gmailAccountEmail})`);
-    });
+    if (workspaces.length === 0) {
+      console.log('\n❌ Info Support workspace not found!');
+      return;
+    }
+
+    console.log(`\n📋 Syncing: ${workspaces[0].name} (${workspaces[0].gmailAccountEmail})\n`);
 
     for (const workspace of workspaces) {
       console.log(`\n${'='.repeat(80)}`);
@@ -47,23 +53,21 @@ async function fullResync() {
           console.log(`   - Total: ${result.total}`);
           console.log(`   - New: ${result.new}`);
           console.log(`   - Existing: ${result.existing}`);
-          console.log(`   - Skipped: ${result.skipped}`);
           console.log(`   - Failed: ${result.failed || 0}`);
 
           if (result.errors && result.errors.length > 0) {
             console.log(`   ⚠️  Errors: ${result.errors.length}`);
           }
 
-          // If we processed fewer than 30 threads, we're done
-          if (result.total < 30) {
-            console.log(`\n✅ Sync complete for ${workspace.name} (processed ${result.total} threads in final round)`);
-            hasMore = false;
-          } else {
-            console.log(`\n⏭️  More threads available, continuing...`);
+          // Since we fetch up to 1000 threads per round, one round should be enough
+          // If we got 1000 threads, there might be more
+          if (result.total >= 1000) {
+            console.log(`\n⏭️  Processed 1000 threads, checking for more...`);
             round++;
-
-            // Small delay between rounds
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } else {
+            console.log(`\n✅ Sync complete for ${workspace.name} (processed ${result.total} threads)`);
+            hasMore = false;
           }
 
         } catch (error: any) {
@@ -74,7 +78,7 @@ async function fullResync() {
     }
 
     console.log(`\n${'='.repeat(80)}`);
-    console.log('✅ FULL RE-SYNC COMPLETE FOR ALL WORKSPACES');
+    console.log('✅ SYNC COMPLETE FOR INFO@OUTLIGHT.US');
     console.log('='.repeat(80));
 
   } catch (error: any) {

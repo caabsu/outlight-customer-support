@@ -190,40 +190,45 @@ export async function pollOnce(req: Request, res: Response) {
     const allThreadIds_array = Array.from(allThreadIds);
     const threadIds = allThreadIds_array;
 
-    console.log(`[POLL] Processing ${threadIds.length} threads SEQUENTIALLY (reliable, no race conditions)...`);
+    console.log(`[POLL] Processing ${threadIds.length} threads in BATCHES (faster with retry logic)...`);
 
     const errors: any[] = [];
+    const BATCH_SIZE = 10; // Process 10 threads at a time in parallel
 
-    // Process threads SEQUENTIALLY - simple and reliable
-    for (let i = 0; i < threadIds.length; i++) {
-      const threadId = threadIds[i];
+    // Process threads in parallel batches
+    for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
+      const batch = threadIds.slice(i, i + BATCH_SIZE);
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(threadIds.length / BATCH_SIZE);
 
-      // Log progress every 50 threads
-      if (i % 50 === 0 && i > 0) {
-        console.log(`[POLL] Progress: ${i}/${threadIds.length} threads`);
-      }
+      console.log(`[POLL] Batch ${batchNum}/${totalBatches} (${batch.length} threads)...`);
 
-      try {
-        const existing = await prisma.conversation.findUnique({
-          where: {
-            workspaceId_gmailThreadId: {
-              workspaceId: workspace.id,
-              gmailThreadId: threadId
+      const batchPromises = batch.map(async (threadId) => {
+        try {
+          const existing = await prisma.conversation.findUnique({
+            where: {
+              workspaceId_gmailThreadId: {
+                workspaceId: workspace.id,
+                gmailThreadId: threadId
+              }
             }
+          });
+
+          if (existing) {
+            existingCount++;
+          } else {
+            newCount++;
           }
-        });
 
-        if (existing) {
-          existingCount++;
-        } else {
-          newCount++;
+          await ingestThread(gmail, workspace, threadId);
+        } catch (err) {
+          console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
+          errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
+          throw err;
         }
+      });
 
-        await ingestThread(gmail, workspace, threadId);
-      } catch (err) {
-        console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
-        errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
-      }
+      await Promise.allSettled(batchPromises);
     }
 
     const failedCount = errors.length;
