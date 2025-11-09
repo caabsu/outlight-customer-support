@@ -151,12 +151,13 @@ export async function pollOnce(req: Request, res: Response) {
     let existingCount = 0;
     const allThreadIds = new Set<string>();
 
-    // Calculate date 7 days ago for filtering
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const afterDate = Math.floor(sevenDaysAgo.getTime() / 1000);
+    // Calculate date 30 days ago for filtering
+    // We use 30 days to catch old threads with recent replies
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const afterDate = Math.floor(thirtyDaysAgo.getTime() / 1000);
 
-    console.log(`[SYNC] ${workspace.name}: Fetching emails from last 7 days (after ${sevenDaysAgo.toISOString()})...`);
+    console.log(`[SYNC] ${workspace.name}: Fetching emails from last 30 days (after ${thirtyDaysAgo.toISOString()})...`);
 
     // Fetch ALL emails (not just inbox/sent) excluding spam, trash, and drafts
     // This ensures we get emails even if they've been archived or have special labels
@@ -167,7 +168,7 @@ export async function pollOnce(req: Request, res: Response) {
     do {
       const allEmailsRes = await gmail.users.threads.list({
         userId: "me",
-        // Get ALL emails from last 7 days, excluding spam, trash, and drafts
+        // Get ALL emails from last 30 days, excluding spam, trash, and drafts
         q: `-in:spam -in:trash -in:draft after:${afterDate}`,
         maxResults: 100,
         pageToken,
@@ -181,7 +182,7 @@ export async function pollOnce(req: Request, res: Response) {
       pageCount++;
     } while (pageToken && pageCount < maxPages);
 
-    console.log(`[Poll] Total threads from last 7 days: ${allThreadIds.size}`);
+    console.log(`[Poll] Total threads from last 30 days: ${allThreadIds.size}`);
 
     // Ingest each thread
     const threadIds = Array.from(allThreadIds);
