@@ -151,9 +151,7 @@ export async function pollOnce(req: Request, res: Response) {
     let existingCount = 0;
     const allThreadIds = new Set<string>();
 
-    // We only want threads with inbound messages from the last 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Sync ALL threads (no date filtering)
 
     console.log(`[SYNC] ${workspace.name}: Fetching most recent threads (NO DATE FILTER - sorted by recent activity)...`);
 
@@ -253,7 +251,6 @@ export async function pollOnce(req: Request, res: Response) {
     console.log(`[POLL] Step 3/3: Processing ${threadIds.length} threads in parallel batches...`);
 
     const errors: any[] = [];
-    let skippedCount = 0;
     const BATCH_SIZE = 20; // Process 20 threads at a time in parallel
     const allResults: PromiseSettledResult<void>[] = [];
 
@@ -282,11 +279,8 @@ export async function pollOnce(req: Request, res: Response) {
             newCount++;
           }
 
-          // Pass the 30-day threshold to filter by last inbound message
-          const wasSkipped = await ingestThread(gmail, workspace, threadId, thirtyDaysAgo);
-          if (wasSkipped) {
-            skippedCount++;
-          }
+          // Ingest all threads (no filtering)
+          await ingestThread(gmail, workspace, threadId);
         } catch (err) {
           console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
           errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
@@ -305,17 +299,12 @@ export async function pollOnce(req: Request, res: Response) {
       console.error(`[POLL] Failed threads:`, errors);
     }
 
-    if (skippedCount > 0) {
-      console.log(`[POLL] ⏭️  Skipped ${skippedCount} threads (no recent inbound activity)`);
-    }
-
     res.json({
       success: true,
       workspace: workspace.name,
       total: threadIds.length,
       new: newCount,
       existing: existingCount,
-      skipped: skippedCount,
       failed: failedCount,
       errors: errors.length > 0 ? errors : undefined
     });
@@ -326,58 +315,10 @@ export async function pollOnce(req: Request, res: Response) {
 }
 
 // Ingest a single thread
-// Returns true if thread was skipped (no recent inbound activity), false otherwise
-async function ingestThread(gmail: any, workspace: any, threadId: string, inboundThreshold?: Date): Promise<boolean> {
+async function ingestThread(gmail: any, workspace: any, threadId: string): Promise<void> {
   const tr = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
   const messages = tr.data.messages ?? [];
-  if (!messages.length) return false;
-
-  // If threshold is provided, check if last inbound message is recent enough
-  if (inboundThreshold) {
-    let lastInboundDate: Date | null = null;
-
-    // Find the most recent inbound message
-    for (const m of messages) {
-      const from = getHeader(m, "from") || "";
-      const isInbound = !from.includes(workspace.gmailAccountEmail);
-
-      if (isInbound) {
-        const messageDate = new Date(Number(m.internalDate));
-        if (!lastInboundDate || messageDate > lastInboundDate) {
-          lastInboundDate = messageDate;
-        }
-      }
-    }
-
-    // Skip thread if no inbound messages or last inbound is too old
-    if (!lastInboundDate || lastInboundDate < inboundThreshold) {
-      const first = messages[0];
-      const subject = getHeader(first, "subject") || "";
-      console.log(`[INGEST] ⏭️  Skipping thread ${threadId} - last inbound: ${lastInboundDate?.toISOString() || 'never'}, subject: ${subject.substring(0, 50)}`);
-
-      // Delete conversation if it exists (it's now too old)
-      // First delete messages, then delete conversation (foreign key constraint)
-      const existingConvo = await prisma.conversation.findUnique({
-        where: {
-          workspaceId_gmailThreadId: {
-            workspaceId: workspace.id,
-            gmailThreadId: threadId
-          }
-        }
-      });
-
-      if (existingConvo) {
-        await prisma.message.deleteMany({
-          where: { conversationId: existingConvo.id }
-        });
-        await prisma.conversation.delete({
-          where: { id: existingConvo.id }
-        });
-      }
-
-      return true; // Thread was skipped
-    }
-  }
+  if (!messages.length) return;
 
   const first = messages[0];
   const subject = getHeader(first, "subject") || "";
@@ -546,8 +487,6 @@ async function ingestThread(gmail: any, workspace: any, threadId: string, inboun
       }
     }
   }
-
-  return false; // Thread was successfully ingested
 }
 
 // Send reply
@@ -648,7 +587,8 @@ function getHeader(msg: any, name: string): string | undefined {
 
 function parseEmail(from: string): string {
   const m = from.match(/<(.+?)>/);
-  return m ? m[1] : from;
+  const email = m ? m[1] : from;
+  return email.trim().toLowerCase();
 }
 
 function flattenParts(payload: any): { html?: string[]; text?: string[] } {
