@@ -505,34 +505,59 @@ export async function sendNewEmail(workspaceId: string, to: string, subject: str
 }
 
 // Helper functions
-async function upsertCustomerWithRetry(workspaceId: string, email: string, maxRetries = 3): Promise<any> {
+async function upsertCustomerWithRetry(workspaceId: string, email: string, maxRetries = 5): Promise<any> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await prisma.customer.upsert({
+      // Try to find existing customer first
+      let customer = await prisma.customer.findUnique({
         where: {
           workspaceId_primaryEmail: {
             workspaceId: workspaceId,
             primaryEmail: email
           }
-        },
-        update: { lastSeenAt: new Date() },
-        create: {
+        }
+      });
+
+      if (customer) {
+        // Customer exists, update lastSeenAt
+        return await prisma.customer.update({
+          where: { id: customer.id },
+          data: { lastSeenAt: new Date() }
+        });
+      }
+
+      // Customer doesn't exist, try to create
+      return await prisma.customer.create({
+        data: {
           workspaceId: workspaceId,
           primaryEmail: email,
-          name: null
+          name: null,
+          lastSeenAt: new Date()
         }
       });
     } catch (error: any) {
-      if (error.code === 'P2002' && attempt < maxRetries) {
-        // Unique constraint violation - wait a bit and retry
-        console.log(`[RETRY] Customer upsert conflict for ${email}, attempt ${attempt}/${maxRetries}`);
-        await new Promise(resolve => setTimeout(resolve, 50 * attempt));
-        continue;
+      if (error.code === 'P2002') {
+        // Race condition - another thread created it
+        if (attempt < maxRetries) {
+          console.log(`[RETRY] Customer race condition for ${email}, attempt ${attempt}/${maxRetries}, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 100 * attempt));
+          continue;
+        }
+        // Last attempt - just fetch the customer
+        const customer = await prisma.customer.findUnique({
+          where: {
+            workspaceId_primaryEmail: {
+              workspaceId: workspaceId,
+              primaryEmail: email
+            }
+          }
+        });
+        if (customer) return customer;
       }
       throw error;
     }
   }
-  throw new Error(`Failed to upsert customer ${email} after ${maxRetries} attempts`);
+  throw new Error(`Failed to get/create customer ${email} after ${maxRetries} attempts`);
 }
 
 function getHeader(msg: any, name: string): string | undefined {
