@@ -158,54 +158,37 @@ export async function pollOnce(req: Request, res: Response) {
 
     console.log(`[SYNC] ${workspace.name}: Fetching emails from last 7 days (after ${sevenDaysAgo.toISOString()})...`);
 
-    // Fetch from inbox with date filter (last 7 days)
+    // Fetch ALL emails (not just inbox/sent) excluding spam, trash, and drafts
+    // This ensures we get emails even if they've been archived or have special labels
     let pageToken: string | undefined;
     let pageCount = 0;
     const maxPages = 50;
 
     do {
-      const inboxRes = await gmail.users.threads.list({
+      const allEmailsRes = await gmail.users.threads.list({
         userId: "me",
-        q: `in:inbox -in:draft after:${afterDate}`, // Gmail search query for last 7 days, excluding drafts
+        // Get ALL emails from last 7 days, excluding spam, trash, and drafts
+        q: `-in:spam -in:trash -in:draft after:${afterDate}`,
         maxResults: 100,
         pageToken,
       });
 
-      const threads = inboxRes.data.threads || [];
-      console.log(`[SYNC] ${workspace.name}: Inbox page ${pageCount + 1}: Found ${threads.length} threads`);
+      const threads = allEmailsRes.data.threads || [];
+      console.log(`[SYNC] ${workspace.name}: Page ${pageCount + 1}: Found ${threads.length} threads`);
       threads.forEach((t) => t.id && allThreadIds.add(t.id));
 
-      pageToken = inboxRes.data.nextPageToken || undefined;
+      pageToken = allEmailsRes.data.nextPageToken || undefined;
       pageCount++;
     } while (pageToken && pageCount < maxPages);
 
-    console.log(`[Poll] Total inbox threads from last 7 days: ${allThreadIds.size}`);
-
-    // Fetch from sent with date filter (last 7 days)
-    pageToken = undefined;
-    pageCount = 0;
-
-    do {
-      const sentRes = await gmail.users.threads.list({
-        userId: "me",
-        q: `in:sent -in:draft after:${afterDate}`, // Gmail search query for last 7 days, excluding drafts
-        maxResults: 100,
-        pageToken,
-      });
-
-      const threads = sentRes.data.threads || [];
-      console.log(`[Poll] Sent page ${pageCount + 1}: Found ${threads.length} threads`);
-      threads.forEach((t) => t.id && allThreadIds.add(t.id));
-
-      pageToken = sentRes.data.nextPageToken || undefined;
-      pageCount++;
-    } while (pageToken && pageCount < maxPages);
+    console.log(`[Poll] Total threads from last 7 days: ${allThreadIds.size}`);
 
     // Ingest each thread
     const threadIds = Array.from(allThreadIds);
     console.log(`[POLL] Workspace ${workspace.name}: Found ${threadIds.length} threads`);
 
-    await Promise.allSettled(
+    const errors: any[] = [];
+    const results = await Promise.allSettled(
       threadIds.map(async (threadId) => {
         try {
           const existing = await prisma.conversation.findUnique({
@@ -225,17 +208,28 @@ export async function pollOnce(req: Request, res: Response) {
 
           await ingestThread(gmail, workspace, threadId);
         } catch (err) {
-          console.error(`Failed to ingest thread ${threadId}:`, err);
+          console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
+          errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
+          throw err;
         }
       })
     );
+
+    // Log summary of failed threads
+    const failedCount = results.filter(r => r.status === 'rejected').length;
+    if (failedCount > 0) {
+      console.error(`[POLL] ⚠️  ${failedCount} threads failed to ingest out of ${threadIds.length}`);
+      console.error(`[POLL] Failed threads:`, errors);
+    }
 
     res.json({
       success: true,
       workspace: workspace.name,
       total: threadIds.length,
       new: newCount,
-      existing: existingCount
+      existing: existingCount,
+      failed: failedCount,
+      errors: errors.length > 0 ? errors : undefined
     });
   } catch (error: any) {
     console.error("Error polling Gmail:", error);
@@ -289,11 +283,15 @@ async function ingestThread(gmail: any, workspace: any, threadId: string) {
   });
 
   // Process all messages in parallel
+  let draftCount = 0;
+  let ingestedCount = 0;
+
   await Promise.all(messages.map(async (m: any) => {
     // CRITICAL: Skip draft messages - they should not be treated as sent/received emails
     const labelIds = m.labelIds || [];
     if (labelIds.includes("DRAFT")) {
-      console.log(`[INGEST] Skipping draft message ${m.id} in thread ${threadId}`);
+      draftCount++;
+      console.log(`[INGEST] ⏭️  Skipping draft message ${m.id} in thread ${threadId}`);
       return;
     }
 
@@ -321,7 +319,19 @@ async function ingestThread(gmail: any, workspace: any, threadId: string) {
         replyToEmail: replyTo ? parseEmail(replyTo) : null,
       },
     });
+    ingestedCount++;
   }));
+
+  if (draftCount > 0) {
+    console.log(`[INGEST] Thread ${threadId}: Skipped ${draftCount} draft(s), ingested ${ingestedCount} message(s)`);
+  }
+
+  // If all messages were drafts, delete the empty conversation
+  if (ingestedCount === 0) {
+    console.log(`[INGEST] ⚠️  Thread ${threadId} had only draft messages, deleting conversation ${convo.id}`);
+    await prisma.conversation.delete({ where: { id: convo.id } });
+    return;
+  }
 
   // Auto-tag based on last message direction
   const conversationMessages = await prisma.message.findMany({
@@ -331,7 +341,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string) {
   });
 
   if (conversationMessages.length === 0) {
-    console.log(`[INGEST] No messages found for conversation ${convo.id}, skipping auto-tag`);
+    console.log(`[INGEST] ⚠️  No messages found for conversation ${convo.id}, skipping auto-tag`);
     return;
   }
 
