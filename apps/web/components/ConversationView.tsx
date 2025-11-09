@@ -148,6 +148,7 @@ export default function ConversationView() {
   const [activeInfoTooltip, setActiveInfoTooltip] = useState<string | null>(null);
   const [navigatingUnreplied, setNavigatingUnreplied] = useState(false);
   const [showNeedsReplyOnly, setShowNeedsReplyOnly] = useState(false); // Default to showing all conversations
+  const [showCSOnly, setShowCSOnly] = useState(true); // Default to showing only customer support conversations
 
   // Shopify state
   const [shopifyCustomer, setShopifyCustomer] = useState<any>(null);
@@ -281,10 +282,20 @@ export default function ConversationView() {
     return params.toString();
   };
 
-  // Filter history based on needs-reply filter
-  const filteredHistory = showNeedsReplyOnly
-    ? history.filter(conv => isUnreplied(conv))
-    : history;
+  // Filter history based on needs-reply and CS-only filters
+  const filteredHistory = history.filter(conv => {
+    // Filter out non-customer-support if CS-only is enabled
+    if (showCSOnly && conv.tags?.includes('non-customer-support')) {
+      return false;
+    }
+
+    // Filter for needs-reply if enabled
+    if (showNeedsReplyOnly && !isUnreplied(conv)) {
+      return false;
+    }
+
+    return true;
+  });
 
   // Fetch conversation history
   useEffect(() => {
@@ -1889,7 +1900,17 @@ export default function ConversationView() {
               </svg>
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setShowCSOnly(!showCSOnly)}
+              className={`px-2 py-1 rounded text-[10px] font-sans font-medium transition-colors ${
+                showCSOnly
+                  ? "bg-blue-100 text-blue-700 border border-blue-200"
+                  : "bg-slate-100 text-slate-600 border border-slate-200"
+              }`}
+            >
+              💬 CS Only {showCSOnly ? '✓' : ''}
+            </button>
             <button
               onClick={() => setShowNeedsReplyOnly(!showNeedsReplyOnly)}
               className={`px-2 py-1 rounded text-[10px] font-sans font-medium transition-colors ${
@@ -2798,7 +2819,17 @@ export default function ConversationView() {
                 ✕
               </button>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setShowCSOnly(!showCSOnly)}
+                className={`px-3 py-1.5 rounded text-xs font-sans font-medium transition-colors ${
+                  showCSOnly
+                    ? "bg-blue-100 text-blue-700 border border-blue-200"
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}
+              >
+                💬 CS Only {showCSOnly ? '✓' : ''}
+              </button>
               <button
                 onClick={() => setShowNeedsReplyOnly(!showNeedsReplyOnly)}
                 className={`px-3 py-1.5 rounded text-xs font-sans font-medium transition-colors ${
