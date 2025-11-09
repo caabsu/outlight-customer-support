@@ -203,43 +203,45 @@ export async function pollOnce(req: Request, res: Response) {
     const BATCH_SIZE = 50; // Process 50 threads at a time
     const results: PromiseSettledResult<void>[] = [];
 
-    // Process in batches
-    for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
-      const batch = threadIds.slice(i, i + BATCH_SIZE);
-      console.log(`[POLL] Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(threadIds.length / BATCH_SIZE)} (${batch.length} threads)`);
+    // Process threads SEQUENTIALLY to avoid customer upsert race conditions
+    console.log(`[POLL] Processing ${threadIds.length} threads sequentially to avoid race conditions...`);
 
-      const batchResults = await Promise.allSettled(
-        batch.map(async (threadId) => {
-          try {
-            const existing = await prisma.conversation.findUnique({
-              where: {
-                workspaceId_gmailThreadId: {
-                  workspaceId: workspace.id,
-                  gmailThreadId: threadId
-                }
-              }
-            });
+    for (let i = 0; i < threadIds.length; i++) {
+      const threadId = threadIds[i];
 
-            if (existing) {
-              existingCount++;
-            } else {
-              newCount++;
+      // Log progress every 50 threads
+      if (i % 50 === 0) {
+        console.log(`[POLL] Progress: ${i}/${threadIds.length} threads processed`);
+      }
+
+      try {
+        const existing = await prisma.conversation.findUnique({
+          where: {
+            workspaceId_gmailThreadId: {
+              workspaceId: workspace.id,
+              gmailThreadId: threadId
             }
-
-            // Pass the 30-day threshold to filter by last inbound message
-            const wasSkipped = await ingestThread(gmail, workspace, threadId, thirtyDaysAgo);
-            if (wasSkipped) {
-              skippedCount++;
-            }
-          } catch (err) {
-            console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
-            errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
-            throw err;
           }
-        })
-      );
+        });
 
-      results.push(...batchResults);
+        if (existing) {
+          existingCount++;
+        } else {
+          newCount++;
+        }
+
+        // Pass the 30-day threshold to filter by last inbound message
+        const wasSkipped = await ingestThread(gmail, workspace, threadId, thirtyDaysAgo);
+        if (wasSkipped) {
+          skippedCount++;
+        }
+
+        results.push({ status: 'fulfilled', value: undefined } as PromiseSettledResult<void>);
+      } catch (err) {
+        console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
+        errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
+        results.push({ status: 'rejected', reason: err } as PromiseSettledResult<void>);
+      }
     }
 
     // Log summary of failed threads
@@ -327,54 +329,21 @@ async function ingestThread(gmail: any, workspace: any, threadId: string, inboun
   const subject = getHeader(first, "subject") || "";
   const fromEmail = parseEmail(getHeader(first, "from") || "");
 
-  // Upsert customer - if race condition occurs, wait and fetch existing
-  let customer;
-  try {
-    customer = await prisma.customer.upsert({
-      where: {
-        workspaceId_primaryEmail: {
-          workspaceId: workspace.id,
-          primaryEmail: fromEmail
-        }
-      },
-      update: { lastSeenAt: new Date() },
-      create: {
+  // Upsert customer (no race condition possible with sequential processing)
+  const customer = await prisma.customer.upsert({
+    where: {
+      workspaceId_primaryEmail: {
         workspaceId: workspace.id,
-        primaryEmail: fromEmail,
-        name: null
-      },
-    });
-  } catch (error: any) {
-    // If unique constraint race condition, wait for other thread to finish creating, then fetch
-    if (error.code === 'P2002') {
-      console.log(`[INGEST] Race condition for ${fromEmail}, waiting for customer creation...`);
-
-      // Retry up to 5 times with small delays
-      for (let i = 0; i < 5; i++) {
-        await new Promise(resolve => setTimeout(resolve, 50 * (i + 1))); // 50ms, 100ms, 150ms, etc.
-
-        customer = await prisma.customer.findUnique({
-          where: {
-            workspaceId_primaryEmail: {
-              workspaceId: workspace.id,
-              primaryEmail: fromEmail
-            }
-          }
-        });
-
-        if (customer) {
-          console.log(`[INGEST] Found customer after ${i + 1} retries: ${fromEmail}`);
-          break;
-        }
+        primaryEmail: fromEmail
       }
-
-      if (!customer) {
-        throw new Error(`Customer not found after race condition retries: ${fromEmail}`);
-      }
-    } else {
-      throw error;
-    }
-  }
+    },
+    update: { lastSeenAt: new Date() },
+    create: {
+      workspaceId: workspace.id,
+      primaryEmail: fromEmail,
+      name: null
+    },
+  });
 
   const lastInternal = messages[messages.length - 1].internalDate!;
   const convo = await prisma.conversation.upsert({
