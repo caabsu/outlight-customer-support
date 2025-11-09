@@ -554,6 +554,13 @@ export default function ConversationView() {
       // Apply optimistic update FIRST to immediately remove from view
       updateConversationOptimistic(selectedConversation.id, { tags: updatedTags });
 
+      // Also update in Related Conversations if this conversation appears there
+      setHistory(prevHistory => prevHistory.map(conv =>
+        conv.id === selectedConversation.id
+          ? { ...conv, tags: updatedTags }
+          : conv
+      ));
+
       // Then update backend (no await - let it happen in background)
       fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
@@ -580,6 +587,9 @@ export default function ConversationView() {
     try {
       // Apply optimistic update FIRST to immediately remove from view
       updateConversationOptimistic(selectedConversation.id, { archived: true });
+
+      // Also remove from Related Conversations if this conversation appears there
+      setHistory(prevHistory => prevHistory.filter(conv => conv.id !== selectedConversation.id));
 
       // Then update backend (no await - let it happen in background)
       fetch(`/api/conversations/${selectedConversation.id}`, {
