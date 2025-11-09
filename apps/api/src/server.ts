@@ -100,6 +100,62 @@ app.post("/gmail/poll/workspace/:workspaceId", async (req: Request, res: Respons
   await gmailMulti.pollOnce(req, res);
 });
 
+// Re-sync all workspaces
+app.post("/gmail/resync-all", async (req: Request, res: Response) => {
+  try {
+    console.log('[Server] Re-syncing all workspaces...');
+
+    const workspaces = await prisma.workspace.findMany();
+    const results = [];
+
+    for (const workspace of workspaces) {
+      console.log(`[Server] Re-syncing workspace: ${workspace.name} (${workspace.id})`);
+
+      try {
+        // Create a mock request/response for each workspace
+        const mockReq = {
+          params: { workspaceId: workspace.id },
+          body: { workspaceId: workspace.id }
+        } as any;
+
+        let syncResult: any = null;
+        const mockRes = {
+          json: (data: any) => { syncResult = data; },
+          status: (code: number) => ({
+            json: (data: any) => { syncResult = { error: data, statusCode: code }; }
+          })
+        } as any;
+
+        await gmailMulti.pollOnce(mockReq, mockRes);
+
+        results.push({
+          workspace: workspace.name,
+          workspaceId: workspace.id,
+          success: true,
+          result: syncResult
+        });
+      } catch (error: any) {
+        console.error(`[Server] Error syncing workspace ${workspace.name}:`, error);
+        results.push({
+          workspace: workspace.name,
+          workspaceId: workspace.id,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      totalWorkspaces: workspaces.length,
+      results
+    });
+  } catch (error: any) {
+    console.error('[Server] Error in resync-all:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== LEGACY ENDPOINTS (Keep for backward compatibility) ====================
 app.get("/oauth/google", googleAuthStart);
 app.post("/gmail/poll", pollOnce);
