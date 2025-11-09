@@ -408,7 +408,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string): Promi
   if (ingestedCount === 0) {
     console.log(`[INGEST] ⚠️  Thread ${threadId} had only draft messages, deleting conversation ${convo.id}`);
     await prisma.conversation.delete({ where: { id: convo.id } });
-    return false;
+    return;
   }
 
   // Auto-tag based on last message direction
@@ -420,7 +420,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string): Promi
 
   if (conversationMessages.length === 0) {
     console.log(`[INGEST] ⚠️  No messages found for conversation ${convo.id}, skipping auto-tag`);
-    return false;
+    return;
   }
 
   const lastMessage = conversationMessages[0];
@@ -435,7 +435,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string): Promi
 
     if (!freshConvo) {
       console.error(`[INGEST] Conversation ${convo.id} not found during auto-tag check`);
-      return false;
+      return;
     }
 
     const currentTags = freshConvo.tags || [];
@@ -449,7 +449,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string): Promi
     // RULE: Never auto-tag if conversation has special tags or is archived
     if (isNonSupport || isArchived || isAdmin) {
       console.log(`[INGEST] ⏭️  Skipping auto-tag (special status)`);
-      return false;
+      return;
     }
 
     // RULE: Add "needs-reply" if last message is inbound
