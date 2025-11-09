@@ -147,30 +147,24 @@ export async function pollOnce(req: Request, res: Response) {
     const { gmail, workspace } = await getAuthedClient(workspaceId);
     console.log('[Poll] Got authenticated client for workspace:', workspace.name);
 
-    // Fix database constraint if needed (auto-fix on sync)
-    try {
-      await prisma.$executeRawUnsafe(`ALTER TABLE "Customer" DROP CONSTRAINT IF EXISTS "Customer_primaryEmail_key"`);
-      console.log('[SYNC] ✅ Database constraints verified');
-    } catch (err) {
-      console.log('[SYNC] ⚠️  Could not verify constraints (may be fine):', err);
-    }
-
     let newCount = 0;
     let existingCount = 0;
     const allThreadIds = new Set<string>();
 
-    console.log(`[SYNC] ${workspace.name}: Fetching threads by MOST RECENT ACTIVITY (not thread start date)...`);
+    // Fetch 60 days of emails
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+    const afterDate = Math.floor(sixtyDaysAgo.getTime() / 1000);
 
-    // Fetch threads sorted by most recent activity (no date filter)
-    // Gmail naturally returns threads by most recent message/activity
+    console.log(`[SYNC] ${workspace.name}: Fetching threads from last 60 days...`);
+
     let pageToken: string | undefined;
     let pageCount = 0;
 
     do {
       const allEmailsRes = await gmail.users.threads.list({
         userId: "me",
-        // NO DATE FILTER - Gmail returns by most recent activity
-        q: `-in:spam -in:trash -in:draft`,
+        q: `-in:spam -in:trash -in:draft after:${afterDate}`,
         maxResults: 100,
         pageToken,
       });
@@ -182,30 +176,26 @@ export async function pollOnce(req: Request, res: Response) {
       pageToken = allEmailsRes.data.nextPageToken || undefined;
       pageCount++;
 
-      // Safety limit: stop at 10 pages (1000 threads with recent activity)
-      if (pageCount >= 10) {
-        console.log(`[SYNC] Reached 10 page limit, stopping fetch`);
+      // Process up to 5 pages (500 threads)
+      if (pageCount >= 5) {
+        console.log(`[SYNC] Reached 5 page limit`);
         break;
       }
     } while (pageToken);
 
-    console.log(`[SYNC] Total threads fetched (by recent activity): ${allThreadIds.size}`);
+    console.log(`[SYNC] Total threads: ${allThreadIds.size}`);
 
-    // Process ALL threads (no limit)
-    const allThreadIds_array = Array.from(allThreadIds);
-    const threadIds = allThreadIds_array;
+    const threadIds = Array.from(allThreadIds);
 
-    console.log(`[POLL] Processing ${threadIds.length} threads SEQUENTIALLY (simple and reliable)...`);
+    console.log(`[SYNC] Processing ${threadIds.length} threads...`);
 
     const errors: any[] = [];
 
-    // Process threads SEQUENTIALLY - no race conditions
     for (let i = 0; i < threadIds.length; i++) {
       const threadId = threadIds[i];
 
-      // Log progress every 50 threads
-      if (i % 50 === 0 && i > 0) {
-        console.log(`[POLL] Progress: ${i}/${threadIds.length} threads processed`);
+      if (i % 25 === 0 && i > 0) {
+        console.log(`[SYNC] Progress: ${i}/${threadIds.length}`);
       }
 
       try {
@@ -226,16 +216,12 @@ export async function pollOnce(req: Request, res: Response) {
 
         await ingestThread(gmail, workspace, threadId);
       } catch (err) {
-        console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
+        console.error(`[SYNC] Error on thread ${threadId}:`, err instanceof Error ? err.message : String(err));
         errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
       }
     }
 
     const failedCount = errors.length;
-    if (failedCount > 0) {
-      console.error(`[POLL] ⚠️  ${failedCount} threads failed to ingest out of ${threadIds.length}`);
-      console.error(`[POLL] Failed threads:`, errors);
-    }
 
     res.json({
       success: true,
