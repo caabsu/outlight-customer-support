@@ -35,11 +35,20 @@ async function fixConstraint() {
       console.log(`  - ${row.constraint_name}`);
     });
 
-    const hasComposite = result.some((row: any) =>
-      row.constraint_name === 'Customer_workspaceId_primaryEmail_key'
-    );
+    // Also check indexes
+    const indexes: any = await prisma.$queryRawUnsafe(`
+      SELECT indexname
+      FROM pg_indexes
+      WHERE tablename = 'Customer'
+      AND indexname LIKE '%workspaceId%primaryEmail%'
+    `);
 
-    if (!hasComposite) {
+    console.log('\nComposite indexes on Customer table:');
+    indexes.forEach((row: any) => {
+      console.log(`  - ${row.indexname}`);
+    });
+
+    if (indexes.length === 0) {
       console.log('\n⚠️  Composite constraint missing! Creating it...');
       await prisma.$executeRawUnsafe(`
         CREATE UNIQUE INDEX "Customer_workspaceId_primaryEmail_key"
