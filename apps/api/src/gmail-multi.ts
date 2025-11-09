@@ -151,28 +151,29 @@ export async function pollOnce(req: Request, res: Response) {
     let existingCount = 0;
     const allThreadIds = new Set<string>();
 
-    // Fetch a wide window of threads (90 days)
+    // Fetch a reasonable window of threads (45 days)
     // We'll filter by last INBOUND message date during ingestion
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const afterDate = Math.floor(ninetyDaysAgo.getTime() / 1000);
+    // 45 days balances catching old threads with new replies vs. timeout limits
+    const fortyFiveDaysAgo = new Date();
+    fortyFiveDaysAgo.setDate(fortyFiveDaysAgo.getDate() - 45);
+    const afterDate = Math.floor(fortyFiveDaysAgo.getTime() / 1000);
 
     // We only want threads with inbound messages from the last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    console.log(`[SYNC] ${workspace.name}: Fetching threads from last 90 days, filtering for inbound activity within 30 days...`);
+    console.log(`[SYNC] ${workspace.name}: Fetching threads from last 45 days, filtering for inbound activity within 30 days...`);
 
     // Fetch ALL emails (not just inbox/sent) excluding spam, trash, and drafts
     // This ensures we get emails even if they've been archived or have special labels
     let pageToken: string | undefined;
     let pageCount = 0;
-    const maxPages = 50;
+    const maxPages = 10; // Limit to 1000 threads max (10 pages × 100 per page) to avoid timeouts
 
     do {
       const allEmailsRes = await gmail.users.threads.list({
         userId: "me",
-        // Get ALL emails from last 90 days, excluding spam, trash, and drafts
+        // Get ALL emails from last 45 days, excluding spam, trash, and drafts
         q: `-in:spam -in:trash -in:draft after:${afterDate}`,
         maxResults: 100,
         pageToken,
@@ -186,11 +187,17 @@ export async function pollOnce(req: Request, res: Response) {
       pageCount++;
     } while (pageToken && pageCount < maxPages);
 
-    console.log(`[Poll] Total threads fetched from last 90 days: ${allThreadIds.size}`);
+    console.log(`[Poll] Total threads fetched from last 45 days: ${allThreadIds.size}`);
 
-    // Ingest each thread
-    const threadIds = Array.from(allThreadIds);
-    console.log(`[POLL] Workspace ${workspace.name}: Found ${threadIds.length} threads`);
+    // Ingest each thread (limit to 500 to avoid timeouts)
+    const allThreadIds_array = Array.from(allThreadIds);
+    const threadIds = allThreadIds_array.slice(0, 500);
+
+    if (allThreadIds_array.length > 500) {
+      console.log(`[POLL] ⚠️  Limiting to 500 most recent threads (found ${allThreadIds_array.length})`);
+    }
+
+    console.log(`[POLL] Workspace ${workspace.name}: Processing ${threadIds.length} threads`);
 
     const errors: any[] = [];
     let skippedCount = 0;
