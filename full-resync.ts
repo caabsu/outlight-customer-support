@@ -59,16 +59,10 @@ async function fullResync() {
             console.log(`   ⚠️  Errors: ${result.errors.length}`);
           }
 
-          // Since we fetch up to 1000 threads per round, one round should be enough
-          // If we got 1000 threads, there might be more
-          if (result.total >= 1000) {
-            console.log(`\n⏭️  Processed 1000 threads, checking for more...`);
-            round++;
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          } else {
-            console.log(`\n✅ Sync complete for ${workspace.name} (processed ${result.total} threads)`);
-            hasMore = false;
-          }
+          // Sync fetches threads by recent activity (up to 1000)
+          // One round should be enough since we get the most active threads
+          console.log(`\n✅ Sync complete for ${workspace.name} (processed ${result.total} threads)`);
+          hasMore = false;
 
         } catch (error: any) {
           console.error(`\n❌ Error in round ${round}:`, error.message);
