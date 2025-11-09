@@ -190,84 +190,26 @@ export async function pollOnce(req: Request, res: Response) {
 
     // Process threads in batches to avoid timeout
     const allThreadIds_array = Array.from(allThreadIds);
-    const threadIds = allThreadIds_array.slice(0, 200);
+    const threadIds = allThreadIds_array.slice(0, 30);
 
-    if (allThreadIds_array.length > 200) {
-      console.log(`[POLL] ⚠️  Limiting to 200 most recent threads (found ${allThreadIds_array.length})`);
+    if (allThreadIds_array.length > 30) {
+      console.log(`[POLL] ⚠️  Limiting to 30 most recent threads (found ${allThreadIds_array.length})`);
     }
 
-    console.log(`[POLL] Workspace ${workspace.name}: Processing ${threadIds.length} threads...`);
-
-    // STEP 1: Pre-fetch all threads and extract unique customer emails
-    console.log(`[POLL] Step 1: Fetching thread metadata to extract customer emails...`);
-    const customerEmails = new Set<string>();
-
-    for (const threadId of threadIds) {
-      try {
-        const thread = await gmail.users.threads.get({
-          userId: "me",
-          id: threadId,
-          format: "metadata",
-          metadataHeaders: ["From", "To"]
-        });
-
-        const messages = thread.data.messages || [];
-        for (const m of messages) {
-          const headers = m.payload?.headers || [];
-          const from = headers.find((h: any) => h.name.toLowerCase() === "from")?.value || "";
-
-          if (from && !from.includes(workspace.gmailAccountEmail)) {
-            // Extract email from "Name <email>" format
-            const emailMatch = from.match(/<(.+?)>/) || [null, from];
-            const email = emailMatch[1] || from;
-            if (email.includes("@")) {
-              customerEmails.add(email.trim().toLowerCase());
-            }
-          }
-        }
-      } catch (err) {
-        console.error(`[POLL] Failed to fetch thread ${threadId} metadata:`, err);
-      }
-    }
-
-    console.log(`[POLL] Found ${customerEmails.size} unique customer emails`);
-
-    // STEP 2: Pre-create all customers to avoid race conditions
-    console.log(`[POLL] Step 2: Pre-creating ${customerEmails.size} customers...`);
-    for (const email of customerEmails) {
-      try {
-        await prisma.customer.upsert({
-          where: {
-            workspaceId_primaryEmail: {
-              workspaceId: workspace.id,
-              primaryEmail: email
-            }
-          },
-          update: { lastSeenAt: new Date() },
-          create: {
-            workspaceId: workspace.id,
-            primaryEmail: email,
-            name: null
-          }
-        });
-      } catch (err) {
-        console.error(`[POLL] Failed to create customer ${email}:`, err);
-      }
-    }
-
-    console.log(`[POLL] Step 3: Processing ${threadIds.length} threads in parallel...`);
+    console.log(`[POLL] Workspace ${workspace.name}: Processing ${threadIds.length} threads sequentially...`);
 
     const errors: any[] = [];
     let skippedCount = 0;
-    const BATCH_SIZE = 50; // Process 50 threads at a time
-    const results: PromiseSettledResult<void>[] = [];
 
-    // Process threads in batches
-    for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
-      const batch = threadIds.slice(i, i + BATCH_SIZE);
-      console.log(`[POLL] Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(threadIds.length / BATCH_SIZE)} (${batch.length} threads)`);
+    // Process threads SEQUENTIALLY to avoid race conditions and stay under timeout
+    for (let i = 0; i < threadIds.length; i++) {
+      const threadId = threadIds[i];
 
-      const batchPromises = batch.map(async (threadId) => {
+      if (i % 10 === 0 && i > 0) {
+        console.log(`[POLL] Progress: ${i}/${threadIds.length} threads processed`);
+      }
+
+      try {
         const existing = await prisma.conversation.findUnique({
           where: {
             workspaceId_gmailThreadId: {
@@ -288,19 +230,13 @@ export async function pollOnce(req: Request, res: Response) {
         if (wasSkipped) {
           skippedCount++;
         }
-      });
-
-      const batchResults = await Promise.allSettled(batchPromises);
-      results.push(...batchResults);
-
-      // Track errors
-      batchResults.forEach((result, idx) => {
-        if (result.status === 'rejected') {
-          console.error(`[POLL] ❌ Failed to ingest thread ${batch[idx]}:`, result.reason);
-          errors.push({ threadId: batch[idx], error: result.reason instanceof Error ? result.reason.message : String(result.reason) });
-        }
-      });
+      } catch (err) {
+        console.error(`[POLL] ❌ Failed to ingest thread ${threadId}:`, err);
+        errors.push({ threadId, error: err instanceof Error ? err.message : String(err) });
+      }
     }
+
+    const results = threadIds.map(() => ({ status: 'fulfilled' as const, value: undefined }));
 
     // Log summary of failed threads
     const failedCount = results.filter(r => r.status === 'rejected').length;
