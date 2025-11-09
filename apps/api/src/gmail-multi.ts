@@ -327,7 +327,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string, inboun
   const subject = getHeader(first, "subject") || "";
   const fromEmail = parseEmail(getHeader(first, "from") || "");
 
-  // Upsert customer - if race condition occurs, just fetch existing
+  // Upsert customer - if race condition occurs, wait and fetch existing
   let customer;
   try {
     customer = await prisma.customer.upsert({
@@ -345,19 +345,31 @@ async function ingestThread(gmail: any, workspace: any, threadId: string, inboun
       },
     });
   } catch (error: any) {
-    // If unique constraint race condition, just fetch the existing customer
+    // If unique constraint race condition, wait for other thread to finish creating, then fetch
     if (error.code === 'P2002') {
-      console.log(`[INGEST] Race condition for ${fromEmail}, fetching existing customer`);
-      customer = await prisma.customer.findUnique({
-        where: {
-          workspaceId_primaryEmail: {
-            workspaceId: workspace.id,
-            primaryEmail: fromEmail
+      console.log(`[INGEST] Race condition for ${fromEmail}, waiting for customer creation...`);
+
+      // Retry up to 5 times with small delays
+      for (let i = 0; i < 5; i++) {
+        await new Promise(resolve => setTimeout(resolve, 50 * (i + 1))); // 50ms, 100ms, 150ms, etc.
+
+        customer = await prisma.customer.findUnique({
+          where: {
+            workspaceId_primaryEmail: {
+              workspaceId: workspace.id,
+              primaryEmail: fromEmail
+            }
           }
+        });
+
+        if (customer) {
+          console.log(`[INGEST] Found customer after ${i + 1} retries: ${fromEmail}`);
+          break;
         }
-      });
+      }
+
       if (!customer) {
-        throw new Error(`Customer not found after race condition: ${fromEmail}`);
+        throw new Error(`Customer not found after race condition retries: ${fromEmail}`);
       }
     } else {
       throw error;
