@@ -245,6 +245,22 @@ export function ConversationProvider({
           return false;
         }
 
+        // CRITICAL: If needs-reply filter is active, REMOVE conversations without needs-reply tag
+        if (!adminOnly && (showNeedsReply || statusFilter === 'needs-reply')) {
+          if (!conv.tags?.includes('needs-reply')) {
+            console.log(`[Client Filter Safety] BLOCKING no needs-reply when filter active: ${conv.id} "${conv.subject}"`);
+            return false;
+          }
+        }
+
+        // If resolved filter is active, REMOVE conversations with needs-reply tag
+        if (!adminOnly && statusFilter === 'resolved') {
+          if (conv.tags?.includes('needs-reply')) {
+            console.log(`[Client Filter Safety] BLOCKING needs-reply in resolved view: ${conv.id} "${conv.subject}"`);
+            return false;
+          }
+        }
+
         return true;
       });
 
@@ -419,6 +435,23 @@ export function ConversationProvider({
       if (!showArchived && newConv.archived) {
         console.log('[Filter] Removing conversation (archived):', id);
         return true;
+      }
+
+      // CRITICAL: Check needs-reply filter
+      // If showing only needs-reply conversations, remove ones without the tag
+      if (!adminOnly && (showNeedsReply || statusFilter === 'needs-reply')) {
+        if (!newConv.tags?.includes('needs-reply')) {
+          console.log('[Filter] Removing conversation (no needs-reply tag when filter active):', id);
+          return true;
+        }
+      }
+
+      // Check resolved filter (opposite of needs-reply)
+      if (!adminOnly && statusFilter === 'resolved') {
+        if (newConv.tags?.includes('needs-reply')) {
+          console.log('[Filter] Removing conversation (has needs-reply in resolved view):', id);
+          return true;
+        }
       }
 
       return false;
