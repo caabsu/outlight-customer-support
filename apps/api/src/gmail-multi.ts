@@ -190,10 +190,10 @@ export async function pollOnce(req: Request, res: Response) {
 
     // Process threads in batches to avoid timeout
     const allThreadIds_array = Array.from(allThreadIds);
-    const threadIds = allThreadIds_array.slice(0, 100);
+    const threadIds = allThreadIds_array.slice(0, 50);
 
-    if (allThreadIds_array.length > 100) {
-      console.log(`[POLL] ⚠️  Limiting to 100 most recent threads (found ${allThreadIds_array.length})`);
+    if (allThreadIds_array.length > 50) {
+      console.log(`[POLL] ⚠️  Limiting to 50 most recent threads (found ${allThreadIds_array.length})`);
     }
 
     console.log(`[POLL] Workspace ${workspace.name}: Processing ${threadIds.length} threads in batches...`);
