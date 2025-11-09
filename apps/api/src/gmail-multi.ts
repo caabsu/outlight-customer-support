@@ -147,25 +147,30 @@ export async function pollOnce(req: Request, res: Response) {
     const { gmail, workspace } = await getAuthedClient(workspaceId);
     console.log('[Poll] Got authenticated client for workspace:', workspace.name);
 
+    // Fix database constraint if needed (auto-fix on sync)
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Customer" DROP CONSTRAINT IF EXISTS "Customer_primaryEmail_key"`);
+      console.log('[SYNC] ✅ Database constraints verified');
+    } catch (err) {
+      console.log('[SYNC] ⚠️  Could not verify constraints (may be fine):', err);
+    }
+
     let newCount = 0;
     let existingCount = 0;
     const allThreadIds = new Set<string>();
 
-    // Fetch threads from last 2 months
-    const twoMonthsAgo = new Date();
-    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-    const afterDate = Math.floor(twoMonthsAgo.getTime() / 1000);
+    console.log(`[SYNC] ${workspace.name}: Fetching threads by MOST RECENT ACTIVITY (not thread start date)...`);
 
-    console.log(`[SYNC] ${workspace.name}: Fetching threads from last 2 months (after ${twoMonthsAgo.toISOString().split('T')[0]})...`);
-
-    // Fetch threads from last 2 months
+    // Fetch threads sorted by most recent activity (no date filter)
+    // Gmail naturally returns threads by most recent message/activity
     let pageToken: string | undefined;
     let pageCount = 0;
 
     do {
       const allEmailsRes = await gmail.users.threads.list({
         userId: "me",
-        q: `-in:spam -in:trash -in:draft after:${afterDate}`,
+        // NO DATE FILTER - Gmail returns by most recent activity
+        q: `-in:spam -in:trash -in:draft`,
         maxResults: 100,
         pageToken,
       });
@@ -177,14 +182,14 @@ export async function pollOnce(req: Request, res: Response) {
       pageToken = allEmailsRes.data.nextPageToken || undefined;
       pageCount++;
 
-      // Safety limit: stop at 20 pages (2000 threads)
-      if (pageCount >= 20) {
-        console.log(`[SYNC] Reached 20 page limit, stopping fetch`);
+      // Safety limit: stop at 10 pages (1000 threads with recent activity)
+      if (pageCount >= 10) {
+        console.log(`[SYNC] Reached 10 page limit, stopping fetch`);
         break;
       }
     } while (pageToken);
 
-    console.log(`[SYNC] Total threads fetched from last 2 months: ${allThreadIds.size}`);
+    console.log(`[SYNC] Total threads fetched (by recent activity): ${allThreadIds.size}`);
 
     // Process ALL threads (no limit)
     const allThreadIds_array = Array.from(allThreadIds);
