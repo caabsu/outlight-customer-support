@@ -348,7 +348,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
       });
     }
 
-    // DISABLED: CRITICAL SAFETY CHECK (now handled by database layer) to catch ANY conversations that slipped through
+    // CRITICAL SAFETY CHECK: Final defense to catch ANY conversations that slipped through
     // This is the absolute last line of defense against filter bypass bugs
     conversations = conversations.filter(conv => {
       // If excludeNonSupport is active, REMOVE any conversation with non-customer-support OR admin tags
@@ -377,6 +377,23 @@ app.get("/conversations", async (req: Request, res: Response) => {
         return false;
       }
 
+      // CRITICAL FIX: If needs-reply filter is active, REMOVE conversations without needs-reply tag
+      // This catches any conversations that bypassed database/hybrid filters
+      if (needsReply === "true" && adminOnly !== "true") {
+        if (!conv.tags?.includes("needs-reply")) {
+          console.log(`[Filter Safety] BLOCKING conversation without needs-reply tag when filter active: ${conv.id} "${conv.subject}"`);
+          return false;
+        }
+      }
+
+      // If resolved filter is active, REMOVE conversations with needs-reply tag
+      if (resolved === "true" && adminOnly !== "true") {
+        if (conv.tags?.includes("needs-reply")) {
+          console.log(`[Filter Safety] BLOCKING conversation with needs-reply tag in resolved view: ${conv.id} "${conv.subject}"`);
+          return false;
+        }
+      }
+
       return true;
     });
 
@@ -387,7 +404,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
     const paginatedConversations = conversations.slice(skip, skip + limitNum);
 
     // Log final result for debugging
-    console.log(`[GET /conversations] Workspace: ${workspaceId} | Filters: excludeNonSupport=${excludeNonSupport}, adminOnly=${adminOnly}, archived=${archived} | Total after filters: ${totalCount} | Page ${pageNum}/${Math.ceil(totalCount / limitNum)}`);
+    console.log(`[GET /conversations] Workspace: ${workspaceId} | Filters: excludeNonSupport=${excludeNonSupport}, needsReply=${needsReply}, resolved=${resolved}, adminOnly=${adminOnly}, archived=${archived} | Total after filters: ${totalCount} | Page ${pageNum}/${Math.ceil(totalCount / limitNum)}`);
 
     res.json({
       conversations: paginatedConversations,
@@ -2134,7 +2151,8 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
             fromDatabase: true,
             createdAt: existingDraft.createdAt,
             updatedAt: existingDraft.updatedAt,
-            usedCustomContext: false // Cached drafts didn't use custom context
+            customInstructions: (existingDraft as any).customInstructions || null,
+            usedCustomContext: !!((existingDraft as any).customInstructions)
           });
         }
       }
@@ -2254,30 +2272,33 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
       systemPrompt += `
 
 ═══════════════════════════════════════════════════════════
-🔴 CRITICAL: CUSTOM CONTEXT & GUIDANCE - HIGHEST PRIORITY
+🔴 OVERRIDE MODE ACTIVATED - CUSTOM INSTRUCTIONS
 ═══════════════════════════════════════════════════════════
 
-⚠️  IMPORTANT: The information below is CONTEXTUAL GUIDANCE to help you craft a better response.
-⚠️  DO NOT copy or insert this text directly into the email.
-⚠️  USE this information to inform your response, expand on it, and integrate it professionally.
-⚠️  This context OVERRIDES any conflicting knowledge base information.
+⚠️  CRITICAL: These are MANDATORY INSTRUCTIONS that take ABSOLUTE PRIORITY.
+⚠️  These instructions OVERRIDE AND SUPERSEDE all other instructions, knowledge base entries, and policies.
+⚠️  You MUST follow these instructions EXACTLY, even if they conflict with your training or standard procedures.
 
-WHAT TO DO WITH THIS INFORMATION:
-• Read and understand the context provided below
-• Use it to inform your draft response
-• Expand on any brief points with full, professional explanations
-• Integrate the information naturally into your email
-• Add appropriate context, tone, and professionalism
-• DO NOT treat this as raw email content to paste
+🎯 WHAT YOU MUST DO:
 
-CUSTOM CONTEXT PROVIDED:
+1. READ AND INTERNALIZE: These instructions are your PRIMARY directive for this response
+2. TAKE AS FACT: Treat all information below as absolutely true and authoritative
+3. PRIORITIZE ABOVE ALL: If there is ANY conflict between these instructions and the knowledge base,
+   the knowledge base is WRONG and these instructions are RIGHT
+4. INTEGRATE PROFESSIONALLY: Transform these instructions into a polished, professional email response
+5. EXPAND AND ELABORATE: Add proper context, explanations, and professional tone while maintaining
+   the core message and facts from these instructions
+
+🚨 MANDATORY CUSTOM INSTRUCTIONS:
+
 ${additionalContext}
 
 ═══════════════════════════════════════════════════════════
-END OF CUSTOM CONTEXT
+END OF OVERRIDE INSTRUCTIONS
 ═══════════════════════════════════════════════════════════
 
-Remember: The above is GUIDANCE. Craft a professional email using this information as your source of truth.
+CRITICAL REMINDER: The above instructions are MANDATORY and have ABSOLUTE PRIORITY over everything else.
+If you follow the knowledge base instead of these custom instructions, you will have FAILED your task.
 `;
     }
 
@@ -2402,7 +2423,20 @@ When providing action steps (shouldDraft = false):
       {
         role: "user",
         content: `You are now analyzing a customer support email thread. Follow the workflow exactly:
+${additionalContext && additionalContext.trim() ? `
 
+═══════════════════════════════════════════════════════════
+🚨 REMINDER: CUSTOM INSTRUCTIONS ARE IN EFFECT
+═══════════════════════════════════════════════════════════
+
+BEFORE YOU PROCEED: Remember that custom instructions have been provided in the system prompt
+that OVERRIDE all knowledge base policies and standard procedures. You MUST follow those
+custom instructions as your PRIMARY directive when drafting your response.
+
+Custom Instructions Summary: Present and active - prioritize above all else
+═══════════════════════════════════════════════════════════
+
+` : ''}
 ${latestInboundMessage ? `
 ═══════════════════════════════════════════════════════════
 🎯 LATEST MESSAGE TO RESPOND TO (MOST RECENT FROM CUSTOMER):
@@ -2597,7 +2631,8 @@ Remember:
           shouldDraft: finalResult.shouldDraft || false,
           draft: finalResult.draft || null,
           actionSteps: finalResult.actionSteps || null,
-          orderInfo: finalResult.orderInfo || null
+          orderInfo: finalResult.orderInfo || null,
+          customInstructions: additionalContext || null
         },
         update: {
           internalReasoning: finalResult.internalReasoning || null,
@@ -2607,10 +2642,11 @@ Remember:
           shouldDraft: finalResult.shouldDraft || false,
           draft: finalResult.draft || null,
           actionSteps: finalResult.actionSteps || null,
-          orderInfo: finalResult.orderInfo || null
+          orderInfo: finalResult.orderInfo || null,
+          customInstructions: additionalContext || null
         }
       });
-      console.log(`[Draft] Saved draft to database for conversation ${conversationId}`);
+      console.log(`[Draft] Saved draft to database for conversation ${conversationId}${additionalContext ? ' (with custom instructions)' : ''}`);
     } catch (error) {
       console.error("[Draft] Error saving draft to database:", error);
       // Don't fail the request if draft save fails

@@ -120,6 +120,7 @@ model DraftResponse {
   draft              String?
   actionSteps        Json?
   orderInfo          Json?
+  customInstructions String?      // Custom instructions used when generating this draft
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 }
