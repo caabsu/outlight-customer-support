@@ -485,13 +485,21 @@ export async function sendReply(workspaceId: string, conversationId: string, to:
     },
   });
 
+  const oldTags = conversation.tags || [];
+  const newTags = oldTags.filter(tag => tag !== "needs-reply");
+  const removedNeedsReply = oldTags.includes("needs-reply") && !newTags.includes("needs-reply");
+
   await prisma.conversation.update({
     where: { id: conversationId },
     data: {
       lastMessageAt: now,
-      tags: (conversation.tags || []).filter(tag => tag !== "needs-reply")
+      tags: newTags
     },
   });
+
+  if (removedNeedsReply) {
+    console.log(`[Send Email] ✅ Removed needs-reply tag from conversation ${conversationId} after sending reply`);
+  }
 
   return result.data;
 }

@@ -184,6 +184,9 @@ app.get("/conversations", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "workspaceId is required" });
     }
 
+    // Log all active filters for debugging
+    console.log(`[Filter Debug] Request filters: workspace=${workspaceId}, excludeNonSupport=${excludeNonSupport}, adminOnly=${adminOnly}, needsReply=${needsReply}, resolved=${resolved}, archived=${archived}, starred=${starred}, showSent=${showSent}`);
+
     const where: any = {
       workspaceId: workspaceId as string
     };
@@ -231,22 +234,25 @@ app.get("/conversations", async (req: Request, res: Response) => {
     }
 
     // Needs reply filter (has needs-reply tag)
-    // Don't apply this if adminOnly is active (admin conversations might not have needs-reply)
+    // FIXED: Now works with adminOnly mode to filter admin emails by reply status
     if (needsReply === "true") {
       andConditions.push({
         tags: {
           has: "needs-reply"
         }
       });
+      console.log(`[Filter] Adding needs-reply filter (works with adminOnly: ${adminOnly === "true"})`);
     }
 
     // Resolved filter (does NOT have needs-reply tag)
+    // FIXED: Now works with adminOnly mode to show resolved admin emails
     if (resolved === "true") {
       notConditions.push({
         tags: {
           has: "needs-reply"
         }
       });
+      console.log(`[Filter] Adding resolved filter (works with adminOnly: ${adminOnly === "true"})`);
     }
 
     // Specific tags filter (must have ALL specified tags)
@@ -379,7 +385,8 @@ app.get("/conversations", async (req: Request, res: Response) => {
 
       // CRITICAL FIX: If needs-reply filter is active, REMOVE conversations without needs-reply tag
       // This catches any conversations that bypassed database/hybrid filters
-      if (needsReply === "true" && adminOnly !== "true") {
+      // FIXED: Allow this filter to work with adminOnly mode
+      if (needsReply === "true") {
         if (!conv.tags?.includes("needs-reply")) {
           console.log(`[Filter Safety] BLOCKING conversation without needs-reply tag when filter active: ${conv.id} "${conv.subject}"`);
           return false;
@@ -387,7 +394,8 @@ app.get("/conversations", async (req: Request, res: Response) => {
       }
 
       // If resolved filter is active, REMOVE conversations with needs-reply tag
-      if (resolved === "true" && adminOnly !== "true") {
+      // FIXED: Allow this filter to work with adminOnly mode
+      if (resolved === "true") {
         if (conv.tags?.includes("needs-reply")) {
           console.log(`[Filter Safety] BLOCKING conversation with needs-reply tag in resolved view: ${conv.id} "${conv.subject}"`);
           return false;
@@ -404,7 +412,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
     const paginatedConversations = conversations.slice(skip, skip + limitNum);
 
     // Log final result for debugging
-    console.log(`[GET /conversations] Workspace: ${workspaceId} | Filters: excludeNonSupport=${excludeNonSupport}, needsReply=${needsReply}, resolved=${resolved}, adminOnly=${adminOnly}, archived=${archived} | Total after filters: ${totalCount} | Page ${pageNum}/${Math.ceil(totalCount / limitNum)}`);
+    console.log(`[Filter Debug] Results: Total conversations after ALL filters: ${totalCount} | Returning page ${pageNum}/${Math.ceil(totalCount / limitNum)} (${paginatedConversations.length} conversations)`);
 
     res.json({
       conversations: paginatedConversations,

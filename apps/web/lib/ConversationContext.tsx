@@ -161,16 +161,15 @@ export function ConversationProvider({
       if (adminOnly) params.set('adminOnly', 'true');
 
       // Status filter overrides showNeedsReply
-      // Don't apply needsReply or resolved filters if adminOnly is active
-      if (!adminOnly) {
-        if (statusFilter === 'needs-reply') {
-          params.set('needsReply', 'true');
-        } else if (statusFilter === 'resolved') {
-          params.set('resolved', 'true');
-        } else if (showNeedsReply) {
-          // Only apply showNeedsReply if statusFilter is 'all'
-          params.set('needsReply', 'true');
-        }
+      // FIXED: Allow needsReply and resolved filters to work WITH adminOnly
+      // This enables filtering admin emails by reply status
+      if (statusFilter === 'needs-reply') {
+        params.set('needsReply', 'true');
+      } else if (statusFilter === 'resolved') {
+        params.set('resolved', 'true');
+      } else if (showNeedsReply) {
+        // Only apply showNeedsReply if statusFilter is 'all'
+        params.set('needsReply', 'true');
       }
 
       if (selectedTags.length > 0) {
@@ -246,7 +245,8 @@ export function ConversationProvider({
         }
 
         // CRITICAL: If needs-reply filter is active, REMOVE conversations without needs-reply tag
-        if (!adminOnly && (showNeedsReply || statusFilter === 'needs-reply')) {
+        // FIXED: Allow this filter to work with adminOnly mode
+        if (showNeedsReply || statusFilter === 'needs-reply') {
           if (!conv.tags?.includes('needs-reply')) {
             console.log(`[Client Filter Safety] BLOCKING no needs-reply when filter active: ${conv.id} "${conv.subject}"`);
             return false;
@@ -254,7 +254,8 @@ export function ConversationProvider({
         }
 
         // If resolved filter is active, REMOVE conversations with needs-reply tag
-        if (!adminOnly && statusFilter === 'resolved') {
+        // FIXED: Allow this filter to work with adminOnly mode
+        if (statusFilter === 'resolved') {
           if (conv.tags?.includes('needs-reply')) {
             console.log(`[Client Filter Safety] BLOCKING needs-reply in resolved view: ${conv.id} "${conv.subject}"`);
             return false;
@@ -439,7 +440,8 @@ export function ConversationProvider({
 
       // CRITICAL: Check needs-reply filter
       // If showing only needs-reply conversations, remove ones without the tag
-      if (!adminOnly && (showNeedsReply || statusFilter === 'needs-reply')) {
+      // FIXED: Allow this filter to work with adminOnly mode
+      if (showNeedsReply || statusFilter === 'needs-reply') {
         if (!newConv.tags?.includes('needs-reply')) {
           console.log('[Filter] Removing conversation (no needs-reply tag when filter active):', id);
           return true;
@@ -447,7 +449,8 @@ export function ConversationProvider({
       }
 
       // Check resolved filter (opposite of needs-reply)
-      if (!adminOnly && statusFilter === 'resolved') {
+      // FIXED: Allow this filter to work with adminOnly mode
+      if (statusFilter === 'resolved') {
         if (newConv.tags?.includes('needs-reply')) {
           console.log('[Filter] Removing conversation (has needs-reply in resolved view):', id);
           return true;
@@ -531,7 +534,7 @@ export function ConversationProvider({
   };
 
   const refreshConversations = async () => {
-    await fetchConversations(false, 1, false); // Preserve current page, don't suppress errors
+    await fetchConversations(false, 0, false); // Preserve current page, don't suppress errors
   };
 
   const goToPage = async (page: number) => {
