@@ -7,9 +7,9 @@
         "dev": "ts-node apps/api/src/server.ts",
         "dev:web": "cd apps/web && npm run dev",
         "dev:all": "concurrently \"npm run dev\" \"npm run dev:web\" --names \"API,WEB\" --prefix-colors \"cyan,magenta\"",
-        "build": "npx prisma migrate deploy && tsc && npx prisma generate",
+        "build": "tsc && npx prisma generate",
         "build:web": "cd apps/web && npm install && npm run build",
-        "start": "node dist/apps/api/src/server.js",
+        "start": "npx prisma migrate deploy && node dist/apps/api/src/server.js",
         "start:web": "cd apps/web && npm start",
         "migrate:deploy": "npx prisma migrate deploy",
         "test": "echo \"Error: no test specified\" && exit 1"
