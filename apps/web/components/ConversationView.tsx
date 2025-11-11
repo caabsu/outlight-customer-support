@@ -998,6 +998,8 @@ export default function ConversationView() {
     }
 
     const conversationId = selectedConversation.id;
+    const currentConversationAtStart = selectedConversation.id; // Capture for comparison later
+
     // Capture the custom context for this specific conversation at call time
     const thisConversationContext = customContextByConversationId[conversationId] || "";
     const contextToUse = customContext !== undefined ? customContext : thisConversationContext;
@@ -1077,15 +1079,16 @@ export default function ConversationView() {
         [conversationId]: data
       }));
 
-      // CRITICAL FIX: Only auto-open the draft popup if we're still on the same conversation
-      // This prevents the popup from opening for the wrong conversation if user switched
-      if (selectedConversation?.id === conversationId) {
-        console.log(`[Draft] Opening draft popup for current conversation ${conversationId}`);
-        setShowDraftPopup(true);
-        setDraftMinimized(false);
-      } else {
+      // CRITICAL FIX: NEVER auto-open draft popup after generation completes
+      // This prevents popups appearing for wrong conversations when user navigates away
+      // User must explicitly click "Draft" button to view the generated draft
+      // This is safer and prevents all timing/race condition issues
+      if (selectedConversation?.id !== conversationId) {
         console.log(`[Draft] Draft generated for conversation ${conversationId}, but user switched to ${selectedConversation?.id}. Not opening popup.`);
+      } else {
+        console.log(`[Draft] Draft generated successfully for conversation ${conversationId}. User can click Draft button to view.`);
       }
+      // Note: Popup is NOT auto-opened - user must click "Draft" button to view
 
       // Update conversation tags optimistically if draft added new tags
       // CRITICAL: Get tags from the conversation that the draft was generated for, NOT selectedConversation
@@ -1104,13 +1107,12 @@ export default function ConversationView() {
       console.error("[Draft] Error generating draft:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to generate draft";
       setDraftError(errorMessage);
-      // CRITICAL FIX: Only show error in popup if we're still on the same conversation
-      if (selectedConversation?.id === conversationId) {
-        console.log(`[Draft] Showing error popup for current conversation ${conversationId}`);
-        setShowDraftPopup(true);
-        setDraftMinimized(false);
+      // CRITICAL FIX: NEVER auto-open popup on error
+      // Error message is stored and will be shown if user clicks "Draft" button
+      if (selectedConversation?.id !== conversationId) {
+        console.log(`[Draft] Error for conversation ${conversationId}, but user switched to ${selectedConversation?.id}. Error stored, not opening popup.`);
       } else {
-        console.log(`[Draft] Error for conversation ${conversationId}, but user switched to ${selectedConversation?.id}. Not opening popup.`);
+        console.log(`[Draft] Error for conversation ${conversationId}. User can click Draft button to see error.`);
       }
     } finally {
       // Clear loading state for this specific conversation

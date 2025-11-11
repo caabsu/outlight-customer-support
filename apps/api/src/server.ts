@@ -498,6 +498,8 @@ app.get("/conversations/next-unreplied/:currentId", async (req: Request, res: Re
 // Get a single conversation (parameterized route - must come AFTER specific routes)
 app.get("/conversations/:id", async (req: Request, res: Response) => {
   try {
+    const { excludeNonSupport, adminOnly, includeArchived } = req.query;
+
     const conversation = await prisma.conversation.findUnique({
       where: { id: req.params.id },
       include: {
@@ -512,6 +514,43 @@ app.get("/conversations/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
+    // CRITICAL: Validate conversation against active filters to prevent bypass
+    // This prevents non-support/admin/archived conversations from being fetched when filters are active
+
+    if (excludeNonSupport === "true") {
+      if (conversation.tags?.includes("non-customer-support")) {
+        console.log(`[Filter Validation] BLOCKED fetch of non-customer-support conversation: ${req.params.id}`);
+        return res.status(403).json({
+          error: "Conversation filtered out",
+          reason: "non-customer-support tag (CS-only view active)"
+        });
+      }
+      if (conversation.tags?.includes("admin") && adminOnly !== "true") {
+        console.log(`[Filter Validation] BLOCKED fetch of admin conversation in CS view: ${req.params.id}`);
+        return res.status(403).json({
+          error: "Conversation filtered out",
+          reason: "admin tag (CS-only view active)"
+        });
+      }
+    }
+
+    if (adminOnly === "true" && !conversation.tags?.includes("admin")) {
+      console.log(`[Filter Validation] BLOCKED fetch of non-admin conversation in admin view: ${req.params.id}`);
+      return res.status(403).json({
+        error: "Conversation filtered out",
+        reason: "not admin (admin-only view active)"
+      });
+    }
+
+    if (includeArchived !== "true" && conversation.archived) {
+      console.log(`[Filter Validation] BLOCKED fetch of archived conversation: ${req.params.id}`);
+      return res.status(403).json({
+        error: "Conversation filtered out",
+        reason: "archived (show archived not enabled)"
+      });
+    }
+
+    console.log(`[Filter Validation] ✅ Conversation ${req.params.id} passed filter validation`);
     res.json(conversation);
   } catch (error) {
     console.error("Error fetching conversation:", error);

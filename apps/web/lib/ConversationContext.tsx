@@ -383,13 +383,48 @@ export function ConversationProvider({
         return;
       }
 
-      // Fetch the conversation from the API
-      const res = await fetch(`/api/conversations/${id}`);
+      // Fetch the conversation from the API with current filter state
+      // CRITICAL: Pass filter parameters to backend for validation
+      const params = new URLSearchParams();
+      if (excludeNonSupport) params.set('excludeNonSupport', 'true');
+      if (adminOnly) params.set('adminOnly', 'true');
+      if (showArchived) params.set('includeArchived', 'true');
+
+      const res = await fetch(`/api/conversations/${id}?${params.toString()}`);
+
+      if (res.status === 403) {
+        // Conversation filtered out by backend - silently ignore
+        console.log(`[Fetch] Conversation ${id} filtered out by backend (likely non-support/admin/archived)`);
+        return; // Don't show error, just exit
+      }
+
       if (!res.ok) {
         throw new Error(`Failed to fetch conversation: ${res.statusText}`);
       }
 
       const conversation: Conversation = await res.json();
+
+      // CRITICAL: Double-check filters client-side (defense-in-depth)
+      if (excludeNonSupport) {
+        if (conversation.tags?.includes("non-customer-support")) {
+          console.log(`[Fetch] Client blocked non-customer-support conversation: ${id}`);
+          return;
+        }
+        if (!adminOnly && conversation.tags?.includes("admin")) {
+          console.log(`[Fetch] Client blocked admin conversation in CS view: ${id}`);
+          return;
+        }
+      }
+
+      if (adminOnly && !conversation.tags?.includes("admin")) {
+        console.log(`[Fetch] Client blocked non-admin conversation in admin view: ${id}`);
+        return;
+      }
+
+      if (!showArchived && conversation.archived) {
+        console.log(`[Fetch] Client blocked archived conversation: ${id}`);
+        return;
+      }
 
       // Add it to the conversations list
       setConversations((prev) => [conversation, ...prev]);
