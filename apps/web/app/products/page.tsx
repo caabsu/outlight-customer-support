@@ -57,10 +57,22 @@ export default function ProductsPage() {
       });
 
       const res = await fetch(`/api/products?${params.toString()}`);
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error("Failed to load products:", errorData);
+        alert(`Database error: ${errorData.details || errorData.error}\n\nYou need to run this SQL in Supabase:\nALTER TABLE "Product" ADD COLUMN "variants" JSONB;`);
+        setProducts([]);
+        setLoading(false);
+        return;
+      }
+
       const data = await res.json();
       setProducts(data.products || []);
     } catch (error) {
       console.error("Failed to load products:", error);
+      alert("Failed to load products. Check console for details.");
+      setProducts([]);
     } finally {
       setLoading(false);
     }
@@ -72,6 +84,10 @@ export default function ProductsPage() {
 
     try {
       const res = await fetch(`/api/products/stats/${workspaceId}`);
+      if (!res.ok) {
+        console.error("Failed to load stats");
+        return;
+      }
       const data = await res.json();
       setStats(data);
     } catch (error) {
