@@ -3490,7 +3490,11 @@ app.get("/products", async (req: Request, res: Response) => {
     res.json({ products });
   } catch (error) {
     console.error("[Products] Error fetching products:", error);
-    res.status(500).json({ error: "Failed to fetch products" });
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    res.status(500).json({
+      error: "Failed to fetch products",
+      details: errorMessage
+    });
   }
 });
 
