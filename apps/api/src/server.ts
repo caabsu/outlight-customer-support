@@ -204,16 +204,13 @@ app.get("/conversations", async (req: Request, res: Response) => {
 
     // REDESIGNED FILTER SYSTEM: Single reliable layer with clear logic
     // All filtering is done at the database level for consistency and performance
-    const andConditions: any[] = [];
+    const requiredTags: string[] = [];  // Tags that MUST be present (hasEvery)
     const notConditions: any[] = [];
 
     // CRITICAL: Admin-only filter (show ONLY admin tagged conversations)
     if (adminOnly === "true") {
-      andConditions.push({
-        tags: {
-          has: "admin"
-        }
-      });
+      requiredTags.push("admin");
+      console.log(`[Filter] Adding admin requirement`);
     } else if (excludeNonSupport === "true") {
       // CRITICAL: Default behavior - exclude non-support AND admin from view
       // These MUST be in NOT array to exclude them
@@ -236,12 +233,8 @@ app.get("/conversations", async (req: Request, res: Response) => {
     // Needs reply filter (has needs-reply tag)
     // FIXED: Now works with adminOnly mode to filter admin emails by reply status
     if (needsReply === "true") {
-      andConditions.push({
-        tags: {
-          has: "needs-reply"
-        }
-      });
-      console.log(`[Filter] Adding needs-reply filter (works with adminOnly: ${adminOnly === "true"})`);
+      requiredTags.push("needs-reply");
+      console.log(`[Filter] Adding needs-reply requirement (works with adminOnly: ${adminOnly === "true"})`);
     }
 
     // Resolved filter (does NOT have needs-reply tag)
@@ -259,15 +252,19 @@ app.get("/conversations", async (req: Request, res: Response) => {
     if (tags && typeof tags === 'string' && tags.length > 0) {
       const tagArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
       if (tagArray.length > 0) {
-        andConditions.push(...tagArray.map(tag => ({
-          tags: { has: tag }
-        })));
+        requiredTags.push(...tagArray);
       }
     }
 
-    // CRITICAL: Apply AND conditions (must have all)
-    if (andConditions.length > 0) {
-      where.AND = andConditions;
+    // CRITICAL FIX: Use hasEvery for multiple required tags instead of AND array
+    // This ensures Prisma correctly checks that ALL tags are present
+    // Previously: where.AND = [{ tags: { has: "admin" } }, { tags: { has: "needs-reply" } }]
+    // Now: where.tags = { hasEvery: ["admin", "needs-reply"] }
+    if (requiredTags.length > 0) {
+      where.tags = {
+        hasEvery: requiredTags
+      };
+      console.log(`[Filter] Requiring ALL tags: ${requiredTags.join(', ')}`);
     }
 
     // CRITICAL BUG FIX: Prisma NOT array bug - wrap in OR to exclude ANY

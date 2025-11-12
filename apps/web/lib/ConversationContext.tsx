@@ -156,7 +156,9 @@ export function ConversationProvider({
 
       if (showArchived) params.set('archived', 'true');
       if (showStarred) params.set('starred', 'true');
-      if (excludeNonSupport) params.set('excludeNonSupport', 'true');
+      // CRITICAL: Don't send excludeNonSupport when adminOnly is active
+      // ADMIN filter should work as a separate inbox, not affected by CS-only filter
+      if (excludeNonSupport && !adminOnly) params.set('excludeNonSupport', 'true');
       if (showSent) params.set('showSent', 'true');
       if (adminOnly) params.set('adminOnly', 'true');
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useConversations } from "@/lib/ConversationContext";
 import { useRouter } from "next/navigation";
+import AIAssistant from "./AIAssistant";
 
 type ConversationHistory = {
   id: string;
@@ -200,7 +201,6 @@ export default function ConversationView() {
   const [draftMinimized, setDraftMinimized] = useState(false);
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
   const [showKBTab, setShowKBTab] = useState(false); // For Draft KB tab
-  const [showSummarizeKBTab, setShowSummarizeKBTab] = useState(false); // For Summarize KB tab
   const [expandedKBSections, setExpandedKBSections] = useState<Record<string, boolean>>({
     general: true,
     toolSpecific: true
@@ -324,7 +324,6 @@ export default function ConversationView() {
     setShowDraftPopup(false);
     setDraftMinimized(false);
     setShowKBTab(false);
-    setShowSummarizeKBTab(false);
     setDraftError(null);
     // Don't clear custom instructions - they are stored per conversation
   }, [selectedConversation?.id]);
@@ -2718,105 +2717,9 @@ export default function ConversationView() {
             )}
           </div>
 
-          {/* Summarize Button with KB Info */}
-          <div className="relative">
-            <button
-              onClick={() => {/* TODO: Implement summarize */}}
-              disabled={!selectedConversation}
-              className="w-full px-3 py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-md transition-colors text-sm font-sans font-medium disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-between shadow-sm"
-            >
-              <span>Summarize</span>
-              {/* Info Icon */}
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowSummarizeKBTab(!showSummarizeKBTab);
-                }}
-                className="p-0.5 hover:bg-white/20 rounded transition-colors cursor-pointer"
-                title="View Knowledge Base"
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setShowSummarizeKBTab(!showSummarizeKBTab);
-                  }
-                }}
-              >
-                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </button>
-
-            {/* Expandable Knowledge Base Tab for Summarize */}
-            {showSummarizeKBTab && (
-              <div className="absolute left-0 right-0 top-full mt-1 z-10 bg-white border border-slate-300 rounded shadow-lg overflow-hidden">
-                {/* Header */}
-                <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                    </svg>
-                    <span className="text-xs font-sans font-semibold text-slate-700">Summarize Knowledge Base</span>
-                  </div>
-                  <button
-                    onClick={() => setShowSummarizeKBTab(false)}
-                    className="p-0.5 hover:bg-slate-200 rounded transition-colors"
-                    title="Close"
-                  >
-                    <svg className="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-
-                {/* Content */}
-                <div className="max-h-64 overflow-y-auto p-2 space-y-1.5">
-                  {/* General Guidelines */}
-                  <div className="border border-slate-200 rounded overflow-hidden">
-                    <button
-                      onClick={() => setExpandedKBSections(prev => ({ ...prev, general: !prev.general }))}
-                      className="w-full px-2 py-1.5 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between text-left"
-                    >
-                      <span className="text-[10px] font-sans font-semibold text-slate-700">General Guidelines</span>
-                      <svg className={`w-3 h-3 text-slate-600 transition-transform ${expandedKBSections.general ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expandedKBSections.general && (
-                      <div className="px-2 py-1.5 bg-white text-[9px] font-sans text-slate-600 space-y-0.5">
-                        <div>• Email Classification Tags</div>
-                        <div>• Link Policy</div>
-                        <div>• Summary Requirements</div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Summarize Tool Specific */}
-                  <div className="border border-slate-200 rounded overflow-hidden">
-                    <button
-                      onClick={() => setExpandedKBSections(prev => ({ ...prev, toolSpecific: !prev.toolSpecific }))}
-                      className="w-full px-2 py-1.5 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between text-left"
-                    >
-                      <span className="text-[10px] font-sans font-semibold text-slate-700">Summarize Specific</span>
-                      <svg className={`w-3 h-3 text-slate-600 transition-transform ${expandedKBSections.toolSpecific ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expandedKBSections.toolSpecific && (
-                      <div className="px-2 py-1.5 bg-white text-[9px] font-sans text-slate-600 space-y-0.5">
-                        <div>• Conversation Context Analysis</div>
-                        <div>• Key Points Extraction</div>
-                        <div>• Action Items Identification</div>
-                        <div>• Customer Sentiment</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+          {/* AI Assistant Chatbot */}
+          <div>
+            <AIAssistant workspaceId={currentWorkspaceId ?? undefined} />
           </div>
         </div>
       </div>
