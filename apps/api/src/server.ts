@@ -256,15 +256,23 @@ app.get("/conversations", async (req: Request, res: Response) => {
       }
     }
 
-    // CRITICAL FIX: Use hasEvery for multiple required tags instead of AND array
-    // This ensures Prisma correctly checks that ALL tags are present
-    // Previously: where.AND = [{ tags: { has: "admin" } }, { tags: { has: "needs-reply" } }]
-    // Now: where.tags = { hasEvery: ["admin", "needs-reply"] }
+    // CRITICAL FIX: Build AND conditions for required tags
+    // Each tag must be present, so we check each one individually
+    const andConditions: any[] = [];
+
     if (requiredTags.length > 0) {
-      where.tags = {
-        hasEvery: requiredTags
-      };
-      console.log(`[Filter] Requiring ALL tags: ${requiredTags.join(', ')}`);
+      requiredTags.forEach(tag => {
+        andConditions.push({
+          tags: { has: tag }
+        });
+      });
+      console.log(`[Filter] Requiring ALL tags via AND: ${requiredTags.join(', ')}`);
+    }
+
+    // Apply AND conditions (must have all required tags)
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+      console.log(`[Filter] WHERE.AND conditions:`, JSON.stringify(andConditions, null, 2));
     }
 
     // CRITICAL BUG FIX: Prisma NOT array bug - wrap in OR to exclude ANY
@@ -274,6 +282,8 @@ app.get("/conversations", async (req: Request, res: Response) => {
       };
       console.log(`[Filter] NOT filter with OR: excluding ANY of ${notConditions.length} tags`);
     }
+
+    console.log(`[Filter] Final WHERE object:`, JSON.stringify(where, null, 2));
 
     // Date range filter
     if (dateRange && dateRange !== "all") {
@@ -309,16 +319,24 @@ app.get("/conversations", async (req: Request, res: Response) => {
       orderBy: { lastMessageAt: "desc" },
     });
 
+    console.log(`[Filter] Database returned ${conversations.length} conversations`);
+    if (conversations.length > 0 && (adminOnly === "true" || needsReply === "true")) {
+      console.log(`[Filter] First few conversations tags:`, conversations.slice(0, 3).map(c => ({ id: c.id, subject: c.subject?.substring(0, 50), tags: c.tags })));
+    }
+
     // Apply showSent filter (requires checking messages)
     if (showSent === "true") {
+      const beforeShowSent = conversations.length;
       conversations = conversations.filter(conv =>
         conv.messages.some(msg => msg.direction === "outbound")
       );
+      console.log(`[Filter] After showSent filter: ${beforeShowSent} -> ${conversations.length}`);
     }
 
     // DISABLED: Apply hybrid needs-reply filter (now handled by database layer) for conversations without tags (backward compatibility)
     // This handles conversations created before the tag system was implemented
     if (needsReply === "true") {
+      const beforeHybrid = conversations.length;
       conversations = conversations.filter(conv => {
         // Already filtered by tag above, but also check last message for old conversations
         if (conv.tags?.includes("needs-reply")) return true;
@@ -332,6 +350,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
 
         return false;
       });
+      console.log(`[Filter] After hybrid needs-reply filter: ${beforeHybrid} -> ${conversations.length}`);
     }
 
     // Apply hybrid resolved filter
@@ -353,6 +372,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
 
     // CRITICAL SAFETY CHECK: Final defense to catch ANY conversations that slipped through
     // This is the absolute last line of defense against filter bypass bugs
+    const beforeSafety = conversations.length;
     conversations = conversations.filter(conv => {
       // If excludeNonSupport is active, REMOVE any conversation with non-customer-support OR admin tags
       if (excludeNonSupport === "true") {
@@ -401,6 +421,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
 
       return true;
     });
+    console.log(`[Filter] After safety filter: ${beforeSafety} -> ${conversations.length}`);
 
     // Get total count after ALL filters including safety check
     const totalCount = conversations.length;
