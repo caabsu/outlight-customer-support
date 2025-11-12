@@ -3521,6 +3521,8 @@ app.post("/products", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "workspaceId is required" });
     }
 
+    console.log("[Products] Creating product with data:", JSON.stringify({ workspaceId, ...productData }, null, 2));
+
     const product = await prisma.product.create({
       data: {
         workspaceId,
@@ -3532,7 +3534,13 @@ app.post("/products", async (req: Request, res: Response) => {
     res.json(product);
   } catch (error) {
     console.error("[Products] Error creating product:", error);
-    res.status(500).json({ error: "Failed to create product" });
+    // Return more detailed error for debugging
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    res.status(500).json({
+      error: "Failed to create product",
+      details: errorMessage,
+      data: req.body
+    });
   }
 });
 
