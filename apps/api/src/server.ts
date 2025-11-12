@@ -2684,6 +2684,7 @@ Remember:
                   specifications: p.specifications,
                   features: p.features,
                   price: p.price,
+                  variants: p.variants, // Include variants with different prices
                   availabilityStatus: p.availabilityStatus,
                   shippingTime: p.shippingTime,
                   shippingRestrictions: p.shippingRestrictions,
@@ -3742,6 +3743,7 @@ app.post("/ai-assistant/chat", async (req: Request, res: Response) => {
           description: true,
           features: true,
           price: true,
+          variants: true,
           availabilityStatus: true,
           shippingTime: true,
           instructions: true,
@@ -3767,6 +3769,9 @@ app.post("/ai-assistant/chat", async (req: Request, res: Response) => {
           `Description: ${p.description || "N/A"}\n` +
           (p.features && p.features.length > 0 ? `Features: ${p.features.join(", ")}\n` : "") +
           (p.price ? `Price: ${p.price}\n` : "") +
+          (p.variants && Array.isArray(p.variants) && p.variants.length > 0
+            ? `Variants:\n${p.variants.map((v: any) => `  - ${v.option}: ${v.price}${v.sku ? ` (SKU: ${v.sku})` : ""}`).join("\n")}\n`
+            : "") +
           (p.availabilityStatus ? `Availability: ${p.availabilityStatus}\n` : "") +
           (p.shippingTime ? `Shipping: ${p.shippingTime}\n` : "") +
           (p.colors && p.colors.length > 0 ? `Colors: ${p.colors.join(", ")}\n` : "") +

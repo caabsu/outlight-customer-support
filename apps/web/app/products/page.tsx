@@ -412,11 +412,17 @@ function ProductEditorModal({
     category: product?.category || "",
     status: product?.status || "active",
     price: product?.price || "",
+    variants: product?.variants || [],
     description: product?.description || "",
     shippingTime: product?.shippingTime || "",
     warrantyInfo: product?.warrantyInfo || "",
     notes: product?.notes || "",
   });
+
+  // Variant management
+  const [newVariantOption, setNewVariantOption] = useState("");
+  const [newVariantPrice, setNewVariantPrice] = useState("");
+  const [newVariantSku, setNewVariantSku] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -491,16 +497,133 @@ function ProductEditorModal({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Base Price
+                  </label>
                   <input
                     type="text"
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    placeholder="$99.99"
+                    placeholder="$99.99 (or leave blank if using variants)"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Use this for single-price products. For products with multiple options/prices, use Variants below.
+                  </p>
                 </div>
               </div>
+
+            {/* Product Variants */}
+            <div className="border-t border-gray-200 pt-5">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Product Variants (Optional)
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Add different options with specific prices (e.g., Small/Red, Large/Blue)
+                  </p>
+                </div>
+              </div>
+
+              {/* Variant Input */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-3">
+                <div className="grid grid-cols-12 gap-2">
+                  <div className="col-span-5">
+                    <input
+                      type="text"
+                      value={newVariantOption}
+                      onChange={(e) => setNewVariantOption(e.target.value)}
+                      placeholder="Option (e.g., Small / Red)"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <input
+                      type="text"
+                      value={newVariantPrice}
+                      onChange={(e) => setNewVariantPrice(e.target.value)}
+                      placeholder="Price ($49.99)"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <input
+                      type="text"
+                      value={newVariantSku}
+                      onChange={(e) => setNewVariantSku(e.target.value)}
+                      placeholder="SKU (optional)"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="col-span-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newVariantOption.trim() && newVariantPrice.trim()) {
+                          setFormData({
+                            ...formData,
+                            variants: [
+                              ...formData.variants,
+                              {
+                                option: newVariantOption.trim(),
+                                price: newVariantPrice.trim(),
+                                ...(newVariantSku.trim() && { sku: newVariantSku.trim() })
+                              }
+                            ]
+                          });
+                          setNewVariantOption("");
+                          setNewVariantPrice("");
+                          setNewVariantSku("");
+                        }
+                      }}
+                      className="w-full h-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Variants List */}
+              {formData.variants && formData.variants.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-700">
+                    {formData.variants.length} variant{formData.variants.length !== 1 ? 's' : ''}
+                  </p>
+                  {formData.variants.map((variant: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3">
+                          <span className="font-medium text-gray-900">{variant.option}</span>
+                          <span className="text-blue-600 font-semibold">{variant.price}</span>
+                          {variant.sku && (
+                            <span className="text-xs text-gray-500 font-mono">SKU: {variant.sku}</span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            variants: formData.variants.filter((_: any, i: number) => i !== idx)
+                          });
+                        }}
+                        className="text-red-600 hover:text-red-800 ml-4"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

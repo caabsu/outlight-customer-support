@@ -183,6 +183,7 @@ model Product {
   price               String?
   msrp                String?
   availabilityStatus  String?  // in-stock, out-of-stock, preorder
+  variants            Json?    // Array of {option, price, sku}
 
   // Shipping & Logistics
   shippingTime        String?  // "3-5 business days"

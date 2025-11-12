@@ -22,6 +22,7 @@ export interface Product {
   price?: string | null;
   msrp?: string | null;
   availabilityStatus?: string | null;
+  variants?: Array<{ option: string; price: string; sku?: string }> | null;
 
   // Shipping & Logistics
   shippingTime?: string | null;
@@ -66,6 +67,7 @@ export interface ProductFormData {
   price?: string;
   msrp?: string;
   availabilityStatus?: string;
+  variants?: Array<{ option: string; price: string; sku?: string }>;
   shippingTime?: string;
   shippingRestrictions?: string;
   handlingTime?: string;
