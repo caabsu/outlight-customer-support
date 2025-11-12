@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Product, ProductStats } from "../../types/product";
 
 export default function ProductsPage() {
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [stats, setStats] = useState<ProductStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -15,12 +17,29 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
 
-  // Load workspace ID from localStorage
+  // Load workspace ID automatically (use first available workspace)
   useEffect(() => {
-    const stored = localStorage.getItem("selectedWorkspaceId");
-    if (stored) {
-      setWorkspaceId(stored);
-    }
+    const fetchWorkspace = async () => {
+      try {
+        // Try localStorage first
+        const stored = localStorage.getItem("selectedWorkspaceId");
+        if (stored) {
+          setWorkspaceId(stored);
+          return;
+        }
+
+        // Otherwise fetch the first available workspace
+        const res = await fetch("/api/workspaces");
+        const workspaces = await res.json();
+        if (workspaces && workspaces.length > 0) {
+          setWorkspaceId(workspaces[0].id);
+        }
+      } catch (error) {
+        console.error("Failed to load workspace:", error);
+      }
+    };
+
+    fetchWorkspace();
   }, []);
 
   // Load products
@@ -140,8 +159,11 @@ export default function ProductsPage() {
 
   if (!workspaceId) {
     return (
-      <div className="p-8 text-center">
-        <p className="text-gray-500">Please select a workspace first</p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-gray-500">Loading products...</p>
+        </div>
       </div>
     );
   }
@@ -151,6 +173,15 @@ export default function ProductsPage() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-6">
+          <button
+            onClick={() => router.push("/")}
+            className="flex items-center gap-2 px-2 py-1 text-sm text-gray-500 hover:text-gray-700 transition-colors mb-4"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Home
+          </button>
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">📦 Product Knowledge Base</h1>

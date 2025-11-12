@@ -177,6 +177,55 @@ export default function Dashboard() {
             <div className="absolute inset-0 bg-gradient-to-br from-green-50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
           </Link>
 
+          {/* Product Knowledge Base Card */}
+          <Link
+            href="/products"
+            className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-8 transition-all hover:border-teal-400 hover:shadow-xl hover:shadow-teal-100"
+          >
+            <div className="relative z-10">
+              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-teal-50 text-teal-600">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="h-6 w-6"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-2xl font-sans font-semibold text-gray-900 mb-2">
+                Product Knowledge Base
+              </h3>
+              <p className="text-gray-600 font-sans mb-4">
+                Manage product details, specifications, shipping times, and warranties for AI-powered support.
+              </p>
+              <span className="inline-flex items-center text-sm font-medium text-teal-600 group-hover:underline">
+                Manage Products
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="ml-1 h-4 w-4"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
+                  />
+                </svg>
+              </span>
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-br from-teal-50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+          </Link>
+
           {/* Analytics Card */}
           <Link
             href="/analytics"
