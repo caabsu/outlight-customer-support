@@ -109,29 +109,40 @@ export default function ProductsPage() {
 
   const handleSave = async (data: any) => {
     try {
+      let response;
       if (editingProduct) {
         // Update
-        await fetch(`/api/products/${editingProduct.id}`, {
+        response = await fetch(`/api/products/${editingProduct.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
         });
       } else {
         // Create
-        await fetch("/api/products", {
+        response = await fetch("/api/products", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...data, workspaceId }),
         });
       }
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Failed to save product:", errorData);
+        alert(`Failed to save product: ${errorData.error || response.statusText}`);
+        return;
+      }
+
+      const result = await response.json();
+      console.log("Product saved successfully:", result);
+
       setShowEditor(false);
       setEditingProduct(null);
-      loadProducts();
-      loadStats();
+      await loadProducts();
+      await loadStats();
     } catch (error) {
       console.error("Failed to save product:", error);
-      alert("Failed to save product");
+      alert(`Failed to save product: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -426,7 +437,24 @@ function ProductEditorModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+
+    // Clean up data before sending
+    const dataToSave = {
+      ...formData,
+      // Only include variants if there are any
+      variants: formData.variants && formData.variants.length > 0 ? formData.variants : undefined,
+      // Convert empty strings to null for optional fields
+      sku: formData.sku || null,
+      category: formData.category || null,
+      price: formData.price || null,
+      description: formData.description || null,
+      shippingTime: formData.shippingTime || null,
+      warrantyInfo: formData.warrantyInfo || null,
+      notes: formData.notes || null,
+    };
+
+    console.log("Saving product data:", dataToSave);
+    onSave(dataToSave);
   };
 
   return (
