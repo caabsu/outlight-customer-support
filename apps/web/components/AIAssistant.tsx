@@ -146,7 +146,7 @@ export default function AIAssistant({ workspaceId }: { workspaceId?: string }) {
                   </svg>
                 </div>
                 <p className="text-sm text-gray-600 mb-2 font-medium">
-                  Hi! I'm your AI Assistant
+                  Hi! I&apos;m your AI Assistant
                 </p>
                 <p className="text-xs text-gray-500 max-w-xs mx-auto">
                   Ask me about products, policies, or anything from the knowledge base

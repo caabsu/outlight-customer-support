@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Product, ProductStats } from "../../types/product";
 import AIAssistant from "../../components/AIAssistant";
@@ -44,7 +44,7 @@ export default function ProductsPage() {
   }, []);
 
   // Load products
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     if (!workspaceId) return;
 
     try {
@@ -64,10 +64,10 @@ export default function ProductsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [workspaceId, search, categoryFilter, statusFilter]);
 
   // Load stats
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     if (!workspaceId) return;
 
     try {
@@ -77,12 +77,12 @@ export default function ProductsPage() {
     } catch (error) {
       console.error("Failed to load stats:", error);
     }
-  };
+  }, [workspaceId]);
 
   useEffect(() => {
     loadProducts();
     loadStats();
-  }, [workspaceId, search, categoryFilter, statusFilter]);
+  }, [loadProducts, loadStats]);
 
   const handleCreate = () => {
     setEditingProduct(null);
