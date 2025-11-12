@@ -18,6 +18,7 @@ model Workspace {
   customers        Customer[]
   conversations    Conversation[]
   oauthTokens      OAuthToken[]
+  products         Product[]
 }
 
 model User {
@@ -155,4 +156,63 @@ model StandaloneDraft {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   completedAt        DateTime? // When processing finished
+}
+
+model Product {
+  id                  String   @id @default(uuid())
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId         String
+
+  // Basic Info
+  name                String   // Product name (searchable by AI)
+  sku                 String?  // SKU/Product code
+  category            String?  // Product category
+  status              String   @default("active") // active, discontinued, coming-soon
+
+  // Product Details
+  description         String?  @db.Text
+  specifications      Json?    // Flexible JSON for custom specs
+  features            String[] @default([])
+  materials           String?
+  dimensions          String?
+  weight              String?
+  colors              String[] @default([])
+  sizes               String[] @default([])
+
+  // Pricing & Availability
+  price               String?
+  msrp                String?
+  availabilityStatus  String?  // in-stock, out-of-stock, preorder
+
+  // Shipping & Logistics
+  shippingTime        String?  // "3-5 business days"
+  shippingRestrictions String?
+  handlingTime        String?
+  shipsFrom           String?
+
+  // Instructions & Support
+  instructions        String?  @db.Text // Usage instructions
+  careInstructions    String?  @db.Text
+  warrantyInfo        String?  @db.Text
+  returnPolicy        String?  @db.Text // Product-specific return policy
+
+  // Additional Info
+  faqs                Json?    // Array of {question, answer}
+  relatedProducts     String[] @default([]) // Array of product IDs
+  tags                String[] @default([])
+  imageUrl            String?
+
+  // AI Search
+  aiSearchKeywords    String[] @default([]) // Keywords AI should search for
+
+  // Metadata
+  notes               String?  @db.Text // Internal notes for support agents
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([name])
+  @@index([sku])
+  @@index([status])
+  @@index([category])
 }

@@ -2308,6 +2308,23 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
             required: ["tracking_number"]
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "search_product",
+          description: "Search the Product Knowledge Base for detailed product information. Use this when a customer mentions a product name, SKU, or asks product-specific questions like shipping times, care instructions, warranties, or specifications. Returns comprehensive product data including shipping times, instructions, warranty info, and FAQs.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: {
+                type: "string",
+                description: "Product name, SKU, or search keywords. Examples: 'Widget Pro', 'WGT001', 'blue widget'. Search for any product mentioned in the customer's email."
+              }
+            },
+            required: ["query"]
+          }
+        }
       }
     ];
 
@@ -2364,6 +2381,29 @@ ${knowledgeBaseText}
 You have access to these tools:
 1. search_customer_and_orders(query): Search Shopify by email, name, or order number. Returns customer details and order history.
 2. get_tracking_info(tracking_number): Get package tracking from 17track. Returns current status and location.
+3. search_product(query): Search Product Knowledge Base for detailed product information. Use when customer mentions a product name, SKU, or asks product-specific questions.
+
+═══════════════════════════════════════════════════════════
+📦 PRODUCT KNOWLEDGE BASE - PRIORITY OVER GENERAL POLICIES
+═══════════════════════════════════════════════════════════
+
+🚨 CRITICAL: Product-specific information ALWAYS overrides general knowledge base policies
+
+When to use search_product:
+- Customer mentions a product name (e.g., "Widget Pro", "Deluxe Package")
+- Customer asks about product specifications, features, materials, dimensions
+- Questions about shipping times, care instructions, warranties for specific products
+- Product availability, colors, sizes inquiries
+- Return/warranty policies specific to a product
+
+How to use search_product effectively:
+1. Extract the product name or SKU from customer's message
+2. Call search_product with the product name as query parameter
+3. If product found, use the returned data (shipping times, instructions, warranty info, etc.)
+4. Product data overrides general policies - if product says "5-7 days shipping", use that instead of general "3-5 days"
+5. If product not found, fall back to general knowledge base
+
+Product data includes: name, SKU, description, specifications, features, price, availability, shipping times, care instructions, warranty info, return policy, FAQs, and more.
 
 ═══════════════════════════════════════════════════════════
 ⚡ WORKFLOW - EXECUTE IN THIS EXACT ORDER
@@ -2373,11 +2413,12 @@ Step 1: READ THE EMAIL THREAD AND IDENTIFY LATEST MESSAGE
 - ⚠️  CRITICAL: Your draft must RESPOND TO THE LATEST INBOUND MESSAGE (the most recent customer email)
 - Read the full thread for context, but your response addresses the LATEST message
 - Understand the customer's issue, tone, and urgency in their MOST RECENT message
-- Extract: customer email, order numbers, tracking numbers, dates mentioned
+- Extract: customer email, order numbers, tracking numbers, dates mentioned, PRODUCT NAMES
 
 Step 2: GATHER DATA USING TOOLS
 - ALWAYS call search_customer_and_orders first with customer email or order number
 - If tracking numbers exist in the order data, call get_tracking_info
+- If customer mentions a product name or asks product questions, call search_product
 - Collect ALL necessary information before proceeding
 
 Step 3: ANALYZE WITH KNOWLEDGE BASE
@@ -2597,6 +2638,70 @@ Remember:
             } catch (error) {
               console.error(`[Draft] 17track error:`, error);
               toolResult = { error: "Failed to fetch tracking", details: String(error) };
+            }
+          } else if (functionName === "search_product") {
+            try {
+              // Search Product Knowledge Base
+              const queryLower = functionArgs.query.toLowerCase();
+
+              const products = await prisma.product.findMany({
+                where: {
+                  workspaceId: conversation.workspaceId,
+                  status: 'active',
+                  OR: [
+                    { name: { contains: functionArgs.query, mode: 'insensitive' } },
+                    { sku: { contains: functionArgs.query, mode: 'insensitive' } },
+                    { aiSearchKeywords: { has: queryLower } },
+                    { tags: { has: queryLower } },
+                    { description: { contains: functionArgs.query, mode: 'insensitive' } }
+                  ]
+                },
+                take: 5,
+                orderBy: { name: 'asc' }
+              });
+
+              if (products.length === 0) {
+                toolResult = {
+                  found: false,
+                  message: `No products found matching "${functionArgs.query}". Use general knowledge base for response.`,
+                  query: functionArgs.query
+                };
+                console.log(`[Draft] Product search: No results for "${functionArgs.query}"`);
+              } else {
+                // Format for AI consumption - only include relevant fields
+                const formattedProducts = products.map(p => ({
+                  name: p.name,
+                  sku: p.sku,
+                  category: p.category,
+                  description: p.description,
+                  specifications: p.specifications,
+                  features: p.features,
+                  price: p.price,
+                  availabilityStatus: p.availabilityStatus,
+                  shippingTime: p.shippingTime,
+                  shippingRestrictions: p.shippingRestrictions,
+                  instructions: p.instructions,
+                  careInstructions: p.careInstructions,
+                  warrantyInfo: p.warrantyInfo,
+                  returnPolicy: p.returnPolicy,
+                  faqs: p.faqs
+                }));
+
+                toolResult = {
+                  found: true,
+                  products: formattedProducts,
+                  count: products.length,
+                  message: `Found ${products.length} product(s). Use this product-specific data - it overrides general policies.`
+                };
+                console.log(`[Draft] Product search: Found ${products.length} product(s) for "${functionArgs.query}"`);
+              }
+            } catch (error) {
+              console.error(`[Draft] Product search error:`, error);
+              toolResult = {
+                error: "Failed to search products",
+                details: String(error),
+                message: "Product search failed. Use general knowledge base."
+              };
             }
           }
 
@@ -3333,6 +3438,271 @@ When providing action steps (shouldDraft = false):
     });
   }
 }
+
+// ==================== PRODUCT KNOWLEDGE BASE ENDPOINTS ====================
+
+// Get all products for a workspace
+app.get("/products", async (req: Request, res: Response) => {
+  try {
+    const { workspaceId, search, category, status } = req.query;
+
+    if (!workspaceId) {
+      return res.status(400).json({ error: "workspaceId is required" });
+    }
+
+    const where: any = {
+      workspaceId: workspaceId as string
+    };
+
+    // Search filter
+    if (search && typeof search === 'string') {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { sku: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    // Category filter
+    if (category && category !== 'all') {
+      where.category = category as string;
+    }
+
+    // Status filter
+    if (status && status !== 'all') {
+      where.status = status as string;
+    }
+
+    const products = await prisma.product.findMany({
+      where,
+      orderBy: { name: 'asc' }
+    });
+
+    console.log(`[Products] Loaded ${products.length} products for workspace ${workspaceId}`);
+    res.json({ products });
+  } catch (error) {
+    console.error("[Products] Error fetching products:", error);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
+});
+
+// Get single product
+app.get("/products/:id", async (req: Request, res: Response) => {
+  try {
+    const product = await prisma.product.findUnique({
+      where: { id: req.params.id }
+    });
+
+    if (!product) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    res.json(product);
+  } catch (error) {
+    console.error("[Products] Error fetching product:", error);
+    res.status(500).json({ error: "Failed to fetch product" });
+  }
+});
+
+// Create product
+app.post("/products", async (req: Request, res: Response) => {
+  try {
+    const { workspaceId, ...productData } = req.body;
+
+    if (!workspaceId) {
+      return res.status(400).json({ error: "workspaceId is required" });
+    }
+
+    const product = await prisma.product.create({
+      data: {
+        workspaceId,
+        ...productData
+      }
+    });
+
+    console.log(`[Products] Created product: ${product.name} (${product.id})`);
+    res.json(product);
+  } catch (error) {
+    console.error("[Products] Error creating product:", error);
+    res.status(500).json({ error: "Failed to create product" });
+  }
+});
+
+// Update product
+app.patch("/products/:id", async (req: Request, res: Response) => {
+  try {
+    const product = await prisma.product.update({
+      where: { id: req.params.id },
+      data: req.body
+    });
+
+    console.log(`[Products] Updated product: ${product.name} (${product.id})`);
+    res.json(product);
+  } catch (error) {
+    console.error("[Products] Error updating product:", error);
+    res.status(500).json({ error: "Failed to update product" });
+  }
+});
+
+// Delete product
+app.delete("/products/:id", async (req: Request, res: Response) => {
+  try {
+    await prisma.product.delete({
+      where: { id: req.params.id }
+    });
+
+    console.log(`[Products] Deleted product: ${req.params.id}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Products] Error deleting product:", error);
+    res.status(500).json({ error: "Failed to delete product" });
+  }
+});
+
+// Bulk create products
+app.post("/products/bulk-create", async (req: Request, res: Response) => {
+  try {
+    const { workspaceId, products } = req.body;
+
+    if (!workspaceId) {
+      return res.status(400).json({ error: "workspaceId is required" });
+    }
+
+    if (!Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ error: "products array is required" });
+    }
+
+    const createdProducts = await prisma.$transaction(
+      products.map((product: any) =>
+        prisma.product.create({
+          data: {
+            workspaceId,
+            ...product
+          }
+        })
+      )
+    );
+
+    console.log(`[Products] Bulk created ${createdProducts.length} products`);
+    res.json({ products: createdProducts, count: createdProducts.length });
+  } catch (error) {
+    console.error("[Products] Error bulk creating products:", error);
+    res.status(500).json({ error: "Failed to bulk create products" });
+  }
+});
+
+// Get products statistics
+app.get("/products/stats/:workspaceId", async (req: Request, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+
+    const total = await prisma.product.count({
+      where: { workspaceId }
+    });
+
+    const active = await prisma.product.count({
+      where: { workspaceId, status: 'active' }
+    });
+
+    const incomplete = await prisma.product.count({
+      where: {
+        workspaceId,
+        OR: [
+          { description: null },
+          { shippingTime: null },
+          { price: null }
+        ]
+      }
+    });
+
+    const categories = await prisma.product.groupBy({
+      by: ['category'],
+      where: { workspaceId },
+      _count: true
+    });
+
+    res.json({
+      total,
+      active,
+      incomplete,
+      categories: categories.map(c => ({
+        name: c.category || 'Uncategorized',
+        count: c._count
+      }))
+    });
+  } catch (error) {
+    console.error("[Products] Error fetching stats:", error);
+    res.status(500).json({ error: "Failed to fetch product statistics" });
+  }
+});
+
+// Search products for AI (optimized for AI tool calling)
+app.post("/products/search-for-ai", async (req: Request, res: Response) => {
+  try {
+    const { workspaceId, query } = req.body;
+
+    if (!workspaceId || !query) {
+      return res.status(400).json({ error: "workspaceId and query are required" });
+    }
+
+    const queryLower = query.toLowerCase();
+
+    // Search by name, SKU, keywords, and tags
+    const products = await prisma.product.findMany({
+      where: {
+        workspaceId,
+        status: 'active',
+        OR: [
+          { name: { contains: query, mode: 'insensitive' } },
+          { sku: { contains: query, mode: 'insensitive' } },
+          { aiSearchKeywords: { has: queryLower } },
+          { tags: { has: queryLower } },
+          { description: { contains: query, mode: 'insensitive' } }
+        ]
+      },
+      take: 5,
+      orderBy: { name: 'asc' }
+    });
+
+    if (products.length === 0) {
+      console.log(`[Products AI Search] No products found for query: "${query}"`);
+      return res.json({
+        found: false,
+        message: "No products found matching your search. Use general knowledge base.",
+        query
+      });
+    }
+
+    // Format for AI consumption - only include relevant fields
+    const formattedProducts = products.map(p => ({
+      name: p.name,
+      sku: p.sku,
+      category: p.category,
+      description: p.description,
+      specifications: p.specifications,
+      features: p.features,
+      price: p.price,
+      availabilityStatus: p.availabilityStatus,
+      shippingTime: p.shippingTime,
+      shippingRestrictions: p.shippingRestrictions,
+      instructions: p.instructions,
+      careInstructions: p.careInstructions,
+      warrantyInfo: p.warrantyInfo,
+      returnPolicy: p.returnPolicy,
+      faqs: p.faqs
+    }));
+
+    console.log(`[Products AI Search] Found ${products.length} products for query: "${query}"`);
+    res.json({
+      found: true,
+      products: formattedProducts,
+      count: products.length
+    });
+  } catch (error) {
+    console.error("[Products AI Search] Error:", error);
+    res.status(500).json({ error: "Failed to search products" });
+  }
+});
 
 const port = process.env.PORT || 3001;
 
