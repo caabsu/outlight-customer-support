@@ -2417,11 +2417,18 @@ Step 1: READ THE EMAIL THREAD AND IDENTIFY LATEST MESSAGE
 
 Step 2: GATHER DATA USING TOOLS
 - ALWAYS call search_customer_and_orders first with customer email or order number
+- 🚨 CRITICAL: If customer mentions a product name, ALWAYS call search_product FIRST before using Shopify data
 - If tracking numbers exist in the order data, call get_tracking_info
-- If customer mentions a product name or asks product questions, call search_product
 - Collect ALL necessary information before proceeding
 
-Step 3: ANALYZE WITH KNOWLEDGE BASE
+Step 3: ANALYZE WITH KNOWLEDGE BASE AND PRODUCT DATA
+- 🚨 PRIORITY ORDER - USE DATA IN THIS EXACT ORDER:
+  1. FIRST: Product Knowledge Base data (from search_product tool) - HIGHEST PRIORITY
+  2. SECOND: General Knowledge Base policies
+  3. THIRD: Shopify order data (only for order details, NOT for product info)
+
+- Product KB ALWAYS overrides everything else for product-specific information
+- If Product KB has shipping time, warranty, care instructions, etc. - use ONLY that data, ignore Shopify
 - Match the issue to knowledge base categories
 - Apply ALL relevant policies (return windows, refund timelines, etc.)
 - Calculate dates carefully (30 days from DELIVERY, not order date)
@@ -3701,6 +3708,125 @@ app.post("/products/search-for-ai", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Products AI Search] Error:", error);
     res.status(500).json({ error: "Failed to search products" });
+  }
+});
+
+// ==========================================
+// AI ASSISTANT CHATBOT
+// ==========================================
+
+app.post("/ai-assistant/chat", async (req: Request, res: Response) => {
+  try {
+    const { message, workspaceId, history } = req.body;
+
+    console.log("[AI Assistant] Received chat request:", message);
+
+    // Fetch Knowledge Base articles
+    const kbEntries = await prisma.knowledgeBase.findMany({
+      where: { active: true },
+      select: { title: true, content: true, category: true, tags: true }
+    });
+
+    // Fetch Product Knowledge Base
+    let products: any[] = [];
+    if (workspaceId) {
+      products = await prisma.product.findMany({
+        where: {
+          workspaceId,
+          status: "active"
+        },
+        select: {
+          name: true,
+          sku: true,
+          category: true,
+          description: true,
+          features: true,
+          price: true,
+          availabilityStatus: true,
+          shippingTime: true,
+          instructions: true,
+          careInstructions: true,
+          warrantyInfo: true,
+          returnPolicy: true,
+          colors: true,
+          sizes: true,
+        },
+        take: 50
+      });
+    }
+
+    // Build context from knowledge bases
+    const kbContext = kbEntries.map(entry =>
+      `[${entry.category}] ${entry.title}\n${entry.content}`
+    ).join("\n\n---\n\n");
+
+    const productsContext = products.length > 0
+      ? products.map(p =>
+          `Product: ${p.name}${p.sku ? ` (SKU: ${p.sku})` : ""}\n` +
+          `Category: ${p.category || "N/A"}\n` +
+          `Description: ${p.description || "N/A"}\n` +
+          (p.features && p.features.length > 0 ? `Features: ${p.features.join(", ")}\n` : "") +
+          (p.price ? `Price: ${p.price}\n` : "") +
+          (p.availabilityStatus ? `Availability: ${p.availabilityStatus}\n` : "") +
+          (p.shippingTime ? `Shipping: ${p.shippingTime}\n` : "") +
+          (p.colors && p.colors.length > 0 ? `Colors: ${p.colors.join(", ")}\n` : "") +
+          (p.sizes && p.sizes.length > 0 ? `Sizes: ${p.sizes.join(", ")}\n` : "") +
+          (p.warrantyInfo ? `Warranty: ${p.warrantyInfo}\n` : "")
+        ).join("\n---\n\n")
+      : "No product data available.";
+
+    // Build conversation history
+    const conversationHistory = history && history.length > 0
+      ? history.map((msg: any) => ({
+          role: msg.role,
+          content: msg.content
+        }))
+      : [];
+
+    // Create AI Assistant prompt
+    const messages: any[] = [
+      {
+        role: "system",
+        content: `You are a helpful AI Assistant for customer support agents. Your role is to help agents quickly find information from the Knowledge Base and Product Knowledge Base.
+
+📚 GENERAL KNOWLEDGE BASE:
+${kbContext}
+
+📦 PRODUCT KNOWLEDGE BASE:
+${productsContext}
+
+Instructions:
+- Answer questions clearly and concisely
+- When asked about products, provide specific details from the Product KB
+- When asked about policies, reference the General KB
+- If you don't know something, say so - don't make up information
+- Format your responses with clear structure (bullet points, sections, etc.)
+- Be helpful and friendly to support agents
+
+You are NOT generating customer-facing email drafts. You are helping internal support agents find information quickly.`
+      },
+      ...conversationHistory,
+      {
+        role: "user",
+        content: message
+      }
+    ];
+
+    // Call OpenAI
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini", // Fast and cost-effective
+      messages,
+      temperature: 0.7,
+      max_tokens: 1000
+    });
+
+    const response = completion.choices[0].message.content;
+    console.log("[AI Assistant] Response generated");
+
+    res.json({ response });
+  } catch (error) {
+    console.error("[AI Assistant] Error:", error);
+    res.status(500).json({ error: "AI Assistant failed" });
   }
 });
 

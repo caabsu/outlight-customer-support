@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import AIAssistant from "../../components/AIAssistant";
 
 type KnowledgeEntry = {
   id: string;
@@ -280,7 +281,9 @@ export default function KnowledgeBasePage() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <>
+      <AIAssistant />
+      <div className="flex h-screen bg-slate-50">
       {/* Left Sidebar - Document List */}
       <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
         {/* Sidebar Header */}
@@ -705,5 +708,6 @@ For best results:
         )}
       </div>
     </div>
+    </>
   );
 }

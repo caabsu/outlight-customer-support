@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Product, ProductStats } from "../../types/product";
+import AIAssistant from "../../components/AIAssistant";
 
 export default function ProductsPage() {
   const router = useRouter();
@@ -169,7 +170,9 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
+      <AIAssistant workspaceId={workspaceId || undefined} />
+      <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-6">
@@ -389,6 +392,7 @@ export default function ProductsPage() {
         />
       )}
     </div>
+    </>
   );
 }
 
@@ -410,11 +414,33 @@ function ProductEditorModal({
     status: product?.status || "active",
     description: product?.description || "",
     price: product?.price || "",
+    msrp: product?.msrp || "",
     availabilityStatus: product?.availabilityStatus || "",
+    specifications: product?.specifications || {},
+    features: product?.features || [],
+    materials: product?.materials || "",
+    dimensions: product?.dimensions || "",
+    weight: product?.weight || "",
+    colors: product?.colors || [],
+    sizes: product?.sizes || [],
     shippingTime: product?.shippingTime || "",
+    shippingRestrictions: product?.shippingRestrictions || "",
     instructions: product?.instructions || "",
+    careInstructions: product?.careInstructions || "",
     warrantyInfo: product?.warrantyInfo || "",
+    returnPolicy: product?.returnPolicy || "",
+    faqs: product?.faqs || [],
+    tags: product?.tags || [],
+    aiSearchKeywords: product?.aiSearchKeywords || [],
+    notes: product?.notes || "",
   });
+
+  // Helpers for array fields
+  const [newFeature, setNewFeature] = useState("");
+  const [newColor, setNewColor] = useState("");
+  const [newSize, setNewSize] = useState("");
+  const [newTag, setNewTag] = useState("");
+  const [newKeyword, setNewKeyword] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -548,6 +574,275 @@ function ProductEditorModal({
             </div>
           )}
 
+          {activeTab === "details" && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Features</label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={newFeature}
+                    onChange={(e) => setNewFeature(e.target.value)}
+                    placeholder="Add a feature..."
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newFeature.trim()) {
+                        e.preventDefault();
+                        setFormData({ ...formData, features: [...formData.features, newFeature.trim()] });
+                        setNewFeature("");
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newFeature.trim()) {
+                        setFormData({ ...formData, features: [...formData.features, newFeature.trim()] });
+                        setNewFeature("");
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {formData.features.map((feature, idx) => (
+                    <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm flex items-center gap-2">
+                      {feature}
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, features: formData.features.filter((_, i) => i !== idx) })}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Materials</label>
+                  <input
+                    type="text"
+                    value={formData.materials}
+                    onChange={(e) => setFormData({ ...formData, materials: e.target.value })}
+                    placeholder="Aluminum, Glass, etc."
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Weight</label>
+                  <input
+                    type="text"
+                    value={formData.weight}
+                    onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                    placeholder="5 lbs"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dimensions</label>
+                <input
+                  type="text"
+                  value={formData.dimensions}
+                  onChange={(e) => setFormData({ ...formData, dimensions: e.target.value })}
+                  placeholder="12 x 8 x 4 inches"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Available Colors</label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={newColor}
+                    onChange={(e) => setNewColor(e.target.value)}
+                    placeholder="Add a color..."
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newColor.trim()) {
+                        e.preventDefault();
+                        setFormData({ ...formData, colors: [...formData.colors, newColor.trim()] });
+                        setNewColor("");
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newColor.trim()) {
+                        setFormData({ ...formData, colors: [...formData.colors, newColor.trim()] });
+                        setNewColor("");
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {formData.colors.map((color, idx) => (
+                    <span key={idx} className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm flex items-center gap-2">
+                      {color}
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, colors: formData.colors.filter((_, i) => i !== idx) })}
+                        className="text-purple-600 hover:text-purple-800"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Available Sizes</label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={newSize}
+                    onChange={(e) => setNewSize(e.target.value)}
+                    placeholder="Add a size..."
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newSize.trim()) {
+                        e.preventDefault();
+                        setFormData({ ...formData, sizes: [...formData.sizes, newSize.trim()] });
+                        setNewSize("");
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newSize.trim()) {
+                        setFormData({ ...formData, sizes: [...formData.sizes, newSize.trim()] });
+                        setNewSize("");
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {formData.sizes.map((size, idx) => (
+                    <span key={idx} className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm flex items-center gap-2">
+                      {size}
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, sizes: formData.sizes.filter((_, i) => i !== idx) })}
+                        className="text-green-600 hover:text-green-800"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tags (for searching)</label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    placeholder="Add a tag..."
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newTag.trim()) {
+                        e.preventDefault();
+                        setFormData({ ...formData, tags: [...formData.tags, newTag.trim()] });
+                        setNewTag("");
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newTag.trim()) {
+                        setFormData({ ...formData, tags: [...formData.tags, newTag.trim()] });
+                        setNewTag("");
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {formData.tags.map((tag, idx) => (
+                    <span key={idx} className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm flex items-center gap-2">
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, tags: formData.tags.filter((_, i) => i !== idx) })}
+                        className="text-gray-600 hover:text-gray-800"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">AI Search Keywords</label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={newKeyword}
+                    onChange={(e) => setNewKeyword(e.target.value)}
+                    placeholder="Add keyword for AI search..."
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newKeyword.trim()) {
+                        e.preventDefault();
+                        setFormData({ ...formData, aiSearchKeywords: [...formData.aiSearchKeywords, newKeyword.trim().toLowerCase()] });
+                        setNewKeyword("");
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newKeyword.trim()) {
+                        setFormData({ ...formData, aiSearchKeywords: [...formData.aiSearchKeywords, newKeyword.trim().toLowerCase()] });
+                        setNewKeyword("");
+                      }
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {formData.aiSearchKeywords.map((kw, idx) => (
+                    <span key={idx} className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm flex items-center gap-2">
+                      {kw}
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, aiSearchKeywords: formData.aiSearchKeywords.filter((_, i) => i !== idx) })}
+                        className="text-indigo-600 hover:text-indigo-800"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-gray-500">Keywords help AI find this product when customers ask questions</p>
+              </div>
+            </div>
+          )}
+
           {activeTab === "shipping" && (
             <div className="space-y-4">
               <div>
@@ -559,6 +854,30 @@ function ProductEditorModal({
                   value={formData.shippingTime}
                   onChange={(e) => setFormData({ ...formData, shippingTime: e.target.value })}
                   placeholder="3-5 business days"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Shipping Restrictions
+                </label>
+                <textarea
+                  value={formData.shippingRestrictions}
+                  onChange={(e) => setFormData({ ...formData, shippingRestrictions: e.target.value })}
+                  placeholder="e.g., Cannot ship to PO boxes, International shipping available to Canada only"
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">MSRP</label>
+                <input
+                  type="text"
+                  value={formData.msrp}
+                  onChange={(e) => setFormData({ ...formData, msrp: e.target.value })}
+                  placeholder="$149.99"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -574,7 +893,21 @@ function ProductEditorModal({
                 <textarea
                   value={formData.instructions}
                   onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
+                  placeholder="How to use this product..."
                   rows={4}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Care Instructions
+                </label>
+                <textarea
+                  value={formData.careInstructions}
+                  onChange={(e) => setFormData({ ...formData, careInstructions: e.target.value })}
+                  placeholder="How to care for and maintain this product..."
+                  rows={3}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -586,7 +919,34 @@ function ProductEditorModal({
                 <textarea
                   value={formData.warrantyInfo}
                   onChange={(e) => setFormData({ ...formData, warrantyInfo: e.target.value })}
+                  placeholder="Warranty details and coverage..."
                   rows={4}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Return Policy (Product-specific)
+                </label>
+                <textarea
+                  value={formData.returnPolicy}
+                  onChange={(e) => setFormData({ ...formData, returnPolicy: e.target.value })}
+                  placeholder="Specific return policy for this product (if different from general policy)..."
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Internal Notes
+                </label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Internal notes for support agents (not visible to customers)..."
+                  rows={3}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
