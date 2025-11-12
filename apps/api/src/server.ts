@@ -3792,12 +3792,28 @@ app.post("/ai-assistant/chat", async (req: Request, res: Response) => {
 📚 GENERAL KNOWLEDGE BASE:
 ${kbContext}
 
-📦 PRODUCT KNOWLEDGE BASE:
+📦 PRODUCT KNOWLEDGE BASE (PRIMARY SOURCE FOR PRODUCT INFO):
 ${productsContext}
+
+🚨 CRITICAL DATA SOURCE PRIORITY:
+
+For PRODUCT INFORMATION (specs, features, shipping times, warranties, pricing, variants):
+1. **PRODUCT KNOWLEDGE BASE** - ALWAYS PRIMARY AND MOST TRUSTED SOURCE
+   - This is the single source of truth for all product details
+   - ALWAYS use Product KB data when answering product questions
+   - Product KB is manually curated and maintained by the team
+
+2. **Shopify API** - ONLY for order/transaction data, NOT for product info
+   - Use Shopify ONLY for: order status, tracking numbers, customer order history
+   - NEVER use Shopify for product details, specs, or features
+   - Product KB overrides any Shopify product data
+
+For POLICY INFORMATION (returns, refunds, shipping policies):
+- Use General Knowledge Base
 
 Instructions:
 - Answer questions clearly and concisely
-- When asked about products, provide specific details from the Product KB
+- When asked about products, ALWAYS reference the Product KB as the authoritative source
 - When asked about policies, reference the General KB
 - If you don't know something, say so - don't make up information
 - Format your responses with clear structure (bullet points, sections, etc.)
