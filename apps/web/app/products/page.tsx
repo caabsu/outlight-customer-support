@@ -451,6 +451,13 @@ function ProductEditorModal({
       shippingTime: formData.shippingTime || null,
       warrantyInfo: formData.warrantyInfo || null,
       notes: formData.notes || null,
+      // Ensure array fields have default empty arrays if not present
+      features: [],
+      colors: [],
+      sizes: [],
+      relatedProducts: [],
+      tags: [],
+      aiSearchKeywords: [],
     };
 
     console.log("Saving product data:", dataToSave);
