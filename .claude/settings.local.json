@@ -44,7 +44,8 @@
       "Bash(npx kill-port 3000 3001 --method tcp)",
       "Bash(npm run dev:*)",
       "Bash(test:*)",
-      "Bash(npx next build --no-lint)"
+      "Bash(npx next build --no-lint)",
+      "Bash(npx prisma generate:*)"
     ],
     "deny": [],
     "ask": []

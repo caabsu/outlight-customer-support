@@ -360,72 +360,41 @@ async function ingestThread(gmail: any, workspace: any, threadId: string): Promi
       return;
     }
 
-    const currentTags = freshConvo.tags || [];
-    const isNonSupport = currentTags.includes("non-customer-support");
+    // NEW TAGGING SYSTEM V2: System manages needsReply, users manage userTags
     const isArchived = freshConvo.archived || false;
-    const isAdmin = currentTags.includes("admin");
-    const hasNeedsReply = currentTags.includes("needs-reply");
+    const currentNeedsReply = freshConvo.needsReply || false;
+    const currentDirection = freshConvo.lastMessageDirection;
+    const userTags = freshConvo.userTags || [];
 
-    console.log(`[INGEST] ${workspace.name} | ${freshConvo.subject} | Thread: ${freshConvo.gmailThreadId.substring(0, 8)}... | Tags: ${JSON.stringify(currentTags)} | LastMsg: ${lastMessage.direction} | NonSupport: ${isNonSupport} | Archived: ${isArchived} | Admin: ${isAdmin}`);
+    console.log(`[INGEST V2] ${workspace.name} | ${freshConvo.subject?.substring(0, 40)}... | Thread: ${freshConvo.gmailThreadId.substring(0, 8)}... | LastMsg: ${lastMessage.direction} | needsReply: ${currentNeedsReply} | UserTags: ${JSON.stringify(userTags)}`);
 
     // RULE: Skip archived conversations entirely
     if (isArchived) {
-      console.log(`[INGEST] ⏭️  Skipping auto-tag (archived)`);
+      console.log(`[INGEST V2] ⏭️  Skipping auto-tag (archived)`);
       return;
     }
 
-    // RULE: For non-support or admin conversations, ensure needs-reply is removed if present
-    if (isNonSupport || isAdmin) {
-      if (hasNeedsReply) {
-        console.log(`[INGEST] 🧹 Removing stale needs-reply tag from non-support/admin conversation ${convo.id}`);
-        try {
-          await prisma.conversation.update({
-            where: { id: convo.id },
-            data: { tags: currentTags.filter(tag => tag !== "needs-reply") }
-          });
-          console.log(`[INGEST] ✅ Successfully removed stale needs-reply tag`);
-        } catch (error) {
-          console.error(`[INGEST] ❌ Failed to remove stale needs-reply tag:`, error);
-        }
-      } else {
-        console.log(`[INGEST] ✓ Non-support/admin conversation correctly has no needs-reply tag`);
-      }
-      return;
-    }
+    // Determine what needsReply should be based on last message direction
+    const shouldNeedReply = lastMessage.direction === "inbound";
+    const newDirection = lastMessage.direction;
 
-    // RULE: Add "needs-reply" if last message is inbound
-    if (lastMessage.direction === "inbound") {
-      if (!hasNeedsReply) {
-        console.log(`[INGEST] ➕ Adding needs-reply tag to conversation ${convo.id}`);
-        try {
-          await prisma.conversation.update({
-            where: { id: convo.id },
-            data: { tags: [...currentTags, "needs-reply"] }
-          });
-          console.log(`[INGEST] ✅ Successfully added needs-reply tag`);
-        } catch (error) {
-          console.error(`[INGEST] ❌ Failed to add needs-reply tag:`, error);
-        }
-      } else {
-        console.log(`[INGEST] ✓ Already has needs-reply tag`);
+    // Only update if something changed
+    if (currentNeedsReply !== shouldNeedReply || currentDirection !== newDirection) {
+      console.log(`[INGEST V2] 🔄 Updating system tags: needsReply ${currentNeedsReply} → ${shouldNeedReply}, direction "${currentDirection}" → "${newDirection}"`);
+      try {
+        await prisma.conversation.update({
+          where: { id: convo.id },
+          data: {
+            needsReply: shouldNeedReply,
+            lastMessageDirection: newDirection,
+          }
+        });
+        console.log(`[INGEST V2] ✅ Successfully updated system tags`);
+      } catch (error) {
+        console.error(`[INGEST V2] ❌ Failed to update system tags:`, error);
       }
-    }
-    // RULE: Remove "needs-reply" if last message is outbound
-    else if (lastMessage.direction === "outbound") {
-      if (hasNeedsReply) {
-        console.log(`[INGEST] ➖ Removing needs-reply tag from conversation ${convo.id} (replied)`);
-        try {
-          await prisma.conversation.update({
-            where: { id: convo.id },
-            data: { tags: currentTags.filter(tag => tag !== "needs-reply") }
-          });
-          console.log(`[INGEST] ✅ Successfully removed needs-reply tag`);
-        } catch (error) {
-          console.error(`[INGEST] ❌ Failed to remove needs-reply tag:`, error);
-        }
-      } else {
-        console.log(`[INGEST] ✓ No needs-reply tag to remove`);
-      }
+    } else {
+      console.log(`[INGEST V2] ✓ System tags already correct (needsReply=${shouldNeedReply}, direction="${newDirection}")`);
     }
   }
 }
@@ -485,21 +454,19 @@ export async function sendReply(workspaceId: string, conversationId: string, to:
     },
   });
 
-  const oldTags = conversation.tags || [];
-  const newTags = oldTags.filter(tag => tag !== "needs-reply");
-  const removedNeedsReply = oldTags.includes("needs-reply") && !newTags.includes("needs-reply");
-
+  // NEW TAGGING SYSTEM V2: Update system tags after sending reply
+  // needsReply = false (we just replied), lastMessageDirection = "outbound"
   await prisma.conversation.update({
     where: { id: conversationId },
     data: {
       lastMessageAt: now,
-      tags: newTags
+      needsReply: false,              // System tag: we just replied
+      lastMessageDirection: "outbound" // Track last message direction
+      // userTags remain unchanged - user manages those
     },
   });
 
-  if (removedNeedsReply) {
-    console.log(`[Send Email] ✅ Removed needs-reply tag from conversation ${conversationId} after sending reply`);
-  }
+  console.log(`[Send Email V2] ✅ Updated system tags: needsReply=false, lastMessageDirection=outbound`);
 
   return result.data;
 }

@@ -202,95 +202,91 @@ app.get("/conversations", async (req: Request, res: Response) => {
       where.archived = false;
     }
 
-    // REDESIGNED FILTER SYSTEM: Single reliable layer with clear logic
-    // All filtering is done at the database level for consistency and performance
-    const requiredTags: string[] = [];  // Tags that MUST be present (hasEvery)
+    // NEW TAGGING SYSTEM V2: Clean separation between system and user tags
+    // System manages: needsReply (boolean), lastMessageDirection (string)
+    // Users manage: userTags (array of strings)
+    const andConditions: any[] = [];
     const notConditions: any[] = [];
 
-    // Admin filter: requires "admin" tag (works together with other filters)
+    console.log(`[Filter V2] Processing filters: adminOnly=${adminOnly}, excludeNonSupport=${excludeNonSupport}, needsReply=${needsReply}, resolved=${resolved}`);
+
+    // Admin filter: requires "admin" in userTags array
     if (adminOnly === "true") {
-      requiredTags.push("admin");
-      console.log(`[Filter] Adding admin requirement`);
+      andConditions.push({
+        userTags: {
+          has: "admin"
+        }
+      });
+      console.log(`[Filter V2] ✓ Admin filter: userTags must contain "admin"`);
     }
 
-    // CS-only filter: exclude non-customer-support (works together with admin filter)
-    // Also exclude admin-tagged emails UNLESS adminOnly is specifically enabled
+    // CS-only filter: exclude "non-customer-support" from userTags
+    // Also exclude "admin" UNLESS adminOnly is specifically enabled
     if (excludeNonSupport === "true") {
       // Always exclude non-customer-support emails
       notConditions.push({
-        tags: {
+        userTags: {
           has: "non-customer-support"
         }
       });
+
       // Only exclude admin emails when NOT specifically filtering for admin
       if (adminOnly !== "true") {
         notConditions.push({
-          tags: {
+          userTags: {
             has: "admin"
           }
         });
       }
-      console.log(`[Filter] Excluding non-customer-support${adminOnly !== "true" ? " and admin" : ""}`);
+      console.log(`[Filter V2] ✓ CS-only filter: excluding non-customer-support${adminOnly !== "true" ? " and admin" : ""}`);
     }
 
     if (unreadOnly === "true") {
       where.unreadAgent = true;
+      console.log(`[Filter V2] ✓ Unread filter: unreadAgent=true`);
     }
 
-    // Needs reply filter (has needs-reply tag)
-    // FIXED: Now works with adminOnly mode to filter admin emails by reply status
+    // Needs reply filter: system-managed boolean field
+    // This is the KEY fix - needsReply is independent from userTags!
     if (needsReply === "true") {
-      requiredTags.push("needs-reply");
-      console.log(`[Filter] Adding needs-reply requirement (works with adminOnly: ${adminOnly === "true"})`);
+      where.needsReply = true;
+      console.log(`[Filter V2] ✓ Needs-reply filter: needsReply=true (works with all other filters)`);
     }
 
-    // Resolved filter (does NOT have needs-reply tag)
-    // FIXED: Now works with adminOnly mode to show resolved admin emails
+    // Resolved filter: opposite of needs reply
     if (resolved === "true") {
-      notConditions.push({
-        tags: {
-          has: "needs-reply"
-        }
-      });
-      console.log(`[Filter] Adding resolved filter (works with adminOnly: ${adminOnly === "true"})`);
+      where.needsReply = false;
+      console.log(`[Filter V2] ✓ Resolved filter: needsReply=false`);
     }
 
-    // Specific tags filter (must have ALL specified tags)
+    // Custom tags filter: must have ALL specified tags in userTags
     if (tags && typeof tags === 'string' && tags.length > 0) {
       const tagArray = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
       if (tagArray.length > 0) {
-        requiredTags.push(...tagArray);
+        tagArray.forEach(tag => {
+          andConditions.push({
+            userTags: { has: tag }
+          });
+        });
+        console.log(`[Filter V2] ✓ Custom tags filter: userTags must contain ${tagArray.join(', ')}`);
       }
     }
 
-    // CRITICAL FIX: Build AND conditions for required tags
-    // Each tag must be present, so we check each one individually
-    const andConditions: any[] = [];
-
-    if (requiredTags.length > 0) {
-      requiredTags.forEach(tag => {
-        andConditions.push({
-          tags: { has: tag }
-        });
-      });
-      console.log(`[Filter] Requiring ALL tags via AND: ${requiredTags.join(', ')}`);
-    }
-
-    // Apply AND conditions (must have all required tags)
+    // Apply AND conditions
     if (andConditions.length > 0) {
       where.AND = andConditions;
-      console.log(`[Filter] WHERE.AND conditions:`, JSON.stringify(andConditions, null, 2));
+      console.log(`[Filter V2] WHERE.AND conditions:`, JSON.stringify(andConditions, null, 2));
     }
 
-    // CRITICAL BUG FIX: Prisma NOT array bug - wrap in OR to exclude ANY
+    // Apply NOT conditions (wrapped in OR to exclude ANY match)
     if (notConditions.length > 0) {
       where.NOT = {
         OR: notConditions
       };
-      console.log(`[Filter] NOT filter with OR: excluding ANY of ${notConditions.length} tags`);
+      console.log(`[Filter V2] WHERE.NOT.OR conditions:`, JSON.stringify(notConditions, null, 2));
     }
 
-    console.log(`[Filter] Final WHERE object:`, JSON.stringify(where, null, 2));
+    console.log(`[Filter V2] Final WHERE object:`, JSON.stringify(where, null, 2));
 
     // Date range filter
     if (dateRange && dateRange !== "all") {
@@ -340,95 +336,57 @@ app.get("/conversations", async (req: Request, res: Response) => {
       console.log(`[Filter] After showSent filter: ${beforeShowSent} -> ${conversations.length}`);
     }
 
-    // DISABLED: Apply hybrid needs-reply filter (now handled by database layer) for conversations without tags (backward compatibility)
-    // This handles conversations created before the tag system was implemented
-    if (needsReply === "true") {
-      const beforeHybrid = conversations.length;
-      conversations = conversations.filter(conv => {
-        // Already filtered by tag above, but also check last message for old conversations
-        if (conv.tags?.includes("needs-reply")) return true;
+    // NEW V2: No hybrid filter needed - database query handles everything
+    // The needsReply boolean is always up-to-date from Gmail sync
+    console.log(`[Filter V2] Skipping hybrid filters - using clean database query results`);
 
-        // Fallback: check last message direction for conversations without tags
-        if (!conv.tags || conv.tags.length === 0) {
-          if (conv.messages.length === 0) return false;
-          const lastMessage = conv.messages[conv.messages.length - 1];
-          return lastMessage.direction === "inbound";
-        }
-
-        return false;
-      });
-      console.log(`[Filter] After hybrid needs-reply filter: ${beforeHybrid} -> ${conversations.length}`);
-    }
-
-    // Apply hybrid resolved filter
-    if (resolved === "true") {
-      conversations = conversations.filter(conv => {
-        // If has needs-reply tag, it's not resolved
-        if (conv.tags?.includes("needs-reply")) return false;
-
-        // For conversations without tags, check last message direction
-        if (!conv.tags || conv.tags.length === 0) {
-          if (conv.messages.length === 0) return true; // No messages = resolved
-          const lastMessage = conv.messages[conv.messages.length - 1];
-          return lastMessage.direction === "outbound";
-        }
-
-        return true;
-      });
-    }
-
-    // CRITICAL SAFETY CHECK: Final defense to catch ANY conversations that slipped through
-    // This is the absolute last line of defense against filter bypass bugs
+    // NEW V2 SAFETY CHECK: Verify database query results match filter criteria
+    // This catches any edge cases or bugs in the database query
     const beforeSafety = conversations.length;
     conversations = conversations.filter(conv => {
-      // If excludeNonSupport is active, REMOVE any conversation with non-customer-support OR admin tags
+      // Check userTags-based filters
       if (excludeNonSupport === "true") {
-        if (conv.tags?.includes("non-customer-support")) {
-          console.log(`[Filter Safety] BLOCKING non-customer-support conversation: ${conv.id} "${conv.subject}"`);
+        if (conv.userTags?.includes("non-customer-support")) {
+          console.log(`[Filter V2 Safety] BLOCKING non-customer-support: ${conv.id} "${conv.subject}"`);
           return false;
         }
-        if (conv.tags?.includes("admin") && adminOnly !== "true") {
-          console.log(`[Filter Safety] BLOCKING admin conversation in default view: ${conv.id} "${conv.subject}"`);
+        if (conv.userTags?.includes("admin") && adminOnly !== "true") {
+          console.log(`[Filter V2 Safety] BLOCKING admin in default view: ${conv.id} "${conv.subject}"`);
           return false;
         }
       }
 
-      // If adminOnly is active, ONLY show conversations with admin tag
       if (adminOnly === "true") {
-        if (!conv.tags?.includes("admin")) {
-          console.log(`[Filter Safety] BLOCKING non-admin conversation in admin view: ${conv.id} "${conv.subject}"`);
+        if (!conv.userTags?.includes("admin")) {
+          console.log(`[Filter V2 Safety] BLOCKING non-admin in admin view: ${conv.id} "${conv.subject}"`);
           return false;
         }
       }
 
-      // If not showing archived, REMOVE archived conversations
+      // Check archived filter
       if (archived !== "true" && conv.archived) {
-        console.log(`[Filter Safety] BLOCKING archived conversation: ${conv.id} "${conv.subject}"`);
+        console.log(`[Filter V2 Safety] BLOCKING archived: ${conv.id} "${conv.subject}"`);
         return false;
       }
 
-      // CRITICAL FIX: If needs-reply filter is active, REMOVE conversations without needs-reply tag
-      // This catches any conversations that bypassed database/hybrid filters
-      // FIXED: Allow this filter to work with adminOnly mode
+      // Check needsReply boolean (not tags!)
       if (needsReply === "true") {
-        if (!conv.tags?.includes("needs-reply")) {
-          console.log(`[Filter Safety] BLOCKING conversation without needs-reply tag when filter active: ${conv.id} "${conv.subject}"`);
+        if (!conv.needsReply) {
+          console.log(`[Filter V2 Safety] BLOCKING needsReply=false when filter requires true: ${conv.id} "${conv.subject}"`);
           return false;
         }
       }
 
-      // If resolved filter is active, REMOVE conversations with needs-reply tag
-      // FIXED: Allow this filter to work with adminOnly mode
       if (resolved === "true") {
-        if (conv.tags?.includes("needs-reply")) {
-          console.log(`[Filter Safety] BLOCKING conversation with needs-reply tag in resolved view: ${conv.id} "${conv.subject}"`);
+        if (conv.needsReply) {
+          console.log(`[Filter V2 Safety] BLOCKING needsReply=true in resolved view: ${conv.id} "${conv.subject}"`);
           return false;
         }
       }
 
       return true;
     });
-    console.log(`[Filter] After safety filter: ${beforeSafety} -> ${conversations.length}`);
+    console.log(`[Filter V2] After safety filter: ${beforeSafety} -> ${conversations.length}`);
 
     // Get total count after ALL filters including safety check
     const totalCount = conversations.length;
@@ -737,16 +695,10 @@ app.patch("/conversations/:id", async (req: Request, res: Response) => {
     if (archived !== undefined) {
       data.archived = archived;
 
-      // If archiving, also remove needs-reply tag
+      // NEW V2: If archiving, set needsReply = false (archived conversations are considered resolved)
       if (archived === true) {
-        const conversation = await prisma.conversation.findUnique({
-          where: { id: req.params.id },
-        });
-
-        if (conversation) {
-          const updatedTags = (conversation.tags || []).filter(t => t !== "needs-reply");
-          data.tags = updatedTags;
-        }
+        data.needsReply = false;
+        console.log(`[PATCH V2] Setting needsReply=false for archived conversation`);
       }
     }
 
@@ -764,7 +716,7 @@ app.patch("/conversations/:id", async (req: Request, res: Response) => {
   }
 });
 
-// Archive conversation (with optional tag)
+// NEW V2: Archive conversation (with optional user tag)
 app.patch("/conversations/:id/archive", async (req: Request, res: Response) => {
   try {
     const { tag } = req.body;
@@ -773,20 +725,18 @@ app.patch("/conversations/:id/archive", async (req: Request, res: Response) => {
       where: { id: req.params.id },
     });
 
-    const data: any = { archived: true };
+    const data: any = {
+      archived: true,
+      needsReply: false  // NEW V2: Archived conversations are considered resolved
+    };
 
-    if (conversation) {
-      let updatedTags = conversation.tags || [];
-
-      // Add the tag if provided
-      if (tag) {
-        updatedTags = [...updatedTags, tag];
-      }
-
-      // Remove "needs-reply" tag when archiving (resolved conversations shouldn't need reply)
-      updatedTags = updatedTags.filter(t => t !== "needs-reply");
-
-      data.tags = updatedTags;
+    if (conversation && tag) {
+      // Add the user tag if provided (e.g., "non-customer-support")
+      const updatedUserTags = [...(conversation.userTags || []), tag];
+      data.userTags = updatedUserTags;
+      console.log(`[ARCHIVE V2] Adding userTag "${tag}" and setting needsReply=false`);
+    } else {
+      console.log(`[ARCHIVE V2] Setting needsReply=false (no tag added)`);
     }
 
     const updated = await prisma.conversation.update({
@@ -802,6 +752,7 @@ app.patch("/conversations/:id/archive", async (req: Request, res: Response) => {
 });
 
 // Add/remove tags
+// NEW V2: Update user tags (does NOT affect needsReply system tag)
 app.patch("/conversations/:id/tags", async (req: Request, res: Response) => {
   try {
     const { tags } = req.body;
@@ -813,30 +764,40 @@ app.patch("/conversations/:id/tags", async (req: Request, res: Response) => {
     // Get current conversation state for logging
     const current = await prisma.conversation.findUnique({
       where: { id: req.params.id },
-      select: { tags: true, subject: true, gmailThreadId: true }
+      select: { userTags: true, needsReply: true, subject: true, gmailThreadId: true }
     });
 
-    console.log(`[TAGS UPDATE] 📝 Conversation ${req.params.id} | Subject: "${current?.subject}" | Thread: ${current?.gmailThreadId?.substring(0, 8)}...`);
-    console.log(`[TAGS UPDATE] 🏷️  Current tags: ${JSON.stringify(current?.tags || [])}`);
-    console.log(`[TAGS UPDATE] 🎯 Requested tags: ${JSON.stringify(tags)}`);
+    console.log(`[TAGS V2 UPDATE] 📝 Conversation ${req.params.id} | Subject: "${current?.subject}" | Thread: ${current?.gmailThreadId?.substring(0, 8)}...`);
+    console.log(`[TAGS V2 UPDATE] 🏷️  Current userTags: ${JSON.stringify(current?.userTags || [])}`);
+    console.log(`[TAGS V2 UPDATE] 🔔 Current needsReply (unchanged): ${current?.needsReply}`);
+    console.log(`[TAGS V2 UPDATE] 🎯 Requested userTags: ${JSON.stringify(tags)}`);
 
-    // CRITICAL: If "non-customer-support" or "admin" tag is being added, also remove "needs-reply" tag
-    let finalTags = tags;
-    if (tags.includes("non-customer-support") || tags.includes("admin")) {
-      finalTags = tags.filter(tag => tag !== "needs-reply");
-      console.log(`[TAGS UPDATE] 🚫 Removed needs-reply (special tag added): ${JSON.stringify(finalTags)}`);
-    }
-
+    // NEW V2: Update userTags without touching needsReply
+    // User can add "admin" or "non-customer-support" and KEEP needsReply status
     const updated = await prisma.conversation.update({
       where: { id: req.params.id },
-      data: { tags: finalTags },
+      data: { userTags: tags },
+      // Return both fields so frontend gets complete state
+      select: {
+        id: true,
+        subject: true,
+        userTags: true,
+        needsReply: true,
+        lastMessageDirection: true,
+        archived: true,
+        starred: true,
+        lastMessageAt: true,
+        // Also return old 'tags' field for backward compatibility during migration
+        tags: true,
+      }
     });
 
-    console.log(`[TAGS UPDATE] ✅ Saved to DB: ${JSON.stringify(updated.tags)}`);
+    console.log(`[TAGS V2 UPDATE] ✅ Saved userTags to DB: ${JSON.stringify(updated.userTags)}`);
+    console.log(`[TAGS V2 UPDATE] ✅ needsReply unchanged: ${updated.needsReply}`);
 
     res.json(updated);
   } catch (error) {
-    console.error("[TAGS UPDATE] ❌ Error:", error);
+    console.error("[TAGS V2 UPDATE] ❌ Error:", error);
     res.status(500).json({ error: "Failed to update tags" });
   }
 });

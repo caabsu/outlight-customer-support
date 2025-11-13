@@ -61,7 +61,15 @@ model Conversation {
   createdAt             DateTime       @default(now())
   starred               Boolean        @default(false)
   archived              Boolean        @default(false)
+
+  // OLD TAGGING SYSTEM (deprecated, kept for migration only)
   tags                  String[]       @default([])
+
+  // NEW TAGGING SYSTEM (v2)
+  needsReply            Boolean        @default(false)         // System-managed: true if last message was inbound
+  lastMessageDirection  String?                                // "inbound" | "outbound" - tracks last message direction
+  userTags              String[]       @default([])            // User-managed: admin, non-customer-support, custom tags
+
   aiSummary             String?
   aiSummaryGeneratedAt  DateTime?
   messages              Message[]
