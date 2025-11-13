@@ -207,23 +207,30 @@ app.get("/conversations", async (req: Request, res: Response) => {
     const requiredTags: string[] = [];  // Tags that MUST be present (hasEvery)
     const notConditions: any[] = [];
 
-    // CRITICAL: Admin-only filter (show ONLY admin tagged conversations)
+    // Admin filter: requires "admin" tag (works together with other filters)
     if (adminOnly === "true") {
       requiredTags.push("admin");
       console.log(`[Filter] Adding admin requirement`);
-    } else if (excludeNonSupport === "true") {
-      // CRITICAL: Default behavior - exclude non-support AND admin from view
-      // These MUST be in NOT array to exclude them
+    }
+
+    // CS-only filter: exclude non-customer-support (works together with admin filter)
+    // Also exclude admin-tagged emails UNLESS adminOnly is specifically enabled
+    if (excludeNonSupport === "true") {
+      // Always exclude non-customer-support emails
       notConditions.push({
         tags: {
           has: "non-customer-support"
         }
       });
-      notConditions.push({
-        tags: {
-          has: "admin"
-        }
-      });
+      // Only exclude admin emails when NOT specifically filtering for admin
+      if (adminOnly !== "true") {
+        notConditions.push({
+          tags: {
+            has: "admin"
+          }
+        });
+      }
+      console.log(`[Filter] Excluding non-customer-support${adminOnly !== "true" ? " and admin" : ""}`);
     }
 
     if (unreadOnly === "true") {

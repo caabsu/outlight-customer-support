@@ -156,10 +156,10 @@ export function ConversationProvider({
 
       if (showArchived) params.set('archived', 'true');
       if (showStarred) params.set('starred', 'true');
-      // CRITICAL: Don't send excludeNonSupport when adminOnly is active
-      // ADMIN filter should work as a separate inbox, not affected by CS-only filter
-      if (excludeNonSupport && !adminOnly) params.set('excludeNonSupport', 'true');
+      // CS-only filter should work WITH admin filter (exclude non-customer-support even from admin emails)
+      if (excludeNonSupport) params.set('excludeNonSupport', 'true');
       if (showSent) params.set('showSent', 'true');
+      // ADMIN is just another tag filter that requires "admin" tag
       if (adminOnly) params.set('adminOnly', 'true');
 
       // Status filter overrides showNeedsReply
@@ -235,15 +235,14 @@ export function ConversationProvider({
       console.log('[Client Filter] Starting client-side filter. Conversations from backend:', beforeFilter);
       console.log('[Client Filter] Filter state:', { adminOnly, excludeNonSupport, showNeedsReply, statusFilter });
       conversationsList = conversationsList.filter((conv: Conversation) => {
-        // CRITICAL: Don't apply excludeNonSupport when adminOnly is active
-        // ADMIN inbox should be completely independent from CS-only filter
-        // If excludeNonSupport is active AND adminOnly is NOT active, REMOVE any conversation with non-customer-support OR admin tags
-        if (excludeNonSupport && !adminOnly) {
+        // CS-only filter: exclude non-customer-support AND admin (unless adminOnly is specifically active)
+        if (excludeNonSupport) {
           if (conv.tags?.includes("non-customer-support")) {
             console.log(`[Client Filter Safety] BLOCKING non-customer-support: ${conv.id} "${conv.subject}"`);
             return false;
           }
-          if (conv.tags?.includes("admin")) {
+          // Only exclude admin-tagged conversations when NOT specifically filtering for admin
+          if (conv.tags?.includes("admin") && !adminOnly) {
             console.log(`[Client Filter Safety] BLOCKING admin in default view: ${conv.id} "${conv.subject}"`);
             return false;
           }
@@ -466,9 +465,8 @@ export function ConversationProvider({
 
     // Check if updated conversation should be filtered out based on current filters
     const shouldRemove = (() => {
-      // CRITICAL: Don't apply excludeNonSupport when adminOnly is active
-      // Check excludeNonSupport filter (only when adminOnly is NOT active)
-      if (excludeNonSupport && !adminOnly && newConv.tags?.includes('non-customer-support')) {
+      // Check excludeNonSupport filter (should work WITH admin filter)
+      if (excludeNonSupport && newConv.tags?.includes('non-customer-support')) {
         console.log('[Filter] Removing conversation (non-customer-support):', id);
         return true;
       }
