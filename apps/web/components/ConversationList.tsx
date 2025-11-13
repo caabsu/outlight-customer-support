@@ -41,25 +41,25 @@ export default function ConversationList() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Get all unique tags from conversations (excluding system tags like needs-reply)
-  const systemTags = ['needs-reply', 'non-customer-support', 'admin']; // System-managed tags to hide from user
+  // Get all unique tags from conversations
+  // NEW V2: Use userTags instead of tags (no need to filter out system tags anymore)
   const allTags = Array.from(
     new Set(
       conversations.flatMap((conv: Conversation) =>
-        (conv.tags || []).filter(tag => !systemTags.includes(tag))
+        (conv.userTags || [])
       )
     )
   ).sort();
 
   // Helper function to check if conversation is unreplied
-  // Uses hybrid approach: check tag first (new system), then fall back to message direction (old system)
+  // NEW V2: Check needsReply boolean instead of tags array
   const isUnreplied = (conv: Conversation) => {
-    // First check if has needs-reply tag (new system)
-    if (conv.tags?.includes("needs-reply")) {
-      return true;
+    // NEW V2: Check needsReply boolean field
+    if (conv.needsReply !== undefined) {
+      return conv.needsReply;
     }
 
-    // Fallback to last message direction check (for conversations without tags yet)
+    // Fallback to last message direction check (for conversations migrating to V2)
     if (conv.messages.length === 0) return false;
     const lastMessage = conv.messages[conv.messages.length - 1];
     return lastMessage.direction === "inbound";
@@ -124,11 +124,12 @@ export default function ConversationList() {
 
     try {
       // Remove non-customer-support tag and unarchive
-      const newTags = (conv.tags || []).filter(tag => tag !== "non-customer-support");
+      // NEW V2: Use userTags instead of tags
+      const newUserTags = (conv.userTags || []).filter(tag => tag !== "non-customer-support");
       await fetch(`/api/conversations/${convId}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags: newTags }),
+        body: JSON.stringify({ tags: newUserTags }),
       });
       // Update archived status
       await fetch(`/api/conversations/${convId}`, {
@@ -494,10 +495,11 @@ export default function ConversationList() {
                   <span className="tag tag-warning font-sans">Needs Reply</span>
                 </div>
               )}
-              {/* Tags - Separate row, more visible (excluding system tags) */}
-              {conv.tags && conv.tags.filter(tag => !systemTags.includes(tag)).length > 0 && (
+              {/* Tags - Separate row, more visible */}
+              {/* NEW V2: Display userTags instead of tags (no need to filter system tags) */}
+              {conv.userTags && conv.userTags.length > 0 && (
                 <div className="flex items-center gap-2 mt-2 ml-7 flex-wrap">
-                  {conv.tags.filter(tag => !systemTags.includes(tag)).map((tag) => (
+                  {conv.userTags.map((tag) => (
                     <span key={tag} className="px-2 py-0.5 bg-primary/15 text-primary text-xs font-sans font-medium border border-primary/30 rounded">
                       {tag}
                     </span>

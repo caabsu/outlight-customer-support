@@ -22,7 +22,12 @@ export type Conversation = {
   unreadAgent: boolean;
   starred?: boolean;
   archived?: boolean;
+  // OLD TAGGING SYSTEM (deprecated, kept for backward compatibility)
   tags?: string[];
+  // NEW TAGGING SYSTEM V2
+  needsReply?: boolean;
+  lastMessageDirection?: string;
+  userTags?: string[];
   customer: {
     name: string | null;
     primaryEmail: string;
@@ -231,49 +236,54 @@ export function ConversationProvider({
 
       // CRITICAL SAFETY CHECK: Aggressively filter conversations client-side as final defense
       // This catches ANY conversations that somehow bypassed backend filters
+      // NEW V2: Use needsReply boolean and userTags array instead of tags array
       const beforeFilter = conversationsList.length;
-      console.log('[Client Filter] Starting client-side filter. Conversations from backend:', beforeFilter);
-      console.log('[Client Filter] Filter state:', { adminOnly, excludeNonSupport, showNeedsReply, statusFilter });
+      console.log('[Client Filter V2] Starting client-side filter. Conversations from backend:', beforeFilter);
+      console.log('[Client Filter V2] Filter state:', { adminOnly, excludeNonSupport, showNeedsReply, statusFilter });
       conversationsList = conversationsList.filter((conv: Conversation) => {
         // CS-only filter: exclude non-customer-support AND admin (unless adminOnly is specifically active)
+        // NEW V2: Check userTags instead of tags
         if (excludeNonSupport) {
-          if (conv.tags?.includes("non-customer-support")) {
-            console.log(`[Client Filter Safety] BLOCKING non-customer-support: ${conv.id} "${conv.subject}"`);
+          if (conv.userTags?.includes("non-customer-support")) {
+            console.log(`[Client Filter V2 Safety] BLOCKING non-customer-support: ${conv.id} "${conv.subject}"`);
             return false;
           }
           // Only exclude admin-tagged conversations when NOT specifically filtering for admin
-          if (conv.tags?.includes("admin") && !adminOnly) {
-            console.log(`[Client Filter Safety] BLOCKING admin in default view: ${conv.id} "${conv.subject}"`);
+          if (conv.userTags?.includes("admin") && !adminOnly) {
+            console.log(`[Client Filter V2 Safety] BLOCKING admin in default view: ${conv.id} "${conv.subject}"`);
             return false;
           }
         }
 
         // If adminOnly is active, ONLY show conversations with admin tag
-        if (adminOnly && !conv.tags?.includes("admin")) {
-          console.log(`[Client Filter Safety] BLOCKING non-admin in admin view: ${conv.id} "${conv.subject}"`);
+        // NEW V2: Check userTags instead of tags
+        if (adminOnly && !conv.userTags?.includes("admin")) {
+          console.log(`[Client Filter V2 Safety] BLOCKING non-admin in admin view: ${conv.id} "${conv.subject}"`);
           return false;
         }
 
         // If not showing archived, REMOVE archived conversations
         if (!showArchived && conv.archived) {
-          console.log(`[Client Filter Safety] BLOCKING archived: ${conv.id} "${conv.subject}"`);
+          console.log(`[Client Filter V2 Safety] BLOCKING archived: ${conv.id} "${conv.subject}"`);
           return false;
         }
 
-        // CRITICAL: If needs-reply filter is active, REMOVE conversations without needs-reply tag
+        // CRITICAL: If needs-reply filter is active, REMOVE conversations without needsReply=true
+        // NEW V2: Check needsReply boolean instead of tags array
         // FIXED: Allow this filter to work with adminOnly mode
         if (showNeedsReply || statusFilter === 'needs-reply') {
-          if (!conv.tags?.includes('needs-reply')) {
-            console.log(`[Client Filter Safety] BLOCKING no needs-reply when filter active: ${conv.id} "${conv.subject}"`);
+          if (!conv.needsReply) {
+            console.log(`[Client Filter V2 Safety] BLOCKING no needs-reply when filter active: ${conv.id} "${conv.subject}"`);
             return false;
           }
         }
 
-        // If resolved filter is active, REMOVE conversations with needs-reply tag
+        // If resolved filter is active, REMOVE conversations with needsReply=true
+        // NEW V2: Check needsReply boolean instead of tags array
         // FIXED: Allow this filter to work with adminOnly mode
         if (statusFilter === 'resolved') {
-          if (conv.tags?.includes('needs-reply')) {
-            console.log(`[Client Filter Safety] BLOCKING needs-reply in resolved view: ${conv.id} "${conv.subject}"`);
+          if (conv.needsReply) {
+            console.log(`[Client Filter V2 Safety] BLOCKING needs-reply in resolved view: ${conv.id} "${conv.subject}"`);
             return false;
           }
         }
@@ -421,24 +431,25 @@ export function ConversationProvider({
       const conversation: Conversation = await res.json();
 
       // CRITICAL: Double-check filters client-side (defense-in-depth)
+      // NEW V2: Check userTags instead of tags
       if (excludeNonSupport) {
-        if (conversation.tags?.includes("non-customer-support")) {
-          console.log(`[Fetch] Client blocked non-customer-support conversation: ${id}`);
+        if (conversation.userTags?.includes("non-customer-support")) {
+          console.log(`[Fetch V2] Client blocked non-customer-support conversation: ${id}`);
           return;
         }
-        if (!adminOnly && conversation.tags?.includes("admin")) {
-          console.log(`[Fetch] Client blocked admin conversation in CS view: ${id}`);
+        if (!adminOnly && conversation.userTags?.includes("admin")) {
+          console.log(`[Fetch V2] Client blocked admin conversation in CS view: ${id}`);
           return;
         }
       }
 
-      if (adminOnly && !conversation.tags?.includes("admin")) {
-        console.log(`[Fetch] Client blocked non-admin conversation in admin view: ${id}`);
+      if (adminOnly && !conversation.userTags?.includes("admin")) {
+        console.log(`[Fetch V2] Client blocked non-admin conversation in admin view: ${id}`);
         return;
       }
 
       if (!showArchived && conversation.archived) {
-        console.log(`[Fetch] Client blocked archived conversation: ${id}`);
+        console.log(`[Fetch V2] Client blocked archived conversation: ${id}`);
         return;
       }
 
@@ -464,46 +475,52 @@ export function ConversationProvider({
     const newConv = { ...updatedConv, ...updates };
 
     // Check if updated conversation should be filtered out based on current filters
+    // NEW V2: Use needsReply boolean and userTags array
     const shouldRemove = (() => {
       // Check excludeNonSupport filter (should work WITH admin filter)
-      if (excludeNonSupport && newConv.tags?.includes('non-customer-support')) {
-        console.log('[Filter] Removing conversation (non-customer-support):', id);
+      // NEW V2: Check userTags instead of tags
+      if (excludeNonSupport && newConv.userTags?.includes('non-customer-support')) {
+        console.log('[Filter V2] Removing conversation (non-customer-support):', id);
         return true;
       }
 
       // Check adminOnly filter
-      if (adminOnly && !newConv.tags?.includes('admin')) {
-        console.log('[Filter] Removing conversation (not admin):', id);
+      // NEW V2: Check userTags instead of tags
+      if (adminOnly && !newConv.userTags?.includes('admin')) {
+        console.log('[Filter V2] Removing conversation (not admin):', id);
         return true;
       }
 
       // Check if it should be hidden from default view (has admin tag but adminOnly is false)
-      if (!adminOnly && excludeNonSupport && newConv.tags?.includes('admin')) {
-        console.log('[Filter] Removing conversation (admin tag in default view):', id);
+      // NEW V2: Check userTags instead of tags
+      if (!adminOnly && excludeNonSupport && newConv.userTags?.includes('admin')) {
+        console.log('[Filter V2] Removing conversation (admin tag in default view):', id);
         return true;
       }
 
       // Check archived filter
       if (!showArchived && newConv.archived) {
-        console.log('[Filter] Removing conversation (archived):', id);
+        console.log('[Filter V2] Removing conversation (archived):', id);
         return true;
       }
 
       // CRITICAL: Check needs-reply filter
-      // If showing only needs-reply conversations, remove ones without the tag
+      // If showing only needs-reply conversations, remove ones without needsReply=true
+      // NEW V2: Check needsReply boolean instead of tags array
       // FIXED: Allow this filter to work with adminOnly mode
       if (showNeedsReply || statusFilter === 'needs-reply') {
-        if (!newConv.tags?.includes('needs-reply')) {
-          console.log('[Filter] Removing conversation (no needs-reply tag when filter active):', id);
+        if (!newConv.needsReply) {
+          console.log('[Filter V2] Removing conversation (needsReply=false when filter active):', id);
           return true;
         }
       }
 
       // Check resolved filter (opposite of needs-reply)
+      // NEW V2: Check needsReply boolean instead of tags array
       // FIXED: Allow this filter to work with adminOnly mode
       if (statusFilter === 'resolved') {
-        if (newConv.tags?.includes('needs-reply')) {
-          console.log('[Filter] Removing conversation (has needs-reply in resolved view):', id);
+        if (newConv.needsReply) {
+          console.log('[Filter V2] Removing conversation (needsReply=true in resolved view):', id);
           return true;
         }
       }

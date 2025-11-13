@@ -10,7 +10,12 @@ type ConversationHistory = {
   subject: string;
   lastMessageAt: string;
   archived?: boolean;
+  // OLD TAGGING SYSTEM (deprecated)
   tags?: string[];
+  // NEW TAGGING SYSTEM V2
+  needsReply?: boolean;
+  lastMessageDirection?: string;
+  userTags?: string[];
   messages: { direction: string; bodyText?: string | null; bodyHtml?: string | null }[];
 };
 
@@ -232,14 +237,14 @@ export default function ConversationView() {
   const autoLoadAttemptedRef = useRef<Set<string>>(new Set());
 
   // Helper function to check if conversation needs reply
-  // Uses hybrid approach: check tag first (new system), then fall back to message direction (old system)
+  // NEW V2: Check needsReply boolean instead of tags array
   const isUnreplied = (conv: ConversationHistory) => {
-    // First check if has needs-reply tag (new system)
-    if (conv.tags?.includes("needs-reply")) {
-      return true;
+    // NEW V2: Check needsReply boolean field
+    if (conv.needsReply !== undefined) {
+      return conv.needsReply;
     }
 
-    // Fallback to last message direction check (for conversations without tags yet)
+    // Fallback to last message direction check (for conversations migrating to V2)
     if (!conv.messages || conv.messages.length === 0) return false;
     const lastMessage = conv.messages[conv.messages.length - 1];
     return lastMessage.direction === "inbound";
@@ -285,7 +290,8 @@ export default function ConversationView() {
   // Filter history based on needs-reply and CS-only filters
   const filteredHistory = history.filter(conv => {
     // Filter out non-customer-support if CS-only is enabled
-    if (showCSOnly && conv.tags?.includes('non-customer-support')) {
+    // NEW V2: Check userTags instead of tags
+    if (showCSOnly && conv.userTags?.includes('non-customer-support')) {
       return false;
     }
 
@@ -545,18 +551,18 @@ export default function ConversationView() {
   const handleMarkNonSupport = async () => {
     if (!selectedConversation) return;
 
-    const currentTags = selectedConversation.tags || [];
-    // Add non-customer-support tag and remove needs-reply tag
-    const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "non-customer-support"];
+    // NEW V2: Update userTags, don't touch needsReply (system-managed)
+    const currentUserTags = selectedConversation.userTags || [];
+    const updatedUserTags = [...currentUserTags, "non-customer-support"].filter((tag, index, self) => self.indexOf(tag) === index);
 
     try {
       // Apply optimistic update FIRST to immediately remove from view
-      updateConversationOptimistic(selectedConversation.id, { tags: updatedTags });
+      updateConversationOptimistic(selectedConversation.id, { userTags: updatedUserTags });
 
       // Also update in Related Conversations if this conversation appears there
       setHistory(prevHistory => prevHistory.map(conv =>
         conv.id === selectedConversation.id
-          ? { ...conv, tags: updatedTags }
+          ? { ...conv, userTags: updatedUserTags }
           : conv
       ));
 
@@ -564,7 +570,7 @@ export default function ConversationView() {
       fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags: updatedTags }),
+        body: JSON.stringify({ tags: updatedUserTags }),
       }).catch(error => {
         console.error("Failed to mark as non-support:", error);
         alert('Failed to mark as non-support. Please try again.');
@@ -612,19 +618,19 @@ export default function ConversationView() {
   const handleEscalateToAdmin = async () => {
     if (!selectedConversation) return;
 
-    const currentTags = selectedConversation.tags || [];
-    // Add admin tag and remove needs-reply tag
-    const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "admin"];
+    // NEW V2: Update userTags, don't touch needsReply (system-managed)
+    const currentUserTags = selectedConversation.userTags || [];
+    const updatedUserTags = [...currentUserTags, "admin"].filter((tag, index, self) => self.indexOf(tag) === index);
 
     try {
       // Apply optimistic update FIRST to immediately remove from view (if not in admin-only filter)
-      updateConversationOptimistic(selectedConversation.id, { tags: updatedTags });
+      updateConversationOptimistic(selectedConversation.id, { userTags: updatedUserTags });
 
       // Then update backend (no await - let it happen in background)
       fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags: updatedTags }),
+        body: JSON.stringify({ tags: updatedUserTags }),
       }).catch(error => {
         console.error("Failed to escalate to admin:", error);
         alert('Failed to escalate to admin. Please try again.');
@@ -644,11 +650,10 @@ export default function ConversationView() {
 
     try {
       // STEP 1: Check current page FIRST (instant, no API call!)
+      // NEW V2: Check userTags and needsReply instead of tags and message direction
       const unrepliedOnPage = conversations.filter((conv) => {
-        if (conv.tags?.includes("non-customer-support")) return false;
-        if (conv.messages.length === 0) return false;
-        const lastMessage = conv.messages[conv.messages.length - 1];
-        return lastMessage.direction === "inbound";
+        if (conv.userTags?.includes("non-customer-support")) return false;
+        return conv.needsReply === true;
       });
 
       const sortedUnreplied = unrepliedOnPage.sort((a, b) =>
@@ -1531,16 +1536,17 @@ export default function ConversationView() {
   const handleAddTag = async () => {
     if (!newTag.trim() || !selectedConversation) return;
 
-    const currentTags = selectedConversation.tags || [];
-    if (currentTags.includes(newTag.trim())) {
+    // NEW V2: Update userTags instead of tags
+    const currentUserTags = selectedConversation.userTags || [];
+    if (currentUserTags.includes(newTag.trim())) {
       setNewTag("");
       return;
     }
 
-    const updatedTags = [...currentTags, newTag.trim()];
+    const updatedUserTags = [...currentUserTags, newTag.trim()];
 
     // Optimistic update - instant UI feedback
-    updateConversationOptimistic(selectedConversation.id, { tags: updatedTags });
+    updateConversationOptimistic(selectedConversation.id, { userTags: updatedUserTags });
     setNewTag("");
     setEditingTags(false);
 
@@ -1548,7 +1554,7 @@ export default function ConversationView() {
       const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags: updatedTags }),
+        body: JSON.stringify({ tags: updatedUserTags }),
       });
 
       if (!response.ok) {
@@ -1560,24 +1566,25 @@ export default function ConversationView() {
     } catch (error) {
       console.error("Failed to add tag:", error);
       // Revert on error
-      updateConversationOptimistic(selectedConversation.id, { tags: currentTags });
+      updateConversationOptimistic(selectedConversation.id, { userTags: currentUserTags });
     }
   };
 
   const handleRemoveTag = async (tagToRemove: string) => {
     if (!selectedConversation) return;
 
-    const currentTags = selectedConversation.tags || [];
-    const newTags = currentTags.filter(tag => tag !== tagToRemove);
+    // NEW V2: Update userTags instead of tags
+    const currentUserTags = selectedConversation.userTags || [];
+    const newUserTags = currentUserTags.filter(tag => tag !== tagToRemove);
 
     // Optimistic update - instant UI feedback
-    updateConversationOptimistic(selectedConversation.id, { tags: newTags });
+    updateConversationOptimistic(selectedConversation.id, { userTags: newUserTags });
 
     try {
       const response = await fetch(`/api/conversations/${selectedConversation.id}/tags`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags: newTags }),
+        body: JSON.stringify({ tags: newUserTags }),
       });
 
       if (!response.ok) {
@@ -1589,7 +1596,7 @@ export default function ConversationView() {
     } catch (error) {
       console.error("Failed to remove tag:", error);
       // Revert on error
-      updateConversationOptimistic(selectedConversation.id, { tags: currentTags });
+      updateConversationOptimistic(selectedConversation.id, { userTags: currentUserTags });
     }
   };
 
@@ -1677,7 +1684,8 @@ export default function ConversationView() {
 
           {/* Tag Management */}
           <div className="flex items-center gap-2 flex-wrap">
-            {selectedConversation.tags?.filter(tag => tag !== 'needs-reply' && tag !== 'non-customer-support').map((tag) => (
+            {/* NEW V2: Display userTags instead of tags */}
+            {selectedConversation.userTags?.map((tag) => (
               <span
                 key={tag}
                 className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary text-xs font-sans rounded-md border border-primary/20"
@@ -2024,14 +2032,14 @@ export default function ConversationView() {
                       <button
                         onClick={async () => {
                           try {
-                            const currentTags = conv.tags || [];
-                            // Add admin tag and remove needs-reply tag
-                            const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "admin"];
+                            // NEW V2: Update userTags, don't touch needsReply
+                            const currentUserTags = conv.userTags || [];
+                            const updatedUserTags = [...currentUserTags, "admin"].filter((tag, index, self) => self.indexOf(tag) === index);
 
                             const updateResponse = await fetch(`/api/conversations/${conv.id}/tags`, {
                               method: 'PATCH',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ tags: updatedTags }),
+                              body: JSON.stringify({ tags: updatedUserTags }),
                             });
 
                             if (!updateResponse.ok) {
@@ -2084,14 +2092,14 @@ export default function ConversationView() {
                       <button
                         onClick={async () => {
                           try {
-                            const currentTags = conv.tags || [];
-                            // Remove needs-reply tag and add non-customer-support tag
-                            const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "non-customer-support"];
+                            // NEW V2: Update userTags, don't touch needsReply
+                            const currentUserTags = conv.userTags || [];
+                            const updatedUserTags = [...currentUserTags, "non-customer-support"].filter((tag, index, self) => self.indexOf(tag) === index);
 
                             const updateResponse = await fetch(`/api/conversations/${conv.id}/tags`, {
                               method: 'PATCH',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ tags: updatedTags }),
+                              body: JSON.stringify({ tags: updatedUserTags }),
                             });
 
                             if (!updateResponse.ok) {
@@ -2168,7 +2176,8 @@ export default function ConversationView() {
           </button>
 
           {/* Escalate to Admin Button */}
-          {!selectedConversation.tags?.includes("admin") && (
+          {/* NEW V2: Check userTags instead of tags */}
+          {!selectedConversation.userTags?.includes("admin") && (
             <button
               onClick={handleEscalateToAdmin}
               className="w-full px-3 py-2.5 bg-white border-2 border-purple-300 hover:bg-purple-50 text-purple-700 rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-between"
@@ -2183,7 +2192,8 @@ export default function ConversationView() {
           )}
 
           {/* Mark as Non-Support Button */}
-          {!selectedConversation.tags?.includes("non-customer-support") && (
+          {/* NEW V2: Check userTags instead of tags */}
+          {!selectedConversation.userTags?.includes("non-customer-support") && (
             <button
               onClick={handleMarkNonSupport}
               className="w-full px-3 py-2.5 bg-white border-2 border-orange-300 hover:bg-orange-50 text-orange-700 rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-between"
@@ -2769,14 +2779,15 @@ export default function ConversationView() {
 
                   try {
                     // Update all filtered conversations
+                    // NEW V2: Update userTags, don't touch needsReply
                     const updatePromises = filteredHistory.map(conv => {
-                      const currentTags = conv.tags || [];
-                      const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "non-customer-support"];
+                      const currentUserTags = conv.userTags || [];
+                      const updatedUserTags = [...currentUserTags, "non-customer-support"].filter((tag, index, self) => self.indexOf(tag) === index);
 
                       return fetch(`/api/conversations/${conv.id}/tags`, {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ tags: updatedTags }),
+                        body: JSON.stringify({ tags: updatedUserTags }),
                       });
                     });
 
@@ -2866,14 +2877,14 @@ export default function ConversationView() {
                     <button
                       onClick={async () => {
                         try {
-                          // Add admin tag and remove needs-reply tag
-                          const currentTags = conv.tags || [];
-                          const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "admin"];
+                          // NEW V2: Update userTags, don't touch needsReply
+                          const currentUserTags = conv.userTags || [];
+                          const updatedUserTags = [...currentUserTags, "admin"].filter((tag, index, self) => self.indexOf(tag) === index);
 
                           const updateResponse = await fetch(`/api/conversations/${conv.id}/tags`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ tags: updatedTags }),
+                            body: JSON.stringify({ tags: updatedUserTags }),
                           });
 
                           if (!updateResponse.ok) {
@@ -2935,14 +2946,14 @@ export default function ConversationView() {
                     <button
                       onClick={async () => {
                         try {
-                          // Add non-customer-support tag and remove needs-reply tag
-                          const currentTags = conv.tags || [];
-                          const updatedTags = [...currentTags.filter(tag => tag !== "needs-reply"), "non-customer-support"];
+                          // NEW V2: Update userTags, don't touch needsReply
+                          const currentUserTags = conv.userTags || [];
+                          const updatedUserTags = [...currentUserTags, "non-customer-support"].filter((tag, index, self) => self.indexOf(tag) === index);
 
                           const updateResponse = await fetch(`/api/conversations/${conv.id}/tags`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ tags: updatedTags }),
+                            body: JSON.stringify({ tags: updatedUserTags }),
                           });
 
                           if (!updateResponse.ok) {
