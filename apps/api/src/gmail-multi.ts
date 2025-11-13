@@ -352,7 +352,16 @@ async function ingestThread(gmail: any, workspace: any, threadId: string): Promi
     // This ensures we have the absolute latest tags before making auto-tag decisions
     const freshConvo = await prisma.conversation.findUnique({
       where: { id: convo.id },
-      select: { tags: true, archived: true, gmailThreadId: true, subject: true }
+      select: {
+        tags: true,
+        archived: true,
+        gmailThreadId: true,
+        subject: true,
+        // NEW V2 FIELDS
+        needsReply: true,
+        lastMessageDirection: true,
+        userTags: true
+      }
     });
 
     if (!freshConvo) {
