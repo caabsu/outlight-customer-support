@@ -182,6 +182,17 @@ export function ConversationProvider({
         params.set('dateRange', dateRange);
       }
 
+      console.log('[Frontend Filter] Current filter state:', {
+        adminOnly,
+        excludeNonSupport,
+        showNeedsReply,
+        statusFilter,
+        showArchived,
+        showStarred,
+        showSent
+      });
+      console.log('[Frontend Filter] Query params being sent:', params.toString());
+
       const res = await fetch(`/api/conversations?${params.toString()}`);
       if (!res.ok) {
         // Don't log errors if suppressed (during auto-refresh)
@@ -221,6 +232,8 @@ export function ConversationProvider({
       // CRITICAL SAFETY CHECK: Aggressively filter conversations client-side as final defense
       // This catches ANY conversations that somehow bypassed backend filters
       const beforeFilter = conversationsList.length;
+      console.log('[Client Filter] Starting client-side filter. Conversations from backend:', beforeFilter);
+      console.log('[Client Filter] Filter state:', { adminOnly, excludeNonSupport, showNeedsReply, statusFilter });
       conversationsList = conversationsList.filter((conv: Conversation) => {
         // CRITICAL: Don't apply excludeNonSupport when adminOnly is active
         // ADMIN inbox should be completely independent from CS-only filter
