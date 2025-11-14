@@ -24,7 +24,11 @@ export default function OnboardingPage() {
 
   const fetchSections = async () => {
     try {
-      const response = await fetch("http://localhost:4000/onboarding/sections");
+      const apiUrl = process.env.NODE_ENV === 'development'
+        ? 'http://localhost:3001/onboarding/sections'
+        : '/api/onboarding/sections';
+
+      const response = await fetch(apiUrl);
       const data = await response.json();
 
       setToolSections(data.filter((s: OnboardingSection) => s.category === "tool-sop"));
@@ -53,7 +57,11 @@ export default function OnboardingPage() {
     if (!editingSection) return;
 
     try {
-      const response = await fetch(`http://localhost:4000/onboarding/sections/${editingSection.id}`, {
+      const apiUrl = process.env.NODE_ENV === 'development'
+        ? `http://localhost:3001/onboarding/sections/${editingSection.id}`
+        : `/api/onboarding/sections/${editingSection.id}`;
+
+      const response = await fetch(apiUrl, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
