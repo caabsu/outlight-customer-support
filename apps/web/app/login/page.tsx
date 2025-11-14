@@ -14,12 +14,10 @@ interface User {
 export default function LoginPage() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
-  const [selectedUsername, setSelectedUsername] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [customUsername, setCustomUsername] = useState("");
-  const [useCustom, setUseCustom] = useState(false);
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -41,9 +39,6 @@ export default function LoginPage() {
       const response = await fetch(`${API_BASE_URL}/auth/users`);
       const data = await response.json();
       setUsers(data);
-      if (data.length > 0) {
-        setSelectedUsername(data[0].username);
-      }
     } catch (error) {
       console.error("Error fetching users:", error);
     }
@@ -53,8 +48,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-
-    const username = useCustom ? customUsername : selectedUsername;
 
     if (!username || !password) {
       setError("Username and password are required");
@@ -97,57 +90,27 @@ export default function LoginPage() {
 
         {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-6">
-          {/* User Selection */}
+          {/* Username */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select User
+              Username
             </label>
-            <div className="flex items-center gap-4 mb-3">
-              <button
-                type="button"
-                onClick={() => setUseCustom(false)}
-                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  !useCustom
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                Quick Select
-              </button>
-              <button
-                type="button"
-                onClick={() => setUseCustom(true)}
-                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  useCustom
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                Manual Entry
-              </button>
-            </div>
-
-            {!useCustom ? (
-              <select
-                value={selectedUsername}
-                onChange={(e) => setSelectedUsername(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {users.map((user) => (
-                  <option key={user.id} value={user.username}>
-                    {user.name} ({user.username}) - {user.role}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={customUsername}
-                onChange={(e) => setCustomUsername(e.target.value)}
-                placeholder="Enter username"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            )}
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your username"
+              list="usernames"
+              autoComplete="username"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            />
+            <datalist id="usernames">
+              {users.map((user) => (
+                <option key={user.id} value={user.username}>
+                  {user.name}
+                </option>
+              ))}
+            </datalist>
           </div>
 
           {/* Password */}
@@ -192,19 +155,7 @@ export default function LoginPage() {
               Create Account
             </Link>
           </p>
-          <p className="text-xs text-gray-500 mt-2">
-            (Admin password required)
-          </p>
         </div>
-
-        {/* Quick Login Hint */}
-        {users.length > 0 && (
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-xs text-blue-800 text-center">
-              Default Admin: <span className="font-mono font-semibold">caabsu</span>
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

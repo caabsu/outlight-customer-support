@@ -214,22 +214,15 @@ export default function CreateAccountPage() {
 
         {/* Back to Login Link */}
         <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
-            Already have an account?{" "}
-            <Link
-              href="/login"
-              className="text-green-600 hover:text-green-700 font-medium"
-            >
-              Login
-            </Link>
-          </p>
-        </div>
-
-        {/* Security Notice */}
-        <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <p className="text-xs text-yellow-800 text-center">
-            Admin password: <span className="font-mono">gmltn123</span>
-          </p>
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+            </svg>
+            Back to Login
+          </Link>
         </div>
       </div>
     </div>

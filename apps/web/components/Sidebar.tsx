@@ -3,12 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useConversations } from "@/lib/ConversationContext";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useCurrentUser, useLogout } from "@/components/AuthProvider";
 
 export default function Sidebar() {
   const [activeView, setActiveView] = useState<"inbox" | "sent">("inbox");
   const { showArchived, setShowArchived, showSent, setShowSent, openEmailComposer } = useConversations();
   const pathname = usePathname();
+  const currentUser = useCurrentUser();
+  const logout = useLogout();
+  const router = useRouter();
 
   const handleViewChange = (view: "inbox" | "sent" | "archived") => {
     if (view === "archived") {
@@ -29,6 +33,8 @@ export default function Sidebar() {
   const isAnalyticsActive = pathname === "/analytics";
   const isKnowledgeBaseActive = pathname === "/knowledge-base";
   const isExternalDraftsActive = pathname === "/external-drafts";
+  const isQuestionsKBActive = pathname === "/questions";
+  const isOnboardingActive = pathname === "/onboarding";
 
   return (
     <div className="w-full h-full border-r border-border bg-background flex flex-col" style={{ fontFamily: "Roboto, sans-serif" }}>
@@ -138,20 +144,70 @@ export default function Sidebar() {
             <span className={`w-2 h-2 rounded-full ${isKnowledgeBaseActive ? "bg-purple-500" : "bg-transparent"}`}></span>
             Knowledge Base
           </Link>
+          <Link
+            href="/questions"
+            className={`block w-full text-left px-4 py-2.5 rounded-lg text-sm font-sans font-medium transition-colors flex items-center gap-2 ${
+              isQuestionsKBActive
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${isQuestionsKBActive ? "bg-orange-500" : "bg-transparent"}`}></span>
+            Questions KB
+          </Link>
+          <Link
+            href="/onboarding"
+            className={`block w-full text-left px-4 py-2.5 rounded-lg text-sm font-sans font-medium transition-colors flex items-center gap-2 ${
+              isOnboardingActive
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${isOnboardingActive ? "bg-green-500" : "bg-transparent"}`}></span>
+            Onboarding
+          </Link>
         </div>
       </nav>
 
       {/* User Section */}
       <div className="p-4 border-t border-border">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-            <span className="text-sm font-sans font-medium text-primary">U</span>
+        {currentUser ? (
+          <>
+            <button
+              onClick={() => router.push(`/analytics/user/${currentUser.id}`)}
+              className="w-full flex items-center gap-3 hover:bg-accent/50 rounded-lg p-2 transition-colors group"
+            >
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <span className="text-sm font-sans font-medium text-primary">
+                  {currentUser.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm font-sans font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                  {currentUser.name}
+                </p>
+                <p className="text-xs font-sans text-muted-foreground truncate">
+                  {currentUser.role}
+                </p>
+              </div>
+            </button>
+            <button
+              onClick={logout}
+              className="w-full mt-2 px-3 py-1.5 text-xs font-sans font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded-lg transition-colors"
+            >
+              Logout
+            </button>
+          </>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+              <span className="text-sm font-sans font-medium text-primary">?</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-sans font-medium text-foreground truncate">Loading...</p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-sans font-medium text-foreground truncate">User</p>
-            <p className="text-xs font-sans text-muted-foreground truncate">user@outlight.com</p>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
