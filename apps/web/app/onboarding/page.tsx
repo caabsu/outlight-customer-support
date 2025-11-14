@@ -263,7 +263,7 @@ export default function OnboardingPage() {
                     </div>
                   ) : (
                     <div
-                      className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-a:text-blue-600 prose-strong:text-gray-900 prose-code:text-sm prose-code:bg-gray-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded"
+                      className="onboarding-content"
                       dangerouslySetInnerHTML={{ __html: formatContent(currentSection.content) }}
                     />
                   )}
@@ -283,37 +283,190 @@ export default function OnboardingPage() {
   );
 }
 
-// Simple markdown-like formatter
+// Enhanced markdown formatter with better styling
 function formatContent(content: string): string {
   let html = content;
 
-  // Headers
-  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  // Code blocks (must be processed before other replacements)
+  html = html.replace(/```([\s\S]*?)```/g, '<pre class="code-block"><code>$1</code></pre>');
 
-  // Bold
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Headers with styling
+  html = html.replace(/^### (.+)$/gm, '<h3 class="section-h3">$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2 class="section-h2">$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1 class="section-h1">$1</h1>');
 
-  // Italic
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Bold text
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-gray-900">$1</strong>');
 
-  // Lists
-  html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-  html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-
-  // Code blocks
-  html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+  // Italic text
+  html = html.replace(/\*([^*]+?)\*/g, '<em class="italic text-gray-700">$1</em>');
 
   // Inline code
-  html = html.replace(/`(.+?)`/g, '<code>$1</code>');
+  html = html.replace(/`([^`]+?)`/g, '<code class="inline-code">$1</code>');
 
-  // Paragraphs
-  html = html.replace(/\n\n/g, '</p><p>');
-  html = '<p>' + html + '</p>';
+  // Links
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer">$1</a>');
 
-  // Line breaks
-  html = html.replace(/\n/g, '<br>');
+  // Split into blocks for better paragraph handling
+  const blocks = html.split(/\n\n+/);
+  const processedBlocks = blocks.map(block => {
+    // Check if block is already a special element
+    if (block.match(/^<(h[123]|pre|ul|ol|div)/)) {
+      return block;
+    }
 
-  return html;
+    // Process lists
+    if (block.match(/^- /m)) {
+      const items = block.split('\n').filter(line => line.trim());
+      const listItems = items.map(item => {
+        const match = item.match(/^- (.+)$/);
+        if (match) {
+          return `<li class="list-item">${match[1]}</li>`;
+        }
+        return '';
+      }).filter(Boolean).join('\n');
+      return `<ul class="custom-list">${listItems}</ul>`;
+    }
+
+    // Process numbered lists
+    if (block.match(/^\d+\. /m)) {
+      const items = block.split('\n').filter(line => line.trim());
+      const listItems = items.map(item => {
+        const match = item.match(/^\d+\. (.+)$/);
+        if (match) {
+          return `<li class="list-item">${match[1]}</li>`;
+        }
+        return '';
+      }).filter(Boolean).join('\n');
+      return `<ol class="custom-list custom-list-numbered">${listItems}</ol>`;
+    }
+
+    // Regular paragraphs
+    const trimmed = block.trim();
+    if (trimmed) {
+      // Replace single line breaks with <br> for better formatting
+      const withBreaks = trimmed.replace(/\n/g, '<br>');
+      return `<p class="paragraph">${withBreaks}</p>`;
+    }
+    return '';
+  });
+
+  return `
+    <style>
+      .onboarding-content {
+        line-height: 1.8;
+        color: #374151;
+      }
+
+      .section-h1 {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #111827;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #e5e7eb;
+      }
+
+      .section-h2 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.25rem;
+        border-bottom: 1px solid #e5e7eb;
+      }
+
+      .section-h3 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #374151;
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .paragraph {
+        margin-bottom: 1rem;
+        font-size: 1rem;
+        line-height: 1.75;
+        color: #4b5563;
+      }
+
+      .custom-list {
+        margin-bottom: 1.5rem;
+        margin-left: 1.5rem;
+        list-style-type: disc;
+      }
+
+      .custom-list-numbered {
+        list-style-type: decimal;
+      }
+
+      .list-item {
+        margin-bottom: 0.5rem;
+        padding-left: 0.5rem;
+        color: #4b5563;
+        line-height: 1.6;
+      }
+
+      .list-item strong {
+        color: #111827;
+        font-weight: 600;
+      }
+
+      .inline-code {
+        background-color: #f3f4f6;
+        color: #dc2626;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        font-family: 'Courier New', monospace;
+        font-size: 0.875rem;
+        font-weight: 500;
+      }
+
+      .code-block {
+        background-color: #1f2937;
+        color: #f9fafb;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        overflow-x: auto;
+        margin: 1.5rem 0;
+        font-family: 'Courier New', monospace;
+        font-size: 0.875rem;
+        line-height: 1.5;
+      }
+
+      .code-block code {
+        color: #f9fafb;
+      }
+
+      /* Special formatting for checkmarks and emojis */
+      .onboarding-content strong:first-child {
+        display: inline-block;
+        margin-right: 0.25rem;
+      }
+
+      /* Links */
+      .onboarding-content a {
+        font-weight: 500;
+      }
+
+      /* Spacing adjustments */
+      .onboarding-content > *:first-child {
+        margin-top: 0;
+      }
+
+      .onboarding-content > *:last-child {
+        margin-bottom: 0;
+      }
+
+      /* Better readability for nested lists */
+      .custom-list .custom-list {
+        margin-top: 0.5rem;
+        margin-left: 1rem;
+      }
+    </style>
+    ${processedBlocks.join('\n')}
+  `;
 }
