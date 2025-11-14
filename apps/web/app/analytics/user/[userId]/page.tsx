@@ -24,7 +24,7 @@ interface User {
 
 export default function UserAnalyticsPage() {
   const params = useParams();
-  const userId = params.userId as string;
+  const userId = params?.userId as string;
   const [analytics, setAnalytics] = useState<UserAnalytics | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
