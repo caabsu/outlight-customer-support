@@ -45,7 +45,8 @@
       "Bash(npm run dev:*)",
       "Bash(test:*)",
       "Bash(npx next build --no-lint)",
-      "Bash(npx prisma generate:*)"
+      "Bash(npx prisma generate:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []
