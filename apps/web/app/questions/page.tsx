@@ -42,10 +42,12 @@ export default function QuestionsKBPage() {
 
   useEffect(() => {
     fetchQuestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     applyFilter();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions, filter]);
 
   const fetchQuestions = async () => {
@@ -185,7 +187,7 @@ export default function QuestionsKBPage() {
           </div>
         ) : filteredQuestions.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <p className="text-gray-500">No questions found. Click "Ask Question" to get started!</p>
+            <p className="text-gray-500">No questions found. Click &ldquo;Ask Question&rdquo; to get started!</p>
           </div>
         ) : (
           <div className="space-y-4">
