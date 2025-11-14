@@ -5,6 +5,7 @@ import { useConversations } from "@/lib/ConversationContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AIAssistant from "./AIAssistant";
+import { useCurrentUser } from "@/components/AuthProvider";
 
 type ConversationHistory = {
   id: string;
@@ -199,6 +200,12 @@ export default function ConversationView() {
   const [trackingError, setTrackingError] = useState<string | null>(null);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
 
+  // Ask Question modal state
+  const [showAskQuestionModal, setShowAskQuestionModal] = useState(false);
+  const [questionText, setQuestionText] = useState("");
+  const [questionReferencedEmail, setQuestionReferencedEmail] = useState("");
+  const [submittingQuestion, setSubmittingQuestion] = useState(false);
+
   // AI Draft state - stored per conversation ID
   const [draftsByConversationId, setDraftsByConversationId] = useState<Record<string, any>>({});
   const [loadingDraftByConversationId, setLoadingDraftByConversationId] = useState<Record<string, boolean>>({});
@@ -231,6 +238,58 @@ export default function ConversationView() {
         ...prev,
         [selectedConversation.id]: context
       }));
+    }
+  };
+
+  // Get current user for Ask Question feature
+  const currentUser = useCurrentUser();
+
+  // API base URL
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+  // Helper to open Ask Question modal with pre-populated email
+  const handleOpenAskQuestion = () => {
+    if (selectedConversation) {
+      // Pre-populate the referenced email with the conversation subject and latest message
+      const latestMessage = selectedConversation.messages?.[selectedConversation.messages.length - 1];
+      const emailContent = `Subject: ${selectedConversation.subject}\n\n${latestMessage?.bodyText || latestMessage?.bodyHtml || ""}`;
+      setQuestionReferencedEmail(emailContent);
+    }
+    setShowAskQuestionModal(true);
+  };
+
+  // Helper to submit question to KB
+  const handleSubmitQuestion = async () => {
+    if (!questionText.trim() || !currentUser) return;
+
+    setSubmittingQuestion(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/questions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: questionText,
+          askedBy: currentUser.id,
+          referencedEmail: questionReferencedEmail || null,
+          conversationId: selectedConversation?.id || null,
+        }),
+      });
+
+      if (response.ok) {
+        // Reset form and close modal
+        setQuestionText("");
+        setQuestionReferencedEmail("");
+        setShowAskQuestionModal(false);
+        alert("Question submitted successfully!");
+      } else {
+        const error = await response.json();
+        alert(`Failed to submit question: ${error.error || "Unknown error"}`);
+      }
+    } catch (error) {
+      console.error("Error submitting question:", error);
+      alert("Failed to submit question. Please try again.");
+    } finally {
+      setSubmittingQuestion(false);
     }
   };
 
@@ -2646,15 +2705,15 @@ export default function ConversationView() {
 
             {/* Ask Question Button */}
             <div className="mt-2">
-              <Link
-                href="/questions"
+              <button
+                onClick={handleOpenAskQuestion}
                 className="w-full px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-colors text-sm font-sans font-medium flex items-center justify-center gap-2 shadow-sm"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span>Ask Question</span>
-              </Link>
+              </button>
             </div>
 
             {/* Expandable Knowledge Base Tab for Draft */}
@@ -4675,6 +4734,105 @@ export default function ConversationView() {
               className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors font-sans text-sm font-medium"
             >
               Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Ask Question Modal */}
+    {showAskQuestionModal && (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+            <h2 className="text-xl font-sans font-semibold text-gray-900 flex items-center gap-2">
+              <svg className="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Ask a Question
+            </h2>
+            <button
+              onClick={() => {
+                setShowAskQuestionModal(false);
+                setQuestionText("");
+                setQuestionReferencedEmail("");
+              }}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {/* Question Input */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Your Question <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={questionText}
+                onChange={(e) => setQuestionText(e.target.value)}
+                placeholder="What would you like to know?"
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none font-sans text-sm"
+              />
+            </div>
+
+            {/* Referenced Email */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Referenced Email (Optional)
+              </label>
+              <textarea
+                value={questionReferencedEmail}
+                onChange={(e) => setQuestionReferencedEmail(e.target.value)}
+                placeholder="Paste relevant email content here for context..."
+                rows={8}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none font-sans text-sm font-mono bg-gray-50"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                This email content will be saved with your question for reference.
+              </p>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between shrink-0">
+            <button
+              onClick={() => {
+                setShowAskQuestionModal(false);
+                setQuestionText("");
+                setQuestionReferencedEmail("");
+              }}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors font-sans text-sm font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmitQuestion}
+              disabled={!questionText.trim() || submittingQuestion}
+              className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors font-sans text-sm font-medium disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {submittingQuestion ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Submit Question
+                </>
+              )}
             </button>
           </div>
         </div>
