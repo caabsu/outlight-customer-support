@@ -22,10 +22,6 @@ export default function OnboardingPage() {
   const [editingSection, setEditingSection] = useState<OnboardingSection | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchSections();
-  }, []);
-
   const fetchSections = async () => {
     try {
       const response = await fetch("http://localhost:4000/onboarding/sections");
@@ -44,6 +40,11 @@ export default function OnboardingPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchSections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const currentSections = activeTab === "tool" ? toolSections : generalSections;
   const currentSection = currentSections.find(s => s.slug === activeSection);
@@ -270,7 +271,7 @@ export default function OnboardingPage() {
 
             {!currentSection && (
               <div className="px-8 py-16 text-center text-gray-500">
-                <p>No content available yet. Click "Edit" to add content.</p>
+                <p>No content available yet. Click &ldquo;Edit&rdquo; to add content.</p>
               </div>
             )}
           </div>
