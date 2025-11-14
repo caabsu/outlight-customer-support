@@ -158,25 +158,32 @@ export async function pollOnce(req: Request, res: Response) {
 
     let pageToken: string | undefined;
     let pageCount = 0;
+    const MAX_PAGES = 15; // Increased to handle 1500 threads (1100+ emails + buffer)
 
     do {
-      const allEmailsRes = await gmail.users.threads.list({
-        userId: "me",
-        q: `-in:spam -in:trash -in:draft`,
-        maxResults: 100,
-        pageToken,
-      });
+      try {
+        const allEmailsRes = await gmail.users.threads.list({
+          userId: "me",
+          q: `-in:spam -in:trash -in:draft`,
+          maxResults: 100,
+          pageToken,
+        });
 
-      const threads = allEmailsRes.data.threads || [];
-      console.log(`[SYNC] ${workspace.name}: Page ${pageCount + 1}: Found ${threads.length} threads`);
-      threads.forEach((t) => t.id && allThreadIds.add(t.id));
+        const threads = allEmailsRes.data.threads || [];
+        console.log(`[SYNC] ${workspace.name}: Page ${pageCount + 1}/${MAX_PAGES}: Found ${threads.length} threads`);
+        threads.forEach((t) => t.id && allThreadIds.add(t.id));
 
-      pageToken = allEmailsRes.data.nextPageToken || undefined;
-      pageCount++;
+        pageToken = allEmailsRes.data.nextPageToken || undefined;
+        pageCount++;
 
-      // Process up to 5 pages (500 threads)
-      if (pageCount >= 5) {
-        console.log(`[SYNC] Reached 5 page limit`);
+        // Process up to MAX_PAGES to handle larger inboxes
+        if (pageCount >= MAX_PAGES) {
+          console.log(`[SYNC] ${workspace.name}: Reached ${MAX_PAGES} page limit (${allThreadIds.size} threads total)`);
+          break;
+        }
+      } catch (err) {
+        console.error(`[SYNC] Error fetching page ${pageCount + 1}:`, err instanceof Error ? err.message : String(err));
+        // Continue with what we have so far instead of failing completely
         break;
       }
     } while (pageToken);

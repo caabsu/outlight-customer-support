@@ -1469,6 +1469,205 @@ app.get("/knowledge-base/tool-access", async (req: Request, res: Response) => {
 });
 
 // ============================================================================
+// ONBOARDING & TRAINING ENDPOINTS
+// ============================================================================
+
+// Get all onboarding sections
+app.get("/onboarding/sections", async (req: Request, res: Response) => {
+  try {
+    const category = req.query.category as string | undefined;
+    const sections = await prisma.onboardingSection.findMany({
+      where: {
+        active: true,
+        ...(category && { category })
+      },
+      orderBy: { order: "asc" }
+    });
+    res.json(sections);
+  } catch (error) {
+    console.error("Error fetching onboarding sections:", error);
+    res.status(500).json({ error: "Failed to fetch onboarding sections" });
+  }
+});
+
+// Create onboarding section
+app.post("/onboarding/sections", async (req: Request, res: Response) => {
+  try {
+    const { title, slug, content, order, category, icon, active } = req.body;
+
+    if (!title || !slug || !content) {
+      return res.status(400).json({ error: "Title, slug, and content are required" });
+    }
+
+    const section = await prisma.onboardingSection.create({
+      data: {
+        title,
+        slug,
+        content,
+        order: order || 0,
+        category: category || "tool-sop",
+        icon,
+        active: active !== undefined ? active : true
+      }
+    });
+
+    res.json(section);
+  } catch (error) {
+    console.error("Error creating onboarding section:", error);
+    res.status(500).json({ error: "Failed to create section" });
+  }
+});
+
+// Update onboarding section
+app.patch("/onboarding/sections/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { title, slug, content, order, category, icon, active } = req.body;
+
+    const section = await prisma.onboardingSection.update({
+      where: { id },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(slug !== undefined && { slug }),
+        ...(content !== undefined && { content }),
+        ...(order !== undefined && { order }),
+        ...(category !== undefined && { category }),
+        ...(icon !== undefined && { icon }),
+        ...(active !== undefined && { active })
+      }
+    });
+
+    res.json(section);
+  } catch (error) {
+    console.error("Error updating onboarding section:", error);
+    res.status(500).json({ error: "Failed to update section" });
+  }
+});
+
+// Delete onboarding section
+app.delete("/onboarding/sections/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.onboardingSection.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting onboarding section:", error);
+    res.status(500).json({ error: "Failed to delete section" });
+  }
+});
+
+// Get all training videos
+app.get("/training/videos", async (req: Request, res: Response) => {
+  try {
+    const videos = await prisma.trainingVideo.findMany({
+      where: { active: true },
+      orderBy: { order: "asc" }
+    });
+    res.json(videos);
+  } catch (error) {
+    console.error("Error fetching training videos:", error);
+    res.status(500).json({ error: "Failed to fetch videos" });
+  }
+});
+
+// Verify password for video management
+app.post("/training/videos/verify-password", async (req: Request, res: Response) => {
+  const { password } = req.body;
+  const correctPassword = "gmltn123";
+
+  if (password === correctPassword) {
+    res.json({ verified: true });
+  } else {
+    res.json({ verified: false });
+  }
+});
+
+// Create training video
+app.post("/training/videos", async (req: Request, res: Response) => {
+  try {
+    const { password, title, description, videoUrl, thumbnailUrl, duration, category, order, active } = req.body;
+
+    // Verify password
+    if (password !== "gmltn123") {
+      return res.status(401).json({ error: "Invalid password" });
+    }
+
+    if (!title || !videoUrl) {
+      return res.status(400).json({ error: "Title and video URL are required" });
+    }
+
+    const video = await prisma.trainingVideo.create({
+      data: {
+        title,
+        description,
+        videoUrl,
+        thumbnailUrl,
+        duration,
+        category,
+        order: order || 0,
+        active: active !== undefined ? active : true
+      }
+    });
+
+    res.json(video);
+  } catch (error) {
+    console.error("Error creating training video:", error);
+    res.status(500).json({ error: "Failed to create video" });
+  }
+});
+
+// Update training video
+app.patch("/training/videos/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { password, title, description, videoUrl, thumbnailUrl, duration, category, order, active } = req.body;
+
+    // Verify password
+    if (password !== "gmltn123") {
+      return res.status(401).json({ error: "Invalid password" });
+    }
+
+    const video = await prisma.trainingVideo.update({
+      where: { id },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(description !== undefined && { description }),
+        ...(videoUrl !== undefined && { videoUrl }),
+        ...(thumbnailUrl !== undefined && { thumbnailUrl }),
+        ...(duration !== undefined && { duration }),
+        ...(category !== undefined && { category }),
+        ...(order !== undefined && { order }),
+        ...(active !== undefined && { active })
+      }
+    });
+
+    res.json(video);
+  } catch (error) {
+    console.error("Error updating training video:", error);
+    res.status(500).json({ error: "Failed to update video" });
+  }
+});
+
+// Delete training video
+app.delete("/training/videos/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+
+    // Verify password
+    if (password !== "gmltn123") {
+      return res.status(401).json({ error: "Invalid password" });
+    }
+
+    await prisma.trainingVideo.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting training video:", error);
+    res.status(500).json({ error: "Failed to delete video" });
+  }
+});
+
+// ============================================================================
 // AI ENDPOINTS
 // ============================================================================
 

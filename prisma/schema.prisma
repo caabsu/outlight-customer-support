@@ -225,3 +225,36 @@ model Product {
   @@index([status])
   @@index([category])
 }
+
+model OnboardingSection {
+  id          String   @id @default(uuid())
+  title       String   // Section title (e.g., "Getting Started", "Daily Workflow")
+  slug        String   @unique // URL-friendly identifier
+  content     String   @db.Text // Markdown/HTML content
+  order       Int      @default(0) // Display order
+  category    String   @default("tool-sop") // "tool-sop" or "general-sop"
+  icon        String?  // Optional icon name
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([order])
+}
+
+model TrainingVideo {
+  id          String   @id @default(uuid())
+  title       String
+  description String?  @db.Text
+  videoUrl    String   // YouTube URL, Vimeo, or direct video file URL
+  thumbnailUrl String?
+  duration    String?  // "5:30" format
+  category    String?  // Optional grouping
+  order       Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([order])
+}
