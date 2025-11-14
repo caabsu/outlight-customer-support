@@ -314,23 +314,55 @@ function formatContent(content: string): string {
     // Check for numbered list start
     if (line.match(/^\d+\.\s+/)) {
       const listItems: string[] = [];
-      // Collect all consecutive numbered items (allowing blank lines between them)
+      let currentItemContent: string[] = [];
+
+      // Collect all consecutive numbered items (allowing blank lines and indented content)
       while (i < lines.length) {
         const currentLine = lines[i];
+
+        // Main numbered item
         if (currentLine.match(/^\d+\.\s+/)) {
-          const match = currentLine.match(/^(\d+)\.\s+(.+)$/);
+          // Save previous item if exists
+          if (currentItemContent.length > 0) {
+            listItems.push(`<li class="list-item">${currentItemContent.join('<br>')}</li>`);
+            currentItemContent = [];
+          }
+
+          // Start new item
+          const match = currentLine.match(/^\d+\.\s+(.+)$/);
           if (match) {
-            listItems.push(`<li class="list-item">${match[2]}</li>`);
+            currentItemContent.push(match[1]);
           }
           i++;
-        } else if (currentLine.trim() === '' && i + 1 < lines.length && lines[i + 1].match(/^\d+\.\s+/)) {
-          // Skip blank lines between numbered items
+        }
+        // Indented content (sub-items, continuation)
+        else if (currentLine.match(/^\s+/) && currentLine.trim() !== '') {
+          currentItemContent.push(currentLine);
           i++;
-        } else {
+        }
+        // Blank line - might be between items or end of list
+        else if (currentLine.trim() === '') {
+          // Peek ahead to see if there's more numbered content
+          if (i + 1 < lines.length && (lines[i + 1].match(/^\d+\.\s+/) || lines[i + 1].match(/^\s+\S/))) {
+            // Keep the blank line as spacing
+            currentItemContent.push('');
+            i++;
+          } else {
+            // End of list
+            break;
+          }
+        }
+        else {
           // End of numbered list
           break;
         }
       }
+
+      // Add the last item
+      if (currentItemContent.length > 0) {
+        listItems.push(`<li class="list-item">${currentItemContent.join('<br>')}</li>`);
+      }
+
       if (listItems.length > 0) {
         processedLines.push(`<ol class="custom-list custom-list-numbered">${listItems.join('')}</ol>`);
       }
@@ -338,25 +370,56 @@ function formatContent(content: string): string {
     }
 
     // Check for bullet list start
-    if (line.match(/^-\s+/)) {
+    if (line.match(/^-\s+/) || line.match(/^\s+-\s+/)) {
       const listItems: string[] = [];
-      // Collect all consecutive bullet items (allowing blank lines between them)
+      let currentItemContent: string[] = [];
+
+      // Collect all consecutive bullet items (allowing blank lines and indented content)
       while (i < lines.length) {
         const currentLine = lines[i];
-        if (currentLine.match(/^-\s+/)) {
-          const match = currentLine.match(/^-\s+(.+)$/);
+
+        // Main bullet item (can be indented or not)
+        if (currentLine.match(/^\s*-\s+/)) {
+          // Save previous item if exists
+          if (currentItemContent.length > 0) {
+            listItems.push(`<li class="list-item">${currentItemContent.join('<br>')}</li>`);
+            currentItemContent = [];
+          }
+
+          // Start new item
+          const match = currentLine.match(/^\s*-\s+(.+)$/);
           if (match) {
-            listItems.push(`<li class="list-item">${match[1]}</li>`);
+            currentItemContent.push(match[1]);
           }
           i++;
-        } else if (currentLine.trim() === '' && i + 1 < lines.length && lines[i + 1].match(/^-\s+/)) {
-          // Skip blank lines between bullet items
+        }
+        // Indented content (continuation of bullet item)
+        else if (currentLine.match(/^\s{2,}/) && currentLine.trim() !== '') {
+          currentItemContent.push(currentLine);
           i++;
-        } else {
+        }
+        // Blank line - might be between items or end of list
+        else if (currentLine.trim() === '') {
+          // Peek ahead to see if there's more bullet content
+          if (i + 1 < lines.length && lines[i + 1].match(/^\s*-\s+/)) {
+            // Skip blank line between items
+            i++;
+          } else {
+            // End of list
+            break;
+          }
+        }
+        else {
           // End of bullet list
           break;
         }
       }
+
+      // Add the last item
+      if (currentItemContent.length > 0) {
+        listItems.push(`<li class="list-item">${currentItemContent.join('<br>')}</li>`);
+      }
+
       if (listItems.length > 0) {
         processedLines.push(`<ul class="custom-list">${listItems.join('')}</ul>`);
       }
@@ -438,7 +501,7 @@ function formatContent(content: string): string {
       }
 
       .list-item {
-        margin-bottom: 0.75rem;
+        margin-bottom: 1rem;
         padding-left: 0.5rem;
         color: #4b5563;
         line-height: 1.7;
@@ -452,6 +515,13 @@ function formatContent(content: string): string {
       .list-item strong {
         color: #111827;
         font-weight: 600;
+      }
+
+      /* Handle indented content within list items */
+      .list-item br + br {
+        display: block;
+        content: "";
+        margin-top: 0.5rem;
       }
 
       /* Ensure lists show markers */
