@@ -44,6 +44,151 @@ app.get("/", (_req: Request, res: Response) => {
 
 app.get("/health", (_req: Request, res: Response) => res.json({ ok: true }));
 
+// ==================== AUTHENTICATION ENDPOINTS ====================
+// Login
+app.post("/auth/login", async (req: Request, res: Response) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: "Username and password required" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { username },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        password: true,
+        role: true,
+        email: true,
+        active: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    if (!user.active) {
+      return res.status(403).json({ error: "Account is inactive" });
+    }
+
+    // Simple password comparison (plain text as requested)
+    if (user.password !== password) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    // Return user data (excluding password)
+    const { password: _, ...userData } = user;
+    res.json({ user: userData, message: "Login successful" });
+  } catch (error) {
+    console.error("Error during login:", error);
+    res.status(500).json({ error: "Login failed" });
+  }
+});
+
+// Create account (requires admin password)
+app.post("/auth/create-account", async (req: Request, res: Response) => {
+  try {
+    const { adminPassword, name, username, password, email, role } = req.body;
+
+    // Verify admin password
+    if (adminPassword !== "gmltn123") {
+      return res.status(403).json({ error: "Invalid admin password" });
+    }
+
+    if (!name || !username || !password) {
+      return res.status(400).json({ error: "Name, username, and password are required" });
+    }
+
+    // Check if username already exists
+    const existing = await prisma.user.findUnique({
+      where: { username },
+    });
+
+    if (existing) {
+      return res.status(409).json({ error: "Username already exists" });
+    }
+
+    // Create user
+    const user = await prisma.user.create({
+      data: {
+        name,
+        username,
+        password, // Plain text as requested
+        email: email || null,
+        role: role || "agent",
+        active: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        role: true,
+        email: true,
+        active: true,
+      },
+    });
+
+    res.json({ user, message: "Account created successfully" });
+  } catch (error) {
+    console.error("Error creating account:", error);
+    res.status(500).json({ error: "Failed to create account" });
+  }
+});
+
+// Get all users (for user selection on login)
+app.get("/auth/users", async (_req: Request, res: Response) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        role: true,
+      },
+      orderBy: { name: "asc" },
+    });
+
+    res.json(users);
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+// Get user by ID
+app.get("/auth/user/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        role: true,
+        email: true,
+        active: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    res.status(500).json({ error: "Failed to fetch user" });
+  }
+});
+
 // ==================== WORKSPACE ENDPOINTS ====================
 // Get all workspaces
 app.get("/workspaces", async (req: Request, res: Response) => {
@@ -1664,6 +1809,412 @@ app.delete("/training/videos/:id", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error deleting training video:", error);
     res.status(500).json({ error: "Failed to delete video" });
+  }
+});
+
+// ==================== QUESTIONS KB ENDPOINTS ====================
+// Get all questions
+app.get("/questions", async (req: Request, res: Response) => {
+  try {
+    const status = req.query.status as string | undefined;
+
+    const questions = await prisma.questionsKB.findMany({
+      where: status ? { status } : undefined,
+      include: {
+        askedByUser: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+          },
+        },
+        answeredByUser: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json(questions);
+  } catch (error) {
+    console.error("Error fetching questions:", error);
+    res.status(500).json({ error: "Failed to fetch questions" });
+  }
+});
+
+// Get single question by ID
+app.get("/questions/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const question = await prisma.questionsKB.findUnique({
+      where: { id },
+      include: {
+        askedByUser: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+          },
+        },
+        answeredByUser: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+          },
+        },
+        conversation: {
+          select: {
+            id: true,
+            subject: true,
+            customerEmail: true,
+          },
+        },
+      },
+    });
+
+    if (!question) {
+      return res.status(404).json({ error: "Question not found" });
+    }
+
+    res.json(question);
+  } catch (error) {
+    console.error("Error fetching question:", error);
+    res.status(500).json({ error: "Failed to fetch question" });
+  }
+});
+
+// Create new question
+app.post("/questions", async (req: Request, res: Response) => {
+  try {
+    const { question, askedBy, referencedEmail, conversationId, tags } = req.body;
+
+    if (!question || !askedBy) {
+      return res.status(400).json({ error: "Question and askedBy are required" });
+    }
+
+    const newQuestion = await prisma.questionsKB.create({
+      data: {
+        question,
+        askedBy,
+        referencedEmail: referencedEmail || null,
+        conversationId: conversationId || null,
+        tags: tags || [],
+        status: "unanswered",
+      },
+      include: {
+        askedByUser: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+          },
+        },
+      },
+    });
+
+    res.json(newQuestion);
+  } catch (error) {
+    console.error("Error creating question:", error);
+    res.status(500).json({ error: "Failed to create question" });
+  }
+});
+
+// Answer a question
+app.patch("/questions/:id/answer", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { answer, answeredBy } = req.body;
+
+    if (!answer || !answeredBy) {
+      return res.status(400).json({ error: "Answer and answeredBy are required" });
+    }
+
+    const updatedQuestion = await prisma.questionsKB.update({
+      where: { id },
+      data: {
+        answer,
+        answeredBy,
+        status: "answered",
+        answeredAt: new Date(),
+        updatedAt: new Date(),
+      },
+      include: {
+        askedByUser: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+          },
+        },
+        answeredByUser: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+          },
+        },
+      },
+    });
+
+    res.json(updatedQuestion);
+  } catch (error) {
+    console.error("Error answering question:", error);
+    res.status(500).json({ error: "Failed to answer question" });
+  }
+});
+
+// Delete a question
+app.delete("/questions/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.questionsKB.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting question:", error);
+    res.status(500).json({ error: "Failed to delete question" });
+  }
+});
+
+// ==================== ANALYTICS ENDPOINTS ====================
+// General analytics (overall stats)
+app.get("/analytics/general", async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const timeRange = req.query.timeRange as string || "7d"; // 7d, 30d, 90d, all
+
+    // Calculate date filter based on time range
+    let dateFilter: Date | undefined;
+    const now = new Date();
+    if (timeRange === "7d") {
+      dateFilter = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (timeRange === "30d") {
+      dateFilter = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    } else if (timeRange === "90d") {
+      dateFilter = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    }
+
+    const whereClause = {
+      ...(workspaceId && { workspaceId }),
+      ...(dateFilter && { createdAt: { gte: dateFilter } }),
+    };
+
+    // Total incoming tickets
+    const totalIncoming = await prisma.conversation.count({
+      where: whereClause,
+    });
+
+    // Tickets (non-CS) - conversations tagged with "non-customer-support"
+    const nonCSTickets = await prisma.conversation.count({
+      where: {
+        ...whereClause,
+        userTags: { has: "non-customer-support" },
+      },
+    });
+
+    // Tickets (CS) - all others
+    const csTickets = totalIncoming - nonCSTickets;
+
+    // Average response time (calculate from first inbound to first outbound)
+    const conversationsWithMessages = await prisma.conversation.findMany({
+      where: whereClause,
+      include: {
+        messages: {
+          orderBy: { sentAt: "asc" },
+          select: {
+            direction: true,
+            sentAt: true,
+          },
+        },
+      },
+    });
+
+    let totalResponseTime = 0;
+    let responsesCount = 0;
+
+    conversationsWithMessages.forEach((conv) => {
+      const firstInbound = conv.messages.find((m) => m.direction === "inbound");
+      const firstOutbound = conv.messages.find((m) => m.direction === "outbound");
+
+      if (firstInbound && firstOutbound && firstOutbound.sentAt > firstInbound.sentAt) {
+        const responseTime = firstOutbound.sentAt.getTime() - firstInbound.sentAt.getTime();
+        totalResponseTime += responseTime;
+        responsesCount++;
+      }
+    });
+
+    const avgResponseTimeMs = responsesCount > 0 ? totalResponseTime / responsesCount : 0;
+    const avgResponseTimeHours = avgResponseTimeMs / (1000 * 60 * 60);
+
+    res.json({
+      totalIncoming,
+      nonCSTickets,
+      csTickets,
+      avgResponseTimeHours: Math.round(avgResponseTimeHours * 100) / 100,
+      avgResponseTimeMs,
+      timeRange,
+    });
+  } catch (error) {
+    console.error("Error fetching general analytics:", error);
+    res.status(500).json({ error: "Failed to fetch analytics" });
+  }
+});
+
+// User-specific analytics
+app.get("/analytics/user/:userId", async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const timeRange = req.query.timeRange as string || "7d";
+
+    // Calculate date filter
+    let dateFilter: Date | undefined;
+    const now = new Date();
+    if (timeRange === "7d") {
+      dateFilter = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (timeRange === "30d") {
+      dateFilter = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    } else if (timeRange === "90d") {
+      dateFilter = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    }
+
+    // Total outbound emails (from UserActivity)
+    const totalOutbound = await prisma.userActivity.count({
+      where: {
+        userId,
+        actionType: "email_sent",
+        ...(workspaceId && { workspaceId }),
+        ...(dateFilter && { timestamp: { gte: dateFilter } }),
+      },
+    });
+
+    // Outbound emails per day (for the time range)
+    const outboundActivities = await prisma.userActivity.findMany({
+      where: {
+        userId,
+        actionType: "email_sent",
+        ...(workspaceId && { workspaceId }),
+        ...(dateFilter && { timestamp: { gte: dateFilter } }),
+      },
+      select: {
+        timestamp: true,
+      },
+    });
+
+    // Group by day
+    const emailsByDay: Record<string, number> = {};
+    outboundActivities.forEach((activity) => {
+      const day = activity.timestamp.toISOString().split("T")[0];
+      emailsByDay[day] = (emailsByDay[day] || 0) + 1;
+    });
+
+    // Group by hour (last 24 hours)
+    const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const emailsByHour: Record<number, number> = {};
+    outboundActivities
+      .filter((a) => a.timestamp >= last24Hours)
+      .forEach((activity) => {
+        const hour = activity.timestamp.getHours();
+        emailsByHour[hour] = (emailsByHour[hour] || 0) + 1;
+      });
+
+    // Assigned conversations
+    const assignedConversations = await prisma.conversation.count({
+      where: {
+        assignedTo: userId,
+        ...(workspaceId && { workspaceId }),
+        ...(dateFilter && { createdAt: { gte: dateFilter } }),
+      },
+    });
+
+    // Drafted conversations
+    const draftedConversations = await prisma.conversation.count({
+      where: {
+        lastDraftedBy: userId,
+        ...(workspaceId && { workspaceId }),
+        ...(dateFilter && { createdAt: { gte: dateFilter } }),
+      },
+    });
+
+    res.json({
+      userId,
+      totalOutbound,
+      emailsByDay,
+      emailsByHour,
+      assignedConversations,
+      draftedConversations,
+      timeRange,
+    });
+  } catch (error) {
+    console.error("Error fetching user analytics:", error);
+    res.status(500).json({ error: "Failed to fetch user analytics" });
+  }
+});
+
+// All users analytics (summary)
+app.get("/analytics/users", async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const timeRange = req.query.timeRange as string || "7d";
+
+    // Calculate date filter
+    let dateFilter: Date | undefined;
+    const now = new Date();
+    if (timeRange === "7d") {
+      dateFilter = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (timeRange === "30d") {
+      dateFilter = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    } else if (timeRange === "90d") {
+      dateFilter = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    }
+
+    const users = await prisma.user.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        role: true,
+      },
+    });
+
+    const userStats = await Promise.all(
+      users.map(async (user) => {
+        const emailsSent = await prisma.userActivity.count({
+          where: {
+            userId: user.id,
+            actionType: "email_sent",
+            ...(workspaceId && { workspaceId }),
+            ...(dateFilter && { timestamp: { gte: dateFilter } }),
+          },
+        });
+
+        const assignedCount = await prisma.conversation.count({
+          where: {
+            assignedTo: user.id,
+            ...(workspaceId && { workspaceId }),
+            ...(dateFilter && { createdAt: { gte: dateFilter } }),
+          },
+        });
+
+        return {
+          ...user,
+          emailsSent,
+          assignedCount,
+        };
+      })
+    );
+
+    res.json({ users: userStats, timeRange });
+  } catch (error) {
+    console.error("Error fetching users analytics:", error);
+    res.status(500).json({ error: "Failed to fetch users analytics" });
   }
 });
 
