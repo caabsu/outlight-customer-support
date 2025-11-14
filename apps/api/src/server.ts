@@ -1872,7 +1872,11 @@ app.get("/questions/:id", async (req: Request, res: Response) => {
           select: {
             id: true,
             subject: true,
-            customerEmail: true,
+            customer: {
+              select: {
+                primaryEmail: true,
+              },
+            },
           },
         },
       },
