@@ -31,11 +31,8 @@ export default function TrainingVideosPage() {
 
   const fetchVideos = async () => {
     try {
-      const apiUrl = process.env.NODE_ENV === 'development'
-        ? 'http://localhost:3001/training/videos'
-        : '/api/training/videos';
-
-      const response = await fetch(apiUrl);
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${API_BASE_URL}/training/videos`);
       const data = await response.json();
       setVideos(data);
     } catch (error) {
@@ -49,11 +46,8 @@ export default function TrainingVideosPage() {
     e.preventDefault();
 
     try {
-      const apiUrl = process.env.NODE_ENV === 'development'
-        ? 'http://localhost:3001/training/videos/verify-password'
-        : '/api/training/videos/verify-password';
-
-      const response = await fetch(apiUrl, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${API_BASE_URL}/training/videos/verify-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
@@ -80,11 +74,8 @@ export default function TrainingVideosPage() {
     }
 
     try {
-      const apiUrl = process.env.NODE_ENV === 'development'
-        ? 'http://localhost:3001/training/videos'
-        : '/api/training/videos';
-
-      const response = await fetch(apiUrl, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${API_BASE_URL}/training/videos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -107,11 +98,8 @@ export default function TrainingVideosPage() {
     if (!editingVideo) return;
 
     try {
-      const apiUrl = process.env.NODE_ENV === 'development'
-        ? `http://localhost:3001/training/videos/${editingVideo.id}`
-        : `/api/training/videos/${editingVideo.id}`;
-
-      const response = await fetch(apiUrl, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${API_BASE_URL}/training/videos/${editingVideo.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -139,11 +127,8 @@ export default function TrainingVideosPage() {
     if (!confirm("Are you sure you want to delete this video?")) return;
 
     try {
-      const apiUrl = process.env.NODE_ENV === 'development'
-        ? `http://localhost:3001/training/videos/${id}`
-        : `/api/training/videos/${id}`;
-
-      const response = await fetch(apiUrl, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${API_BASE_URL}/training/videos/${id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: "gmltn123" }),
