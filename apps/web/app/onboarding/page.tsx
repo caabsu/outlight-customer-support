@@ -317,27 +317,29 @@ function formatContent(content: string): string {
 
     // Process lists
     if (block.match(/^- /m)) {
-      const items = block.split('\n').filter(line => line.trim());
+      // Split by actual newlines and handle both \n and \r\n
+      const items = block.split(/\r?\n/).filter(line => line.trim());
       const listItems = items.map(item => {
-        const match = item.match(/^- (.+)$/);
+        const match = item.match(/^-\s+(.+)$/);
         if (match) {
           return `<li class="list-item">${match[1]}</li>`;
         }
         return '';
-      }).filter(Boolean).join('\n');
+      }).filter(Boolean).join('');
       return `<ul class="custom-list">${listItems}</ul>`;
     }
 
     // Process numbered lists
-    if (block.match(/^\d+\. /m)) {
-      const items = block.split('\n').filter(line => line.trim());
+    if (block.match(/^\d+\.\s+/m)) {
+      // Split by actual newlines and handle both \n and \r\n
+      const items = block.split(/\r?\n/).filter(line => line.trim());
       const listItems = items.map(item => {
-        const match = item.match(/^\d+\. (.+)$/);
+        const match = item.match(/^(\d+)\.\s+(.+)$/);
         if (match) {
-          return `<li class="list-item">${match[1]}</li>`;
+          return `<li class="list-item">${match[2]}</li>`;
         }
         return '';
-      }).filter(Boolean).join('\n');
+      }).filter(Boolean).join('');
       return `<ol class="custom-list custom-list-numbered">${listItems}</ol>`;
     }
 
@@ -404,15 +406,29 @@ function formatContent(content: string): string {
       }
 
       .list-item {
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.75rem;
         padding-left: 0.5rem;
         color: #4b5563;
-        line-height: 1.6;
+        line-height: 1.7;
+        display: list-item;
+      }
+
+      .list-item:last-child {
+        margin-bottom: 0;
       }
 
       .list-item strong {
         color: #111827;
         font-weight: 600;
+      }
+
+      /* Ensure lists show markers */
+      .custom-list {
+        display: block;
+      }
+
+      .custom-list li {
+        display: list-item;
       }
 
       .inline-code {
