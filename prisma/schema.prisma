@@ -19,15 +19,7 @@ model Workspace {
   conversations    Conversation[]
   oauthTokens      OAuthToken[]
   products         Product[]
-}
-
-model User {
-  id            String         @id @default(uuid())
-  email         String         @unique
-  name          String?
-  role          String         @default("ADMIN")
-  createdAt     DateTime       @default(now())
-  conversations Conversation[] @relation("UserConversations")
+  userActivities   UserActivity[]
 }
 
 model Customer {
@@ -74,6 +66,18 @@ model Conversation {
   aiSummaryGeneratedAt  DateTime?
   messages              Message[]
   draftResponse         DraftResponse?
+
+  // User tracking for analytics
+  assignedTo            String?
+  lastDraftedBy         String?
+  lastRepliedBy         String?
+  assignedToUser        User?          @relation("AssignedTo", fields: [assignedTo], references: [id], onDelete: SetNull)
+  draftedByUser         User?          @relation("DraftedBy", fields: [lastDraftedBy], references: [id], onDelete: SetNull)
+  repliedByUser         User?          @relation("RepliedBy", fields: [lastRepliedBy], references: [id], onDelete: SetNull)
+
+  // Relations
+  userActivities        UserActivity[]
+  questions             QuestionsKB[]
 
   @@unique([workspaceId, gmailThreadId])
 }
@@ -257,4 +261,71 @@ model TrainingVideo {
 
   @@index([category])
   @@index([order])
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  username  String   @unique
+  password  String   // Plain text for simplicity (as requested)
+  role      String   @default("agent") // "admin" or "agent"
+  email     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  activities        UserActivity[]
+  questionsAsked    QuestionsKB[] @relation("QuestionsAsked")
+  questionsAnswered QuestionsKB[] @relation("QuestionsAnswered")
+  assignedConversations Conversation[] @relation("AssignedTo")
+  draftedConversations  Conversation[] @relation("DraftedBy")
+  repliedConversations  Conversation[] @relation("RepliedBy")
+
+  @@index([username])
+}
+
+model UserActivity {
+  id             String       @id @default(uuid())
+  userId         String
+  workspaceId    String
+  conversationId String?
+  actionType     String       // 'email_sent', 'draft_generated', 'email_viewed', etc.
+  metadata       Json?
+  timestamp      DateTime     @default(now())
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([timestamp])
+  @@index([actionType])
+}
+
+model QuestionsKB {
+  id             String    @id @default(uuid())
+  question       String    @db.Text
+  answer         String?   @db.Text
+  askedBy        String
+  answeredBy     String?
+  referencedEmail String?  @db.Text // Copy/paste of email content
+  conversationId String?
+  status         String    @default("unanswered") // 'unanswered', 'answered'
+  tags           String[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  answeredAt     DateTime?
+
+  // Relations
+  askedByUser    User          @relation("QuestionsAsked", fields: [askedBy], references: [id], onDelete: Cascade)
+  answeredByUser User?         @relation("QuestionsAnswered", fields: [answeredBy], references: [id], onDelete: SetNull)
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([askedBy])
+  @@index([answeredBy])
+  @@index([status])
+  @@index([createdAt])
 }
