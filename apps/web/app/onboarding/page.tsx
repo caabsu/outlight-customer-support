@@ -307,7 +307,10 @@ function formatContent(content: string): string {
   // Links
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer">$1</a>');
 
-  // Split into blocks for better paragraph handling
+  // Normalize line endings to \n (handle both \r\n and \n)
+  html = html.replace(/\r\n/g, '\n');
+
+  // Split into blocks for better paragraph handling (double newlines)
   const blocks = html.split(/\n\n+/);
   const processedBlocks = blocks.map(block => {
     // Check if block is already a special element
@@ -317,8 +320,8 @@ function formatContent(content: string): string {
 
     // Process lists
     if (block.match(/^- /m)) {
-      // Split by actual newlines and handle both \n and \r\n
-      const items = block.split(/\r?\n/).filter(line => line.trim());
+      // Split by newlines (already normalized)
+      const items = block.split('\n').filter(line => line.trim());
       const listItems = items.map(item => {
         const match = item.match(/^-\s+(.+)$/);
         if (match) {
@@ -331,8 +334,8 @@ function formatContent(content: string): string {
 
     // Process numbered lists
     if (block.match(/^\d+\.\s+/m)) {
-      // Split by actual newlines and handle both \n and \r\n
-      const items = block.split(/\r?\n/).filter(line => line.trim());
+      // Split by newlines (already normalized)
+      const items = block.split('\n').filter(line => line.trim());
       const listItems = items.map(item => {
         const match = item.match(/^(\d+)\.\s+(.+)$/);
         if (match) {
