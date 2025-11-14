@@ -285,75 +285,104 @@ export default function OnboardingPage() {
 
 // Enhanced markdown formatter with better styling
 function formatContent(content: string): string {
-  let html = content;
+  // STEP 1: Normalize line endings FIRST before any processing
+  let html = content.replace(/\r\n/g, '\n');
 
-  // Code blocks (must be processed before other replacements)
+  // STEP 2: Process code blocks (must be before other replacements)
   html = html.replace(/```([\s\S]*?)```/g, '<pre class="code-block"><code>$1</code></pre>');
 
-  // Headers with styling
+  // STEP 3: Process headers
   html = html.replace(/^### (.+)$/gm, '<h3 class="section-h3">$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2 class="section-h2">$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1 class="section-h1">$1</h1>');
 
-  // Bold text
+  // STEP 4: Process inline formatting (bold, italic, code, links)
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-gray-900">$1</strong>');
-
-  // Italic text
   html = html.replace(/\*([^*]+?)\*/g, '<em class="italic text-gray-700">$1</em>');
-
-  // Inline code
   html = html.replace(/`([^`]+?)`/g, '<code class="inline-code">$1</code>');
-
-  // Links
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer">$1</a>');
 
-  // Normalize line endings to \n (handle both \r\n and \n)
-  html = html.replace(/\r\n/g, '\n');
+  // STEP 5: Process lists - group consecutive numbered/bullet items
+  // Split into lines for processing
+  const lines = html.split('\n');
+  const processedLines: string[] = [];
+  let i = 0;
 
-  // Split into blocks for better paragraph handling (double newlines)
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Check for numbered list start
+    if (line.match(/^\d+\.\s+/)) {
+      const listItems: string[] = [];
+      // Collect all consecutive numbered items (allowing blank lines between them)
+      while (i < lines.length) {
+        const currentLine = lines[i];
+        if (currentLine.match(/^\d+\.\s+/)) {
+          const match = currentLine.match(/^(\d+)\.\s+(.+)$/);
+          if (match) {
+            listItems.push(`<li class="list-item">${match[2]}</li>`);
+          }
+          i++;
+        } else if (currentLine.trim() === '' && i + 1 < lines.length && lines[i + 1].match(/^\d+\.\s+/)) {
+          // Skip blank lines between numbered items
+          i++;
+        } else {
+          // End of numbered list
+          break;
+        }
+      }
+      if (listItems.length > 0) {
+        processedLines.push(`<ol class="custom-list custom-list-numbered">${listItems.join('')}</ol>`);
+      }
+      continue;
+    }
+
+    // Check for bullet list start
+    if (line.match(/^-\s+/)) {
+      const listItems: string[] = [];
+      // Collect all consecutive bullet items (allowing blank lines between them)
+      while (i < lines.length) {
+        const currentLine = lines[i];
+        if (currentLine.match(/^-\s+/)) {
+          const match = currentLine.match(/^-\s+(.+)$/);
+          if (match) {
+            listItems.push(`<li class="list-item">${match[1]}</li>`);
+          }
+          i++;
+        } else if (currentLine.trim() === '' && i + 1 < lines.length && lines[i + 1].match(/^-\s+/)) {
+          // Skip blank lines between bullet items
+          i++;
+        } else {
+          // End of bullet list
+          break;
+        }
+      }
+      if (listItems.length > 0) {
+        processedLines.push(`<ul class="custom-list">${listItems.join('')}</ul>`);
+      }
+      continue;
+    }
+
+    // Regular line
+    processedLines.push(line);
+    i++;
+  }
+
+  // STEP 6: Re-join and split into blocks for paragraph handling
+  html = processedLines.join('\n');
   const blocks = html.split(/\n\n+/);
   const processedBlocks = blocks.map(block => {
-    // Check if block is already a special element
-    if (block.match(/^<(h[123]|pre|ul|ol|div)/)) {
-      return block;
-    }
+    const trimmed = block.trim();
+    if (!trimmed) return '';
 
-    // Process lists
-    if (block.match(/^- /m)) {
-      // Split by newlines (already normalized)
-      const items = block.split('\n').filter(line => line.trim());
-      const listItems = items.map(item => {
-        const match = item.match(/^-\s+(.+)$/);
-        if (match) {
-          return `<li class="list-item">${match[1]}</li>`;
-        }
-        return '';
-      }).filter(Boolean).join('');
-      return `<ul class="custom-list">${listItems}</ul>`;
-    }
-
-    // Process numbered lists
-    if (block.match(/^\d+\.\s+/m)) {
-      // Split by newlines (already normalized)
-      const items = block.split('\n').filter(line => line.trim());
-      const listItems = items.map(item => {
-        const match = item.match(/^(\d+)\.\s+(.+)$/);
-        if (match) {
-          return `<li class="list-item">${match[2]}</li>`;
-        }
-        return '';
-      }).filter(Boolean).join('');
-      return `<ol class="custom-list custom-list-numbered">${listItems}</ol>`;
+    // Already processed elements (headers, code blocks, lists)
+    if (trimmed.match(/^<(h[123]|pre|ul|ol)/)) {
+      return trimmed;
     }
 
     // Regular paragraphs
-    const trimmed = block.trim();
-    if (trimmed) {
-      // Replace single line breaks with <br> for better formatting
-      const withBreaks = trimmed.replace(/\n/g, '<br>');
-      return `<p class="paragraph">${withBreaks}</p>`;
-    }
-    return '';
+    const withBreaks = trimmed.replace(/\n/g, '<br>');
+    return `<p class="paragraph">${withBreaks}</p>`;
   });
 
   return `
