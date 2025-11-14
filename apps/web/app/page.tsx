@@ -275,6 +275,55 @@ export default function Dashboard() {
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
           </Link>
 
+          {/* Questions KB Card */}
+          <Link
+            href="/questions"
+            className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-8 transition-all hover:border-orange-400 hover:shadow-xl hover:shadow-orange-100"
+          >
+            <div className="relative z-10">
+              <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="h-6 w-6"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z"
+                  />
+                </svg>
+              </div>
+              <h3 className="text-2xl font-sans font-semibold text-gray-900 mb-2">
+                Questions KB
+              </h3>
+              <p className="text-gray-600 font-sans mb-4">
+                Internal knowledge base for team questions. Ask questions and get answers from colleagues.
+              </p>
+              <span className="inline-flex items-center text-sm font-medium text-orange-600 group-hover:underline">
+                Browse Questions
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="ml-1 h-4 w-4"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
+                  />
+                </svg>
+              </span>
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-br from-orange-50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+          </Link>
+
           {/* Analytics Card */}
           <Link
             href="/analytics"
