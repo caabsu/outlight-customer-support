@@ -3,8 +3,11 @@
 -- Run this entire script in Supabase SQL Editor
 -- =====================================================
 
--- Create User table
-CREATE TABLE IF NOT EXISTS "User" (
+-- Drop old User table if it exists (old schema)
+DROP TABLE IF EXISTS "User" CASCADE;
+
+-- Create User table with new schema
+CREATE TABLE "User" (
   "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   "name" TEXT NOT NULL,
   "username" TEXT NOT NULL UNIQUE,
@@ -84,7 +87,25 @@ CREATE INDEX IF NOT EXISTS "QuestionsKB_createdAt_idx" ON "QuestionsKB"("created
 -- Add user tracking fields to Conversation table
 -- =====================================================
 
--- Add userId to Conversation table to track who handled it
+-- Remove old user tracking fields if they exist
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'Conversation' AND column_name = 'assignedUser'
+  ) THEN
+    ALTER TABLE "Conversation" DROP COLUMN "assignedUser";
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'Conversation' AND column_name = 'assignedUserId'
+  ) THEN
+    ALTER TABLE "Conversation" DROP COLUMN "assignedUserId";
+  END IF;
+END $$;
+
+-- Add new userId tracking fields to Conversation table
 DO $$
 BEGIN
   IF NOT EXISTS (

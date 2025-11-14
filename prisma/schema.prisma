@@ -44,8 +44,6 @@ model Conversation {
   customer              Customer       @relation(fields: [customerId], references: [id])
   customerId            String
   status                String         @default("open")
-  assignedUser          User?          @relation("UserConversations", fields: [assignedUserId], references: [id])
-  assignedUserId        String?
   firstMessageAt        DateTime?
   lastMessageAt         DateTime?
   lastHistoryId         BigInt?
