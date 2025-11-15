@@ -769,6 +769,20 @@ export default function ConversationView() {
       } else if (pagination) {
         // Cross-page navigation - NOW show loading
         setNavigatingUnreplied(true);
+
+        // CRITICAL FIX: Use minimal filters when searching for next unreplied
+        // to avoid filtering out the conversation we're looking for
+        const buildMinimalParams = (page: number): string => {
+          const params = new URLSearchParams();
+          params.set('page', page.toString());
+          params.set('limit', '50');
+          if (currentWorkspaceId) {
+            params.set('workspaceId', currentWorkspaceId);
+          }
+          // Don't include any other filters - we're searching for a specific conversation
+          return params.toString();
+        };
+
         // Need to find which page has this conversation
         // Optimize: check current page's date range to determine search direction
         const nextConvDate = new Date(nextConversation.lastMessageAt).getTime();
@@ -782,7 +796,7 @@ export default function ConversationView() {
         if (nextConvDate < currentPageOldest) {
           // Search forward through later pages
           for (let page = pagination.page + 1; page <= pagination.totalPages; page++) {
-            const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
+            const res = await fetch(`/api/conversations?${buildMinimalParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
@@ -795,7 +809,7 @@ export default function ConversationView() {
         } else if (nextConvDate > currentPageNewest) {
           // Search backward through earlier pages
           for (let page = pagination.page - 1; page >= 1; page--) {
-            const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
+            const res = await fetch(`/api/conversations?${buildMinimalParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
@@ -811,7 +825,7 @@ export default function ConversationView() {
         if (foundPage === 0) {
           for (let page = 1; page <= pagination.totalPages; page++) {
             if (page === pagination.page) continue; // Skip current page (already checked)
-            const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
+            const res = await fetch(`/api/conversations?${buildMinimalParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
@@ -906,11 +920,25 @@ export default function ConversationView() {
         // Search strategy: oldest emails are usually on later pages
         console.log(`[Oldest Unreplied] Date comparison - oldest: ${new Date(oldestDate).toISOString()}, current page oldest: ${new Date(currentPageOldest).toISOString()}, current page newest: ${new Date(currentPageNewest).toISOString()}`);
 
+        // CRITICAL FIX: When searching for the oldest unreplied, we need to use minimal filters
+        // to avoid filtering out the conversation we're looking for. The API already confirmed
+        // this conversation exists and is unreplied, so we should be able to find it.
+        const buildMinimalParams = (page: number): string => {
+          const params = new URLSearchParams();
+          params.set('page', page.toString());
+          params.set('limit', '50');
+          if (currentWorkspaceId) {
+            params.set('workspaceId', currentWorkspaceId);
+          }
+          // Don't include any other filters - we're searching for a specific conversation
+          return params.toString();
+        };
+
         if (oldestDate < currentPageOldest) {
           // Search forward through later pages (most likely)
           console.log(`[Oldest Unreplied] Searching forward from page ${pagination.page + 1} to ${pagination.totalPages}`);
           for (let page = pagination.page + 1; page <= pagination.totalPages; page++) {
-            const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
+            const res = await fetch(`/api/conversations?${buildMinimalParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
@@ -926,7 +954,7 @@ export default function ConversationView() {
           // Search backward through earlier pages
           console.log(`[Oldest Unreplied] Searching backward from page ${pagination.page - 1} to 1`);
           for (let page = pagination.page - 1; page >= 1; page--) {
-            const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
+            const res = await fetch(`/api/conversations?${buildMinimalParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
@@ -945,7 +973,7 @@ export default function ConversationView() {
           console.log(`[Oldest Unreplied] Smart search failed, doing full search of all ${pagination.totalPages} pages`);
           for (let page = 1; page <= pagination.totalPages; page++) {
             if (page === pagination.page) continue;
-            const res = await fetch(`/api/conversations?${buildFilterParams(page)}`);
+            const res = await fetch(`/api/conversations?${buildMinimalParams(page)}`);
             if (res.ok) {
               const data = await res.json();
               const convs = data.conversations || data;
