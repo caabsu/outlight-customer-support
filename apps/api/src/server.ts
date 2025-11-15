@@ -769,6 +769,131 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
   }
 });
 
+// Merge conversations into a single thread
+app.post("/conversations/:id/merge", async (req: Request, res: Response) => {
+  try {
+    const targetId = req.params.id;
+    const { conversationIds } = req.body as { conversationIds?: string[] };
+
+    if (!Array.isArray(conversationIds)) {
+      return res.status(400).json({ error: "conversationIds array is required" });
+    }
+
+    const idsToMerge = Array.from(
+      new Set(
+        conversationIds.filter(
+          (id): id is string => typeof id === "string" && id.trim().length > 0 && id !== targetId
+        )
+      )
+    );
+
+    if (idsToMerge.length === 0) {
+      return res.status(400).json({ error: "Provide at least one conversation to merge" });
+    }
+
+    const mergedConversation = await prisma.$transaction(async tx => {
+      const targetConversation = await tx.conversation.findUnique({
+        where: { id: targetId },
+      });
+
+      if (!targetConversation) {
+        throw new Error("TARGET_NOT_FOUND");
+      }
+
+      const conversationsToMerge = await tx.conversation.findMany({
+        where: { id: { in: idsToMerge } },
+      });
+
+      if (conversationsToMerge.length !== idsToMerge.length) {
+        throw new Error("MERGE_CONVERSATION_NOT_FOUND");
+      }
+
+      for (const conv of conversationsToMerge) {
+        if (conv.workspaceId !== targetConversation.workspaceId) {
+          throw new Error("WORKSPACE_MISMATCH");
+        }
+      }
+
+      for (const conv of conversationsToMerge) {
+        await tx.message.updateMany({
+          where: { conversationId: conv.id },
+          data: { conversationId: targetConversation.id },
+        });
+
+        await tx.conversation.delete({
+          where: { id: conv.id },
+        });
+      }
+
+      const firstMessage = await tx.message.findFirst({
+        where: { conversationId: targetConversation.id },
+        orderBy: { sentAt: "asc" },
+      });
+
+      const lastMessage = await tx.message.findFirst({
+        where: { conversationId: targetConversation.id },
+        orderBy: { sentAt: "desc" },
+      });
+
+      const combinedTags = Array.from(
+        new Set([
+          ...(targetConversation.tags || []),
+          ...conversationsToMerge.flatMap(conv => conv.tags || []),
+        ])
+      );
+
+      const combinedUserTags = Array.from(
+        new Set([
+          ...(targetConversation.userTags || []),
+          ...conversationsToMerge.flatMap(conv => conv.userTags || []),
+        ])
+      );
+
+      await tx.conversation.update({
+        where: { id: targetConversation.id },
+        data: {
+          firstMessageAt: firstMessage?.sentAt || targetConversation.firstMessageAt,
+          lastMessageAt: lastMessage?.sentAt || targetConversation.lastMessageAt,
+          needsReply: lastMessage ? lastMessage.direction === "inbound" : targetConversation.needsReply,
+          lastMessageDirection: lastMessage?.direction || targetConversation.lastMessageDirection,
+          tags: combinedTags,
+          userTags: combinedUserTags,
+        },
+      });
+
+      return tx.conversation.findUnique({
+        where: { id: targetConversation.id },
+        include: {
+          customer: true,
+          messages: {
+            orderBy: { sentAt: "asc" },
+          },
+        },
+      });
+    });
+
+    if (!mergedConversation) {
+      return res.status(404).json({ error: "Target conversation not found after merge" });
+    }
+
+    res.json(mergedConversation);
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "TARGET_NOT_FOUND") {
+        return res.status(404).json({ error: "Target conversation not found" });
+      }
+      if (error.message === "MERGE_CONVERSATION_NOT_FOUND") {
+        return res.status(404).json({ error: "One or more conversations to merge were not found" });
+      }
+      if (error.message === "WORKSPACE_MISMATCH") {
+        return res.status(400).json({ error: "Conversations must belong to the same workspace" });
+      }
+    }
+    console.error("Error merging conversations:", error);
+    res.status(500).json({ error: "Failed to merge conversations" });
+  }
+});
+
 // Helper function to get unreplied conversations
 async function getUnrepliedConversations(workspaceId?: string) {
   const whereClause: any = {

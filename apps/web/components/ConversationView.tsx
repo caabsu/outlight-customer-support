@@ -218,6 +218,8 @@ export default function ConversationView() {
   const replyEditorRef = useRef<HTMLDivElement>(null);
   const composerBodyRef = useRef<HTMLDivElement>(null);
   const [history, setHistory] = useState<ConversationHistory[]>([]);
+  const [selectedRelatedIds, setSelectedRelatedIds] = useState<Set<string>>(new Set());
+  const [mergingRelated, setMergingRelated] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
   const [editingTags, setEditingTags] = useState(false);
   const [newTag, setNewTag] = useState("");
@@ -462,6 +464,27 @@ export default function ConversationView() {
       setLoadingHistory(false);
     }
   }, [selectedConversation?.id]);
+
+  useEffect(() => {
+    setSelectedRelatedIds(new Set());
+  }, [selectedConversation?.id]);
+
+  useEffect(() => {
+    setSelectedRelatedIds(prev => {
+      if (prev.size === 0) return prev;
+      const valid = new Set(history.map(conv => conv.id));
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach(id => {
+        if (valid.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [history]);
 
   // Reset draft popup state when conversation changes
   useEffect(() => {
@@ -1421,6 +1444,56 @@ export default function ConversationView() {
     setComposerAttachments(composerAttachments.filter((_, i) => i !== index));
   };
 
+  const toggleRelatedSelection = (conversationId: string) => {
+    setSelectedRelatedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(conversationId)) {
+        next.delete(conversationId);
+      } else {
+        next.add(conversationId);
+      }
+      return next;
+    });
+  };
+
+  const handleMergeRelatedConversations = async () => {
+    if (!selectedConversation?.id || selectedRelatedIds.size === 0 || mergingRelated) return;
+
+    const ids = Array.from(selectedRelatedIds);
+    const confirmMerge = window.confirm(
+      `Merge ${ids.length} conversation${ids.length === 1 ? "" : "s"} into "${selectedConversation.subject || "this conversation"}"? This cannot be undone.`
+    );
+    if (!confirmMerge) return;
+
+    setMergingRelated(true);
+    try {
+      const response = await fetch(`/api/conversations/${selectedConversation.id}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationIds: ids }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Server responded with ${response.status}`);
+      }
+
+      await response.json();
+
+      const mergedSet = new Set(ids);
+      setHistory(prevHistory => prevHistory.filter((conv: ConversationHistory) => !mergedSet.has(conv.id)));
+      setSelectedRelatedIds(new Set());
+
+      await fetchAndSelectConversation(selectedConversation.id);
+      await refreshConversations();
+    } catch (error) {
+      console.error("Failed to merge conversations:", error);
+      alert(`Failed to merge conversations: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setMergingRelated(false);
+    }
+  };
+
   const handleReplyAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
@@ -2190,6 +2263,15 @@ export default function ConversationView() {
             <span className="text-[10px] font-sans text-slate-500">
               {filteredHistory.length} of {history.length}
             </span>
+            {selectedRelatedIds.size > 0 && (
+              <button
+                onClick={handleMergeRelatedConversations}
+                disabled={mergingRelated}
+                className="px-2 py-1 rounded text-[10px] font-sans font-medium bg-green-100 text-green-700 border border-green-200 hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {mergingRelated ? "Merging..." : `Merge Selected (${selectedRelatedIds.size})`}
+              </button>
+            )}
           </div>
         </div>
 
@@ -2206,6 +2288,7 @@ export default function ConversationView() {
           ) : filteredHistory.length > 0 ? (
             filteredHistory.map((conv) => {
               const isExpanded = expandedPreviews.has(conv.id);
+              const isSelected = selectedRelatedIds.has(conv.id);
               const lastMessage = conv.messages && conv.messages.length > 0 ? conv.messages[conv.messages.length - 1] : null;
               const messagePreview = lastMessage
                 ? (lastMessage.bodyText?.substring(0, 150) || lastMessage.bodyHtml?.replace(/<[^>]*>/g, '').substring(0, 150) || 'No content available')
@@ -2218,23 +2301,34 @@ export default function ConversationView() {
                 >
                   {/* Main conversation info */}
                   <div className="p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <button
-                        onClick={() => {
-                          console.log('Navigating to conversation:', conv.id);
-                          selectConversation(conv.id);
-                        }}
-                        className="flex-1 text-left group"
-                      >
-                        <p className="text-xs font-sans font-semibold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 mb-1">
-                          {conv.subject || 'No Subject'}
-                        </p>
-                        <p className="text-[10px] font-sans text-slate-500 flex items-center gap-2">
-                          <span>{new Date(conv.lastMessageAt).toLocaleDateString()}</span>
-                          <span>•</span>
-                          <span>{conv.messages?.length || 0} messages</span>
-                        </p>
-                      </button>
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 text-green-600 rounded border-slate-300 focus:ring-green-500"
+                        checked={isSelected}
+                        onChange={() => toggleRelatedSelection(conv.id)}
+                        aria-label={`Select conversation ${conv.subject || conv.id} for merging`}
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <button
+                            onClick={() => {
+                              console.log('Navigating to conversation:', conv.id);
+                              selectConversation(conv.id);
+                            }}
+                            className="flex-1 text-left group"
+                          >
+                            <p className="text-xs font-sans font-semibold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 mb-1">
+                              {conv.subject || 'No Subject'}
+                            </p>
+                            <p className="text-[10px] font-sans text-slate-500 flex items-center gap-2">
+                              <span>{new Date(conv.lastMessageAt).toLocaleDateString()}</span>
+                              <span>•</span>
+                              <span>{conv.messages?.length || 0} messages</span>
+                            </p>
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Action buttons */}
@@ -3015,11 +3109,11 @@ export default function ConversationView() {
               >
                 💬 CS Only {showCSOnly ? '✓' : ''}
               </button>
-              <button
-                onClick={() => setShowNeedsReplyOnly(!showNeedsReplyOnly)}
-                className={`px-3 py-1.5 rounded text-xs font-sans font-medium transition-colors ${
-                  showNeedsReplyOnly
-                    ? "bg-orange-100 text-orange-700 border border-orange-200"
+            <button
+              onClick={() => setShowNeedsReplyOnly(!showNeedsReplyOnly)}
+              className={`px-3 py-1.5 rounded text-xs font-sans font-medium transition-colors ${
+                showNeedsReplyOnly
+                  ? "bg-orange-100 text-orange-700 border border-orange-200"
                     : "bg-slate-100 text-slate-600 border border-slate-200"
                 }`}
               >
@@ -3063,10 +3157,19 @@ export default function ConversationView() {
                 disabled={filteredHistory.length === 0}
               >
                 🚫 Bulk Mark Non-Support ({filteredHistory.length})
+            </button>
+            {selectedRelatedIds.size > 0 && (
+              <button
+                onClick={handleMergeRelatedConversations}
+                disabled={mergingRelated}
+                className="px-3 py-1.5 rounded text-xs font-sans font-medium transition-colors bg-green-100 text-green-700 border border-green-200 hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {mergingRelated ? "Merging..." : `Merge Selected (${selectedRelatedIds.size})`}
               </button>
-              <span className="text-xs font-sans text-muted-foreground">
-                Showing {filteredHistory.length} of {history.length} conversations
-              </span>
+            )}
+            <span className="text-xs font-sans text-muted-foreground">
+              Showing {filteredHistory.length} of {history.length} conversations
+            </span>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -3080,17 +3183,30 @@ export default function ConversationView() {
                 ))}
               </>
             ) : filteredHistory.length > 0 ? (
-              filteredHistory.map((conv) => (
+              filteredHistory.map((conv) => {
+                const isSelected = selectedRelatedIds.has(conv.id);
+                return (
                 <div
                   key={conv.id}
                   className="w-full p-4 border border-border bg-background rounded-lg"
                 >
-                  <p className="text-sm font-sans font-semibold text-foreground mb-1">
-                    {conv.subject}
-                  </p>
-                  <p className="text-xs font-sans text-muted-foreground mb-3">
-                    {new Date(conv.lastMessageAt).toLocaleDateString()} • {conv.messages.length} messages
-                  </p>
+                  <div className="flex items-start gap-3 mb-2">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 text-green-600 rounded border-slate-300 focus:ring-green-500"
+                      checked={isSelected}
+                      onChange={() => toggleRelatedSelection(conv.id)}
+                      aria-label={`Select conversation ${conv.subject || conv.id} for merging`}
+                    />
+                    <div>
+                      <p className="text-sm font-sans font-semibold text-foreground mb-1">
+                        {conv.subject}
+                      </p>
+                      <p className="text-xs font-sans text-muted-foreground">
+                        {new Date(conv.lastMessageAt).toLocaleDateString()} • {conv.messages.length} messages
+                      </p>
+                    </div>
+                  </div>
 
                   {/* Action buttons */}
                   <div className="flex items-center gap-2">
@@ -3235,7 +3351,7 @@ export default function ConversationView() {
                     </button>
                   </div>
                 </div>
-              ))
+              })
             ) : (
               <div className="p-8 text-center">
                 <p className="text-sm font-sans text-muted-foreground">No related conversations found</p>
