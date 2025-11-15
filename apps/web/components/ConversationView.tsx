@@ -3351,7 +3351,7 @@ export default function ConversationView() {
                     </button>
                   </div>
                 </div>
-              });
+              })
             ) : (
               <div className="p-8 text-center">
                 <p className="text-sm font-sans text-muted-foreground">No related conversations found</p>
@@ -4922,7 +4922,7 @@ export default function ConversationView() {
                     </div>
                   </div>
                 );
-              });
+              })
             ) : (
               <div className="text-center py-12">
                 <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
