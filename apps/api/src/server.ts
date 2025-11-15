@@ -3053,13 +3053,13 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
         type: "function",
         function: {
           name: "search_product",
-          description: "Search the Product Knowledge Base for detailed product information. Use this when a customer mentions a product name, SKU, or asks product-specific questions like shipping times, care instructions, warranties, or specifications. Returns comprehensive product data including shipping times, instructions, warranty info, and FAQs.",
+          description: "Search the Product Knowledge Base for detailed product information. CRITICAL: Use this tool in TWO scenarios: (1) When a customer mentions a product name, SKU, or asks product-specific questions, and (2) AFTER calling search_customer_and_orders, ALWAYS search for EVERY product found in the order's line_items to get product-specific shipping times, care instructions, warranties, specifications, and FAQs. Returns comprehensive product data that OVERRIDES general policies.",
           parameters: {
             type: "object",
             properties: {
               query: {
                 type: "string",
-                description: "Product name, SKU, or search keywords. Examples: 'Widget Pro', 'WGT001', 'blue widget'. Search for any product mentioned in the customer's email."
+                description: "Product name, SKU, or search keywords. Examples: 'Widget Pro', 'WGT001', 'blue widget'. IMPORTANT: After getting order data, search for each product title from line_items (e.g., if line_items contains 'York Pendant Light', search for 'York' or 'York Pendant Light')."
               }
             },
             required: ["query"]
@@ -3101,8 +3101,12 @@ ${additionalContext}
 END OF OVERRIDE INSTRUCTIONS
 ═══════════════════════════════════════════════════════════
 
-CRITICAL REMINDER: The above instructions are MANDATORY and have ABSOLUTE PRIORITY over everything else.
-If you follow the knowledge base instead of these custom instructions, you will have FAILED your task.
+CRITICAL REMINDERS:
+1. The above instructions are MANDATORY and have ABSOLUTE PRIORITY over everything else
+2. If you follow the knowledge base instead of these custom instructions, you will have FAILED your task
+3. 🔍 PRODUCT EXTRACTION: If the custom instructions mention ANY product names (e.g., "Aven", "York", "Widget Pro"),
+   you MUST call search_product() for each product mentioned to retrieve the specific information requested
+4. Custom instructions often reference Product KB data - ALWAYS search for mentioned products FIRST
 `;
     }
 
@@ -3119,9 +3123,9 @@ ${knowledgeBaseText}
 ═══════════════════════════════════════════════════════════
 
 You have access to these tools:
-1. search_customer_and_orders(query): Search Shopify by email, name, or order number. Returns customer details and order history.
+1. search_customer_and_orders(query): Search Shopify by email, name, or order number. Returns customer details and order history with line_items containing product names.
 2. get_tracking_info(tracking_number): Get package tracking from 17track. Returns current status and location.
-3. search_product(query): Search Product Knowledge Base for detailed product information. Use when customer mentions a product name, SKU, or asks product-specific questions.
+3. search_product(query): Search Product Knowledge Base for product-specific information. 🚨 CRITICAL: ALWAYS use this after search_customer_and_orders to look up EVERY product from the order's line_items.
 
 ═══════════════════════════════════════════════════════════
 📦 PRODUCT KNOWLEDGE BASE - PRIORITY OVER GENERAL POLICIES
@@ -3155,11 +3159,16 @@ Step 1: READ THE EMAIL THREAD AND IDENTIFY LATEST MESSAGE
 - Understand the customer's issue, tone, and urgency in their MOST RECENT message
 - Extract: customer email, order numbers, tracking numbers, dates mentioned, PRODUCT NAMES
 
-Step 2: GATHER DATA USING TOOLS
-- ALWAYS call search_customer_and_orders first with customer email or order number
-- 🚨 CRITICAL: If customer mentions a product name, ALWAYS call search_product FIRST before using Shopify data
-- If tracking numbers exist in the order data, call get_tracking_info
-- Collect ALL necessary information before proceeding
+Step 2: GATHER DATA USING TOOLS (CRITICAL - FOLLOW EXACTLY)
+- FIRST: Call search_customer_and_orders with customer email or order number
+- SECOND: 🚨 MANDATORY: Extract ALL product names from the order's line_items (each item has a "title" field)
+- THIRD: 🚨 MANDATORY: For EVERY product found in line_items, call search_product(product_name)
+  * Example: If line_items contains [{"title": "York Pendant Light"}, {"title": "Aven Wall Sconce"}]
+  * You MUST call: search_product("York") AND search_product("Aven")
+  * Do NOT skip this step - product-specific data is CRITICAL for accurate responses
+- FOURTH: If customer mentions a product name in their email, also call search_product for that
+- FIFTH: If tracking numbers exist in the order data, call get_tracking_info
+- Collect ALL necessary information before proceeding to analysis
 
 Step 3: ANALYZE WITH KNOWLEDGE BASE AND PRODUCT DATA
 - 🚨 PRIORITY ORDER - USE DATA IN THIS EXACT ORDER:
@@ -3388,10 +3397,12 @@ Remember:
             }
           } else if (functionName === "search_product") {
             try {
-              // Search Product Knowledge Base
-              const queryLower = functionArgs.query.toLowerCase();
+              // Search Product Knowledge Base with multiple strategies
+              const queryLower = functionArgs.query.toLowerCase().trim();
+              const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2); // Extract significant words
 
-              const products = await prisma.product.findMany({
+              // Strategy 1: Try exact and partial name/SKU matching first
+              let products = await prisma.product.findMany({
                 where: {
                   workspaceId: conversation.workspaceId,
                   status: 'active',
@@ -3400,20 +3411,46 @@ Remember:
                     { sku: { contains: functionArgs.query, mode: 'insensitive' } },
                     { aiSearchKeywords: { has: queryLower } },
                     { tags: { has: queryLower } },
-                    { description: { contains: functionArgs.query, mode: 'insensitive' } }
+                    { description: { contains: functionArgs.query, mode: 'insensitive' } },
+                    // Also try matching variant titles if they exist
+                    { variants: { array_contains: [{ title: queryLower }] } }
                   ]
                 },
                 take: 5,
                 orderBy: { name: 'asc' }
               });
 
+              // Strategy 2: If no results and query has multiple words, try searching by individual words
+              if (products.length === 0 && queryWords.length > 0) {
+                console.log(`[Draft] Product search: No exact matches for "${functionArgs.query}", trying word-based search with words:`, queryWords);
+
+                // Build OR conditions for each significant word
+                const wordConditions = queryWords.flatMap(word => [
+                  { name: { contains: word, mode: 'insensitive' as const } },
+                  { description: { contains: word, mode: 'insensitive' as const } },
+                  { aiSearchKeywords: { has: word } },
+                  { tags: { has: word } }
+                ]);
+
+                products = await prisma.product.findMany({
+                  where: {
+                    workspaceId: conversation.workspaceId,
+                    status: 'active',
+                    OR: wordConditions
+                  },
+                  take: 5,
+                  orderBy: { name: 'asc' }
+                });
+              }
+
               if (products.length === 0) {
                 toolResult = {
                   found: false,
-                  message: `No products found matching "${functionArgs.query}". Use general knowledge base for response.`,
-                  query: functionArgs.query
+                  message: `No products found matching "${functionArgs.query}". This product may not be in the Product Knowledge Base yet. IMPORTANT: You should still help the customer using the Shopify order data and general knowledge base. If the customer is asking for product specifications (bulb type, voltage, dimensions, etc.), acknowledge that specific product documentation is not available and ask the customer to provide any details from their order confirmation or product packaging, OR offer to send detailed specifications separately.`,
+                  query: functionArgs.query,
+                  searchedWords: queryWords
                 };
-                console.log(`[Draft] Product search: No results for "${functionArgs.query}"`);
+                console.log(`[Draft] Product search: No results for "${functionArgs.query}" (searched words: ${queryWords.join(', ')})`);
               } else {
                 // Format for AI consumption - only include relevant fields
                 const formattedProducts = products.map(p => ({
@@ -3439,9 +3476,9 @@ Remember:
                   found: true,
                   products: formattedProducts,
                   count: products.length,
-                  message: `Found ${products.length} product(s). Use this product-specific data - it overrides general policies.`
+                  message: `Found ${products.length} product(s) matching "${functionArgs.query}". SUCCESS! Use this product-specific data (shipping times, instructions, specifications, warranty, FAQs) - it OVERRIDES general knowledge base policies. Product names found: ${products.map(p => p.name).join(', ')}`
                 };
-                console.log(`[Draft] Product search: Found ${products.length} product(s) for "${functionArgs.query}"`);
+                console.log(`[Draft] Product search: ✅ Found ${products.length} product(s) for "${functionArgs.query}":`, products.map(p => p.name).join(', '));
               }
             } catch (error) {
               console.error(`[Draft] Product search error:`, error);
@@ -3838,7 +3875,12 @@ ${draft.customInstructions}
 END OF CUSTOM CONTEXT
 ═══════════════════════════════════════════════════════════
 
-Remember: The above is GUIDANCE. Craft a professional email using this information as your source of truth.
+CRITICAL REMINDERS:
+1. The above context is GUIDANCE - craft a professional email using this information as your source of truth
+2. This context OVERRIDES any conflicting knowledge base information
+3. 🔍 PRODUCT EXTRACTION: If the custom context mentions ANY product names (e.g., "Aven", "York", "Widget Pro"),
+   you MUST call search_product() for each product mentioned to retrieve the specific information requested
+4. Custom context often references Product KB data - ALWAYS search for mentioned products FIRST
 `;
     }
 
@@ -3866,8 +3908,29 @@ END OF KNOWLEDGE BASE
 ═══════════════════════════════════════════════════════════
 
 You have access to these tools:
-1. search_customer_and_orders(query): Search Shopify by email, name, or order number. Returns customer details and order history.
+1. search_customer_and_orders(query): Search Shopify by email, name, or order number. Returns customer details and order history with line_items containing product names.
 2. get_tracking_info(tracking_number): Get package tracking from 17track. Returns current status and location.
+3. search_product(query): Search Product Knowledge Base for product-specific information. 🚨 CRITICAL: ALWAYS use this after search_customer_and_orders to look up EVERY product from the order's line_items.
+
+═══════════════════════════════════════════════════════════
+📦 PRODUCT KNOWLEDGE BASE - PRIORITY OVER GENERAL POLICIES
+═══════════════════════════════════════════════════════════
+
+🚨 CRITICAL: Product-specific information ALWAYS overrides general knowledge base policies
+
+When to use search_product:
+- Customer mentions a product name (e.g., "York", "Aven", "Deluxe Package")
+- Customer asks about product specifications, features, materials, dimensions
+- Questions about shipping times, care instructions, warranties for specific products
+- Product availability, colors, sizes inquiries
+- MANDATORY: After getting Shopify order data, search for EVERY product in line_items
+
+How to use search_product effectively:
+1. Extract product names from order line_items OR customer's email
+2. Call search_product with the product name as query parameter
+3. If product found, use the returned data (shipping times, instructions, warranty info, specifications, etc.)
+4. Product data overrides general policies - if product says "5-7 days shipping", use that instead of general policy
+5. If product not found, fall back to general knowledge base
 
 ═══════════════════════════════════════════════════════════
 ⚡ WORKFLOW - EXECUTE IN THIS EXACT ORDER
@@ -3876,15 +3939,28 @@ You have access to these tools:
 Step 1: READ THE EMAIL
 - ⚠️  CRITICAL: Understand what the customer is SPECIFICALLY asking
 - Read the email carefully to identify their main question or issue
-- Extract: customer email, order numbers, tracking numbers, dates mentioned
+- Extract: customer email, order numbers, tracking numbers, dates mentioned, PRODUCT NAMES
 - Identify the customer's tone and urgency
 
-Step 2: GATHER DATA USING TOOLS
-- ALWAYS call search_customer_and_orders first with customer email or order number
-- If tracking numbers exist in the order data, call get_tracking_info
+Step 2: GATHER DATA USING TOOLS (CRITICAL - FOLLOW EXACTLY)
+- FIRST: Call search_customer_and_orders with customer email or order number
+- SECOND: 🚨 MANDATORY: Extract ALL product names from the order's line_items (each item has a "title" field)
+- THIRD: 🚨 MANDATORY: For EVERY product found in line_items, call search_product(product_name)
+  * Example: If line_items contains [{"title": "York Pendant Light"}, {"title": "Aven Wall Sconce"}]
+  * You MUST call: search_product("York") AND search_product("Aven")
+  * Do NOT skip this step - product-specific data is CRITICAL for accurate responses
+- FOURTH: If customer mentions a product name in their email, also call search_product for that
+- FIFTH: If tracking numbers exist in the order data, call get_tracking_info
 - Collect ALL necessary information before proceeding
 
-Step 3: ANALYZE WITH KNOWLEDGE BASE
+Step 3: ANALYZE WITH KNOWLEDGE BASE AND PRODUCT DATA
+- 🚨 PRIORITY ORDER - USE DATA IN THIS EXACT ORDER:
+  1. FIRST: Product Knowledge Base data (from search_product tool) - HIGHEST PRIORITY
+  2. SECOND: General Knowledge Base policies
+  3. THIRD: Shopify order data (only for order details, NOT for product info)
+
+- Product KB ALWAYS overrides everything else for product-specific information
+- If Product KB has shipping time, warranty, care instructions, etc. - use ONLY that data, ignore Shopify
 - Match the issue to knowledge base categories
 - Apply ALL relevant policies (return windows, refund timelines, etc.)
 - Calculate dates carefully (30 days from DELIVERY, not order date)
@@ -4003,6 +4079,23 @@ When providing action steps (shouldDraft = false):
             required: ["tracking_number"]
           }
         }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "search_product",
+          description: "Search the Product Knowledge Base for detailed product information. CRITICAL: Use this tool in TWO scenarios: (1) When a customer mentions a product name, SKU, or asks product-specific questions, and (2) AFTER calling search_customer_and_orders, ALWAYS search for EVERY product found in the order's line_items to get product-specific shipping times, care instructions, warranties, specifications, and FAQs. Returns comprehensive product data that OVERRIDES general policies.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: {
+                type: "string",
+                description: "Product name, SKU, or search keywords. Examples: 'Widget Pro', 'WGT001', 'blue widget'. IMPORTANT: After getting order data, search for each product title from line_items (e.g., if line_items contains 'York Pendant Light', search for 'York' or 'York Pendant Light')."
+              }
+            },
+            required: ["query"]
+          }
+        }
       }
     ];
 
@@ -4090,6 +4183,97 @@ When providing action steps (shouldDraft = false):
               toolResult = await trackResponse.json();
             } catch (error) {
               toolResult = { error: "Failed to fetch tracking", details: String(error) };
+            }
+          } else if (functionName === "search_product") {
+            try {
+              // Search Product Knowledge Base (same logic as conversation drafts)
+              const queryLower = functionArgs.query.toLowerCase().trim();
+              const queryWords = queryLower.split(/\s+/).filter((w: string) => w.length > 2);
+
+              // Strategy 1: Try exact and partial name/SKU matching first
+              // NOTE: Standalone drafts don't have workspaceId, so we search all active products
+              // TODO: Add workspaceId to StandaloneDraft model to filter by workspace
+              let products = await prisma.product.findMany({
+                where: {
+                  // workspaceId not available for standalone drafts - search all workspaces
+                  status: 'active',
+                  OR: [
+                    { name: { contains: functionArgs.query, mode: 'insensitive' } },
+                    { sku: { contains: functionArgs.query, mode: 'insensitive' } },
+                    { aiSearchKeywords: { has: queryLower } },
+                    { tags: { has: queryLower } },
+                    { description: { contains: functionArgs.query, mode: 'insensitive' } },
+                    { variants: { array_contains: [{ title: queryLower }] } }
+                  ]
+                },
+                take: 5,
+                orderBy: { name: 'asc' }
+              });
+
+              // Strategy 2: If no results and query has multiple words, try word-based search
+              if (products.length === 0 && queryWords.length > 0) {
+                console.log(`[StandaloneDraft ${draftId}] Product search: No exact matches for "${functionArgs.query}", trying word-based search`);
+
+                const wordConditions = queryWords.flatMap((word: string) => [
+                  { name: { contains: word, mode: 'insensitive' as const } },
+                  { description: { contains: word, mode: 'insensitive' as const } },
+                  { aiSearchKeywords: { has: word } },
+                  { tags: { has: word } }
+                ]);
+
+                products = await prisma.product.findMany({
+                  where: {
+                    status: 'active',
+                    OR: wordConditions
+                  },
+                  take: 5,
+                  orderBy: { name: 'asc' }
+                });
+              }
+
+              if (products.length === 0) {
+                toolResult = {
+                  found: false,
+                  message: `No products found matching "${functionArgs.query}". This product may not be in the Product Knowledge Base yet. IMPORTANT: You should still help the customer using the Shopify order data and general knowledge base. If the customer is asking for product specifications (bulb type, voltage, dimensions, etc.), acknowledge that specific product documentation is not available and ask the customer to provide any details from their order confirmation or product packaging, OR offer to send detailed specifications separately.`,
+                  query: functionArgs.query,
+                  searchedWords: queryWords
+                };
+                console.log(`[StandaloneDraft ${draftId}] Product search: No results for "${functionArgs.query}"`);
+              } else {
+                const formattedProducts = products.map((p: any) => ({
+                  name: p.name,
+                  sku: p.sku,
+                  category: p.category,
+                  description: p.description,
+                  specifications: p.specifications,
+                  features: p.features,
+                  price: p.price,
+                  variants: p.variants,
+                  availabilityStatus: p.availabilityStatus,
+                  shippingTime: p.shippingTime,
+                  shippingRestrictions: p.shippingRestrictions,
+                  instructions: p.instructions,
+                  careInstructions: p.careInstructions,
+                  warrantyInfo: p.warrantyInfo,
+                  returnPolicy: p.returnPolicy,
+                  faqs: p.faqs
+                }));
+
+                toolResult = {
+                  found: true,
+                  products: formattedProducts,
+                  count: products.length,
+                  message: `Found ${products.length} product(s) matching "${functionArgs.query}". SUCCESS! Use this product-specific data (shipping times, instructions, specifications, warranty, FAQs) - it OVERRIDES general knowledge base policies. Product names found: ${products.map((p: any) => p.name).join(', ')}`
+                };
+                console.log(`[StandaloneDraft ${draftId}] Product search: ✅ Found ${products.length} product(s) for "${functionArgs.query}":`, products.map((p: any) => p.name).join(', '));
+              }
+            } catch (error) {
+              console.error(`[StandaloneDraft ${draftId}] Product search error:`, error);
+              toolResult = {
+                error: "Failed to search products",
+                details: String(error),
+                message: "Product search failed. Use general knowledge base."
+              };
             }
           }
 
