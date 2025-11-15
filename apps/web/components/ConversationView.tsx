@@ -2,13 +2,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useConversations } from "@/lib/ConversationContext";
-import type { Conversation } from "@/lib/ConversationContext";
-import type { Conversation } from "@/lib/ConversationContext";
+import type { Conversation, Message } from "@/lib/ConversationContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AIAssistant from "./AIAssistant";
 import { useCurrentUser } from "@/components/AuthProvider";
-import type { Conversation, Message } from "@/lib/ConversationContext";
 
 type ConversationHistory = {
   id: string;
