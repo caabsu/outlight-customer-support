@@ -2307,34 +2307,46 @@ app.get("/analytics/users", async (req: Request, res: Response) => {
       },
     });
 
+    const periodDays = timeRange === "30d" ? 30 : timeRange === "90d" ? 90 : 7;
+
     const userStats = await Promise.all(
       users.map(async (user) => {
-        const emailsSent = await prisma.userActivity.count({
-          where: {
-            userId: user.id,
-            actionType: "email_sent",
-            ...(workspaceId && { workspaceId }),
-            ...(dateFilter && { timestamp: { gte: dateFilter } }),
-          },
-        });
-
-        const assignedCount = await prisma.conversation.count({
-          where: {
-            assignedTo: user.id,
-            ...(workspaceId && { workspaceId }),
-            ...(dateFilter && { createdAt: { gte: dateFilter } }),
-          },
-        });
+        const [emailsSent, assignedCount, draftedCount] = await Promise.all([
+          prisma.userActivity.count({
+            where: {
+              userId: user.id,
+              actionType: "email_sent",
+              ...(workspaceId && { workspaceId }),
+              ...(dateFilter && { timestamp: { gte: dateFilter } }),
+            },
+          }),
+          prisma.conversation.count({
+            where: {
+              assignedTo: user.id,
+              ...(workspaceId && { workspaceId }),
+              ...(dateFilter && { createdAt: { gte: dateFilter } }),
+            },
+          }),
+          prisma.conversation.count({
+            where: {
+              lastDraftedBy: user.id,
+              ...(workspaceId && { workspaceId }),
+              ...(dateFilter && { createdAt: { gte: dateFilter } }),
+            },
+          }),
+        ]);
 
         return {
           ...user,
-          emailsSent,
-          assignedCount,
+          totalOutbound: emailsSent,
+          assignedConversations: assignedCount,
+          draftedConversations: draftedCount,
+          avgDailyOutbound: periodDays > 0 ? emailsSent / periodDays : emailsSent,
         };
       })
     );
 
-    res.json({ users: userStats, timeRange });
+    res.json({ users: userStats, timeRange, periodDays });
   } catch (error) {
     console.error("Error fetching users analytics:", error);
     res.status(500).json({ error: "Failed to fetch users analytics" });

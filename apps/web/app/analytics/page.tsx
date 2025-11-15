@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useCurrentUser } from "@/components/AuthProvider";
 
 type AnalyticsData = {
   period: string;
@@ -59,10 +60,25 @@ type AnalyticsData = {
   };
 };
 
+type UserSummary = {
+  id: string;
+  name: string;
+  username: string;
+  role: string;
+  totalOutbound: number;
+  assignedConversations: number;
+  draftedConversations: number;
+  avgDailyOutbound: number;
+};
+
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<"24h" | "7d" | "30d" | "90d">("7d");
+  const currentUser = useCurrentUser();
+  const [teamSummaries, setTeamSummaries] = useState<UserSummary[]>([]);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamError, setTeamError] = useState<string | null>(null);
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -77,10 +93,40 @@ export default function AnalyticsPage() {
     }
   };
 
+  const fetchTeamAnalytics = async () => {
+    if (currentUser?.role !== "admin") {
+      setTeamSummaries([]);
+      return;
+    }
+
+    const timeRange = period === "24h" ? "7d" : period;
+    setTeamLoading(true);
+    setTeamError(null);
+    try {
+      const res = await fetch(`/api/analytics/users?timeRange=${timeRange}`);
+      if (!res.ok) {
+        throw new Error(`Server responded with ${res.status}`);
+      }
+      const payload = await res.json();
+      setTeamSummaries(payload?.users || []);
+    } catch (error) {
+      console.error("Failed to fetch team analytics:", error);
+      setTeamError("Failed to load team analytics");
+      setTeamSummaries([]);
+    } finally {
+      setTeamLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
+
+  useEffect(() => {
+    fetchTeamAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period, currentUser?.role]);
 
   const formatHours = (hours: number) => {
     if (hours < 1) {
@@ -206,6 +252,11 @@ export default function AnalyticsPage() {
               <span className="w-2 h-2 rounded-full bg-warning"></span>
               Analytics
             </div>
+            {currentUser?.role === "admin" && (
+              <div className="px-4 py-2 mt-4 text-xs font-sans text-muted-foreground">
+                Logged in as admin &middot; Team analytics available below
+              </div>
+            )}
           </div>
         </nav>
       </div>
@@ -309,6 +360,65 @@ export default function AnalyticsPage() {
               </div>
             </div>
           </div>
+
+          {currentUser?.role === "admin" && (
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground uppercase tracking-wide text-muted-foreground">Team Performance</h2>
+                  <p className="text-sm text-muted-foreground">View individual agent metrics</p>
+                </div>
+              </div>
+              <div className="bg-card border border-border rounded-lg p-4">
+                {teamLoading && (
+                  <p className="text-sm text-muted-foreground">Loading team analytics...</p>
+                )}
+                {teamError && (
+                  <p className="text-sm text-destructive">{teamError}</p>
+                )}
+                {!teamLoading && !teamError && teamSummaries.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No team analytics available for this period.</p>
+                )}
+                {!teamLoading && teamSummaries.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {teamSummaries.map(user => (
+                      <div key={user.id} className="border border-border rounded-lg p-4 bg-background hover:border-primary/50 transition-all flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-base font-semibold text-foreground">{user.name}</p>
+                            <p className="text-xs text-muted-foreground">@{user.username}</p>
+                          </div>
+                          <Link
+                            href={`/analytics/user/${user.id}`}
+                            className="text-xs font-medium text-primary hover:text-primary/80"
+                          >
+                            View &rarr;
+                          </Link>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Emails</p>
+                            <p className="text-lg font-semibold">{user.totalOutbound}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Assigned</p>
+                            <p className="text-lg font-semibold">{user.assignedConversations}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Drafted</p>
+                            <p className="text-lg font-semibold">{user.draftedConversations}</p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Avg daily outbound: <span className="font-semibold text-foreground">{Math.round(user.avgDailyOutbound || 0)}</span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* SLA Performance */}
           {data.sla && (
