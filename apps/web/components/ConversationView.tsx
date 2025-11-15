@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useConversations } from "@/lib/ConversationContext";
+import type { Conversation } from "@/lib/ConversationContext";
+import type { Conversation } from "@/lib/ConversationContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AIAssistant from "./AIAssistant";
@@ -118,6 +120,38 @@ function sanitizeEmailHtml(html: string): string {
   </div>`;
 }
 
+type AttachmentPayload = {
+  filename: string;
+  mimeType: string;
+  size: number;
+  data: string;
+};
+
+const readFileAsBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.includes(",") ? result.split(",")[1] : result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(reader.error || new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+};
+
+const prepareAttachmentPayload = async (files: File[]): Promise<AttachmentPayload[]> => {
+  if (!files || files.length === 0) return [];
+  return Promise.all(
+    files.map(async (file) => ({
+      filename: file.name,
+      mimeType: file.type || "application/octet-stream",
+      size: file.size,
+      data: await readFileAsBase64(file),
+    }))
+  );
+};
+
 // Replace cid: references with usable URLs (inline data URLs or fetch endpoints)
 function resolveInlineImages(html: string, message: Conversation["messages"][number]): string {
   if (!html || !message?.attachments || message.attachments.length === 0) return html;
@@ -181,6 +215,7 @@ export default function ConversationView() {
   } = useConversations();
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
+  const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const replyEditorRef = useRef<HTMLDivElement>(null);
   const composerBodyRef = useRef<HTMLDivElement>(null);
@@ -241,6 +276,10 @@ export default function ConversationView() {
   const [loadingTracking, setLoadingTracking] = useState(false);
   const [trackingError, setTrackingError] = useState<string | null>(null);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
+
+  useEffect(() => {
+    setReplyAttachments([]);
+  }, [selectedConversation?.id]);
 
   // Ask Question modal state
   const [showAskQuestionModal, setShowAskQuestionModal] = useState(false);
@@ -598,6 +637,7 @@ export default function ConversationView() {
     setSending(true);
     try {
       const recipientEmail = getReplyToEmail();
+      const attachmentsPayload = await prepareAttachmentPayload(replyAttachments);
 
       const response = await fetch("/api/messages", {
         method: "POST",
@@ -606,6 +646,7 @@ export default function ConversationView() {
           conversationId: selectedConversation.id,
           to: recipientEmail,
           body: htmlContent,
+          attachments: attachmentsPayload,
           userId: currentUser?.id,
         }),
       });
@@ -621,6 +662,7 @@ export default function ConversationView() {
         replyEditorRef.current.innerHTML = "";
       }
       setReplyText("");
+      setReplyAttachments([]);
 
       // Clear draft data when email is sent
       if (selectedConversation?.id) {
@@ -1381,6 +1423,17 @@ export default function ConversationView() {
     setComposerAttachments(composerAttachments.filter((_, i) => i !== index));
   };
 
+  const handleReplyAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      setReplyAttachments(prev => [...prev, ...files]);
+    }
+  };
+
+  const removeReplyAttachment = (index: number) => {
+    setReplyAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
   // Send email from composer
   const handleSendComposerEmail = async () => {
     // Get text content from contentEditable div
@@ -1398,6 +1451,7 @@ export default function ConversationView() {
     try {
       // Only associate with current conversation if sending to the same customer
       const isReplyToCurrentConversation = selectedConversation?.customer?.primaryEmail === composerTo.trim();
+      const attachmentsPayload = await prepareAttachmentPayload(composerAttachments);
 
       const response = await fetch("/api/messages", {
         method: "POST",
@@ -1407,6 +1461,7 @@ export default function ConversationView() {
           to: composerTo,
           subject: composerSubject,
           body: htmlContent,
+          attachments: attachmentsPayload,
           userId: currentUser?.id,
           workspaceId: currentWorkspaceId || undefined,
         }),
@@ -2016,6 +2071,35 @@ export default function ConversationView() {
               wordWrap: 'break-word'
             }}
           />
+        </div>
+        <div className="mb-4 space-y-2">
+          {replyAttachments.map((file, index) => (
+            <div key={`${file.name}-${index}`} className="flex items-center justify-between p-2 border border-slate-200 rounded-lg bg-slate-50">
+              <div className="flex items-center gap-2 text-sm font-sans text-slate-700">
+                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+                <span>{file.name}</span>
+                <span className="text-xs text-slate-500">({(file.size / 1024).toFixed(1)} KB)</span>
+              </div>
+              <button
+                className="p-1 rounded hover:bg-white"
+                onClick={() => removeReplyAttachment(index)}
+                title="Remove attachment"
+              >
+                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+          <label className="inline-flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg text-sm font-sans text-slate-700 bg-white hover:bg-slate-50 cursor-pointer">
+            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Add attachment</span>
+            <input type="file" multiple className="hidden" onChange={handleReplyAttachmentChange} />
+          </label>
         </div>
         <div className="flex items-center justify-between">
           <button

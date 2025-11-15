@@ -46,7 +46,12 @@ export async function pollOnce(_req: Request, res: Response) {
 }
 
 
-export async function sendReply(conversationId: string, to: string, body: string) {
+export async function sendReply(
+  conversationId: string,
+  to: string,
+  body: string,
+  attachments?: gmailMulti.OutboundAttachment[]
+) {
   // Get conversation to find workspace
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
@@ -57,10 +62,15 @@ export async function sendReply(conversationId: string, to: string, body: string
     throw new Error("Conversation not found");
   }
 
-  return await gmailMulti.sendReply(conversation.workspaceId, conversationId, to, body);
+  return await gmailMulti.sendReply(conversation.workspaceId, conversationId, to, body, attachments);
 }
 
-export async function sendNewEmail(to: string, subject: string, body: string) {
+export async function sendNewEmail(
+  to: string,
+  subject: string,
+  body: string,
+  attachments?: gmailMulti.OutboundAttachment[]
+) {
   const workspace = await getDefaultWorkspace();
-  return await gmailMulti.sendNewEmail(workspace.id, to, subject, body);
+  return await gmailMulti.sendNewEmail(workspace.id, to, subject, body, attachments);
 }

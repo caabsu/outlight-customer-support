@@ -2,6 +2,15 @@ import { google } from "googleapis";
 import { prisma } from "./db";
 import type { Request, Response } from "express";
 
+export type OutboundAttachment = {
+  filename?: string;
+  mimeType?: string;
+  data: string;
+  inline?: boolean;
+  contentId?: string;
+  size?: number;
+};
+
 // Get OAuth2 client for a specific workspace
 function getOAuth2Client(workspace: { googleClientId: string; googleClientSecret: string }) {
   const oAuth2Client = new google.auth.OAuth2(
@@ -417,7 +426,13 @@ async function ingestThread(gmail: any, workspace: any, threadId: string): Promi
 }
 
 // Send reply
-export async function sendReply(workspaceId: string, conversationId: string, to: string, body: string) {
+export async function sendReply(
+  workspaceId: string,
+  conversationId: string,
+  to: string,
+  body: string,
+  attachments: OutboundAttachment[] = []
+) {
   const { gmail, workspace } = await getAuthedClient(workspaceId);
 
   const conversation = await prisma.conversation.findUnique({
@@ -435,15 +450,19 @@ export async function sendReply(workspaceId: string, conversationId: string, to:
   const threadId = conversation.gmailThreadId;
   const lastMessage = conversation.messages[0];
 
-  const raw = [
-    `To: ${to}`,
-    `Subject: Re: ${conversation.subject || ""}`,
-    `In-Reply-To: ${lastMessage.gmailMessageId}`,
-    `References: ${lastMessage.gmailMessageId}`,
-    "Content-Type: text/html; charset=utf-8",
-    "",
+  const baseSubject = conversation.subject || "";
+  const subjectLine = baseSubject.toLowerCase().startsWith("re:") ? baseSubject : `Re: ${baseSubject}`.trim();
+
+  const raw = buildRawEmail({
+    to,
+    subject: subjectLine || "Re:",
     body,
-  ].join("\r\n");
+    attachments,
+    headers: [
+      `In-Reply-To: ${lastMessage.gmailMessageId}`,
+      `References: ${lastMessage.gmailMessageId}`,
+    ],
+  });
 
   const encodedMessage = Buffer.from(raw).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
@@ -456,6 +475,14 @@ export async function sendReply(workspaceId: string, conversationId: string, to:
   });
 
   const now = new Date();
+  const storedAttachments = attachments.map(att => ({
+    filename: att.filename || "attachment",
+    mimeType: att.mimeType || "application/octet-stream",
+    size: att.size,
+    inline: att.inline || false,
+    contentId: att.contentId,
+    data: att.data,
+  }));
   await prisma.message.create({
     data: {
       conversationId: conversation.id,
@@ -467,7 +494,7 @@ export async function sendReply(workspaceId: string, conversationId: string, to:
       sentAt: now,
       bodyHtml: body,
       bodyText: body,
-      attachments: [] as any,
+      attachments: storedAttachments as any,
     },
   });
 
@@ -489,16 +516,21 @@ export async function sendReply(workspaceId: string, conversationId: string, to:
 }
 
 // Send new email
-export async function sendNewEmail(workspaceId: string, to: string, subject: string, body: string) {
+export async function sendNewEmail(
+  workspaceId: string,
+  to: string,
+  subject: string,
+  body: string,
+  attachments: OutboundAttachment[] = []
+) {
   const { gmail, workspace } = await getAuthedClient(workspaceId);
 
-  const raw = [
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    "Content-Type: text/html; charset=utf-8",
-    "",
+  const raw = buildRawEmail({
+    to,
+    subject,
     body,
-  ].join("\r\n");
+    attachments,
+  });
 
   const encodedMessage = Buffer.from(raw).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
@@ -540,6 +572,58 @@ function flattenParts(payload: any): { html?: string[]; text?: string[] } {
   };
   walk(payload);
   return out;
+}
+
+const chunkBase64 = (data: string) => data.replace(/(.{76})/g, "$1\r\n");
+
+function buildRawEmail(options: {
+  to: string;
+  subject: string;
+  body: string;
+  attachments?: OutboundAttachment[];
+  headers?: string[];
+}): string {
+  const { to, subject, body, attachments = [], headers = [] } = options;
+  const baseHeaders = [
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    ...headers,
+  ];
+
+  if (!attachments.length) {
+    return [...baseHeaders, 'Content-Type: text/html; charset="utf-8"', "", body].join("\r\n");
+  }
+
+  const boundary = `mixed_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const parts: string[] = [
+    ...baseHeaders,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    'Content-Type: text/html; charset="utf-8"',
+    "Content-Transfer-Encoding: 7bit",
+    "",
+    body,
+    "",
+  ];
+
+  attachments.forEach((attachment) => {
+    parts.push(`--${boundary}`);
+    parts.push(`Content-Type: ${attachment.mimeType || "application/octet-stream"}`);
+    parts.push("Content-Transfer-Encoding: base64");
+    const disposition = attachment.inline ? "inline" : "attachment";
+    parts.push(`Content-Disposition: ${disposition}; filename="${attachment.filename || "attachment"}"`);
+    if (attachment.contentId) {
+      parts.push(`Content-ID: <${attachment.contentId}>`);
+    }
+    parts.push("");
+    parts.push(chunkBase64(attachment.data || ""));
+    parts.push("");
+  });
+
+  parts.push(`--${boundary}--`);
+  return parts.join("\r\n");
 }
 
 // Extract attachment metadata (and inline data when provided) from Gmail message parts

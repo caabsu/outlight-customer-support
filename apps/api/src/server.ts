@@ -6,7 +6,7 @@ dotenv.config({ path: ".env.local" });
 dotenv.config(); // This will load .env if .env.local doesn't exist
 import OpenAI from "openai";
 
-import { googleAuthStart, googleAuthCallback, pollOnce, sendReply, sendNewEmail } from "./gmail";
+import { googleAuthStart, googleAuthCallback, pollOnce } from "./gmail";
 import * as gmailMulti from "./gmail-multi";
 import { prisma } from "./db";
 import * as shopify from "./shopify";
@@ -1015,11 +1015,24 @@ app.get("/debug/reply-to", async (req: Request, res: Response) => {
 // Send a reply to a conversation or send a new email
 app.post("/messages", async (req: Request, res: Response) => {
   try {
-    const { conversationId, to, body, subject, workspaceId, userId } = req.body;
+    const { conversationId, to, body, subject, workspaceId, userId, attachments } = req.body;
 
     if (!to || !body) {
       return res.status(400).json({ error: "Missing required fields: to and body" });
     }
+
+    const attachmentPayload = Array.isArray(attachments)
+      ? attachments
+          .filter((att: any) => att && typeof att.data === "string" && att.data.length > 0)
+          .map((att: any) => ({
+            filename: att.filename || "attachment",
+            mimeType: att.mimeType || "application/octet-stream",
+            data: att.data,
+            size: typeof att.size === "number" ? att.size : undefined,
+            inline: att.inline ? true : false,
+            contentId: att.contentId || undefined,
+          }))
+      : [];
 
     let result;
     let actualWorkspaceId = workspaceId;
@@ -1038,7 +1051,7 @@ app.post("/messages", async (req: Request, res: Response) => {
       actualWorkspaceId = conversation.workspaceId;
 
       // Send as reply in existing thread using multi-workspace service
-      result = await gmailMulti.sendReply(actualWorkspaceId, conversationId, to, body);
+      result = await gmailMulti.sendReply(actualWorkspaceId, conversationId, to, body, attachmentPayload);
 
       // Delete draft for this conversation since we sent a message
       try {
@@ -1055,7 +1068,7 @@ app.post("/messages", async (req: Request, res: Response) => {
       if (!actualWorkspaceId) {
         return res.status(400).json({ error: "workspaceId is required for new emails" });
       }
-      result = await gmailMulti.sendNewEmail(actualWorkspaceId, to, subject || "No Subject", body);
+      result = await gmailMulti.sendNewEmail(actualWorkspaceId, to, subject || "No Subject", body, attachmentPayload);
     }
 
     // Record user activity for analytics
@@ -1071,6 +1084,8 @@ app.post("/messages", async (req: Request, res: Response) => {
               to,
               conversationId: conversationId || null,
               messageId: result.id || null,
+              hasAttachments: attachmentPayload.length > 0,
+              attachmentCount: attachmentPayload.length,
             }
           }
         });
