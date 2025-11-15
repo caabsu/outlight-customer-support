@@ -305,6 +305,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string): Promi
     const dir = (getHeader(m, "from") || "").includes(workspace.gmailAccountEmail) ? "outbound" : "inbound";
     const sentAt = new Date(Number(m.internalDate!));
     const { html, text } = flattenParts(m.payload);
+    const attachments = extractAttachments(m.payload);
     const replyTo = getHeader(m, "reply-to");
 
     await prisma.message.upsert({
@@ -322,7 +323,7 @@ async function ingestThread(gmail: any, workspace: any, threadId: string): Promi
         sentAt,
         bodyHtml: html?.join("\n") || null,
         bodyText: text?.join("\n") || null,
-        attachments: [] as any,
+        attachments: attachments as any,
         replyToEmail: replyTo ? parseEmail(replyTo) : null,
       },
     });
@@ -539,4 +540,50 @@ function flattenParts(payload: any): { html?: string[]; text?: string[] } {
   };
   walk(payload);
   return out;
+}
+
+// Extract attachment metadata (and inline data when provided) from Gmail message parts
+function extractAttachments(payload: any): any[] {
+  const attachments: any[] = [];
+
+  const normalizeBase64 = (data: string) => {
+    // Gmail returns URL-safe base64; convert to standard for embedding
+    return Buffer.from(data, "base64").toString("base64");
+  };
+
+  const walk = (part: any) => {
+    if (!part) return;
+    const filename = part.filename;
+    const body = part.body || {};
+    const headers = part.headers || [];
+    const dispositionHeader = headers.find((h: any) => (h.name || "").toLowerCase() === "content-disposition");
+    const contentIdHeader = headers.find((h: any) => (h.name || "").toLowerCase() === "content-id");
+
+    const inline = (dispositionHeader?.value || "").toLowerCase().includes("inline");
+    const contentId = contentIdHeader?.value ? contentIdHeader.value.replace(/[<>]/g, "") : undefined;
+
+    if (filename && body) {
+      const attachment: any = {
+        filename,
+        mimeType: part.mimeType,
+        size: body.size || 0,
+        attachmentId: body.attachmentId,
+        inline,
+        contentId,
+      };
+
+      // Some inline parts are fully inlined (no attachmentId) but carry data directly
+      if (body.data) {
+        attachment.data = normalizeBase64(body.data);
+        attachment.inline = true;
+      }
+
+      attachments.push(attachment);
+    }
+
+    (part.parts || []).forEach(walk);
+  };
+
+  walk(payload);
+  return attachments;
 }

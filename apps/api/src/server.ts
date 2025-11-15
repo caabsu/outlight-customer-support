@@ -1015,7 +1015,7 @@ app.get("/debug/reply-to", async (req: Request, res: Response) => {
 // Send a reply to a conversation or send a new email
 app.post("/messages", async (req: Request, res: Response) => {
   try {
-    const { conversationId, to, body, subject, workspaceId } = req.body;
+    const { conversationId, to, body, subject, workspaceId, userId } = req.body;
 
     if (!to || !body) {
       return res.status(400).json({ error: "Missing required fields: to and body" });
@@ -1058,10 +1058,110 @@ app.post("/messages", async (req: Request, res: Response) => {
       result = await gmailMulti.sendNewEmail(actualWorkspaceId, to, subject || "No Subject", body);
     }
 
+    // Record user activity for analytics
+    if (userId && actualWorkspaceId) {
+      try {
+        await prisma.userActivity.create({
+          data: {
+            userId,
+            workspaceId: actualWorkspaceId,
+            conversationId: conversationId || null,
+            actionType: "email_sent",
+            metadata: {
+              to,
+              conversationId: conversationId || null,
+              messageId: result.id || null,
+            }
+          }
+        });
+
+        // Track who replied last on the conversation
+        if (conversationId) {
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: { lastRepliedBy: userId }
+          });
+        }
+      } catch (activityError) {
+        console.error("[Analytics] Failed to record user activity:", activityError);
+      }
+    }
+
     res.json({ success: true, messageId: result.id });
   } catch (error) {
     console.error("Error sending message:", error);
     res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
+// Download or view a message attachment
+app.get("/messages/:id/attachments/:index", async (req: Request, res: Response) => {
+  try {
+    const { id, index } = req.params;
+    const inline = req.query.inline === "true";
+    const attachmentIndex = Number(index);
+
+    if (Number.isNaN(attachmentIndex)) {
+      return res.status(400).json({ error: "Invalid attachment index" });
+    }
+
+    const message = await prisma.message.findUnique({
+      where: { id },
+      include: {
+        conversation: {
+          select: { workspaceId: true },
+        },
+      },
+    });
+
+    if (!message) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    const attachments: any[] = (message as any).attachments || [];
+    const attachment = attachments[attachmentIndex];
+
+    if (!attachment) {
+      return res.status(404).json({ error: "Attachment not found" });
+    }
+
+    // If we already stored the data inline, return it directly
+    if (attachment.data) {
+      const buffer = Buffer.from(attachment.data, "base64");
+      res.setHeader("Content-Type", attachment.mimeType || "application/octet-stream");
+      if (!inline) {
+        res.setHeader("Content-Disposition", `attachment; filename="${attachment.filename || "attachment"}"`);
+      }
+      return res.send(buffer);
+    }
+
+    if (!attachment.attachmentId) {
+      return res.status(404).json({ error: "Attachment content unavailable" });
+    }
+
+    // Fetch from Gmail on demand
+    const { gmail } = await gmailMulti.getAuthedClient(message.conversation.workspaceId);
+    const attRes = await gmail.users.messages.attachments.get({
+      userId: "me",
+      messageId: message.gmailMessageId,
+      id: attachment.attachmentId,
+    });
+
+    const data = attRes.data?.data;
+    if (!data) {
+      return res.status(404).json({ error: "Attachment data not found" });
+    }
+
+    const buffer = Buffer.from(data, "base64");
+    res.setHeader("Content-Type", attachment.mimeType || "application/octet-stream");
+    if (!inline) {
+      res.setHeader("Content-Disposition", `attachment; filename="${attachment.filename || "attachment"}"`);
+    }
+
+    res.send(buffer);
+  } catch (error) {
+    console.error("Error fetching attachment:", error);
+    res.status(500).json({ error: "Failed to fetch attachment" });
   }
 });
 

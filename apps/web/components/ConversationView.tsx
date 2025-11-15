@@ -18,7 +18,21 @@ type ConversationHistory = {
   needsReply?: boolean;
   lastMessageDirection?: string;
   userTags?: string[];
-  messages: { direction: string; bodyText?: string | null; bodyHtml?: string | null }[];
+  messages: {
+    id: string;
+    direction: string;
+    bodyText?: string | null;
+    bodyHtml?: string | null;
+    attachments?: {
+      filename?: string;
+      mimeType?: string;
+      size?: number;
+      attachmentId?: string;
+      contentId?: string;
+      inline?: boolean;
+      data?: string;
+    }[];
+  }[];
 };
 
 // Helper function to escape HTML special characters
@@ -101,6 +115,33 @@ function sanitizeEmailHtml(html: string): string {
     </style>
     ${sanitized}
   </div>`;
+}
+
+// Replace cid: references with usable URLs (inline data URLs or fetch endpoints)
+function resolveInlineImages(html: string, message: Conversation["messages"][number]): string {
+  if (!html || !message?.attachments || message.attachments.length === 0) return html;
+
+  let resolvedHtml = html;
+
+  message.attachments.forEach((att, idx) => {
+    if (!att.contentId) return;
+
+    const cid = att.contentId.replace(/[<>]/g, "");
+    let src: string | null = null;
+
+    if (att.data) {
+      // Data already stored (standard base64)
+      src = `data:${att.mimeType || "application/octet-stream"};base64,${att.data}`;
+    } else {
+      // Fallback to on-demand fetch endpoint (served by API)
+      src = `/api/messages/${message.id}/attachments/${idx}?inline=true`;
+    }
+
+    const regex = new RegExp(`cid:${cid}`, "g");
+    resolvedHtml = resolvedHtml.replace(regex, src);
+  });
+
+  return resolvedHtml;
 }
 
 export default function ConversationView() {
@@ -564,6 +605,7 @@ export default function ConversationView() {
           conversationId: selectedConversation.id,
           to: recipientEmail,
           body: htmlContent,
+          userId: currentUser?.id,
         }),
       });
 
@@ -1364,6 +1406,8 @@ export default function ConversationView() {
           to: composerTo,
           subject: composerSubject,
           body: htmlContent,
+          userId: currentUser?.id,
+          workspaceId: currentWorkspaceId || undefined,
         }),
       });
 
@@ -1868,12 +1912,39 @@ export default function ConversationView() {
                     color: '#000000',
                     borderColor: '#e5e7eb'
                   }}
-                  dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(message.bodyHtml) }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(resolveInlineImages(message.bodyHtml, message)) }}
                 />
               ) : (
                 <p className="text-sm font-sans whitespace-pre-wrap overflow-hidden" style={{ fontWeight: 400, color: '#000000', maxWidth: '100%', wordWrap: 'break-word' }}>
                   {message.bodyText}
                 </p>
+              )}
+
+              {message.attachments && message.attachments.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  <p className="text-xs font-sans text-slate-500">Attachments</p>
+                  <div className="flex flex-wrap gap-2">
+                    {message.attachments.map((att, idx) => (
+                      <a
+                        key={`${message.id}-att-${idx}`}
+                        href={`/api/messages/${message.id}/attachments/${idx}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-200 bg-slate-50 text-xs font-sans text-slate-700 hover:bg-slate-100"
+                        title={att.inline ? "Inline attachment" : "Download attachment"}
+                      >
+                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m0 0l-4-4m4 4l4-4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                        </svg>
+                        <span>
+                          {att.filename || att.mimeType || "Attachment"}
+                          {att.inline ? " (inline)" : ""}
+                        </span>
+                        {att.size ? <span className="text-[10px] text-slate-500">({Math.round(att.size / 1024)} KB)</span> : null}
+                      </a>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -4581,6 +4652,7 @@ export default function ConversationView() {
               fullViewConversation.messages.map((message, index) => {
                 const isInbound = message.direction === 'inbound';
                 const messageBody = message.bodyHtml || message.bodyText || 'No content available';
+                const resolvedHtml = message.bodyHtml ? sanitizeEmailHtml(resolveInlineImages(message.bodyHtml, message as any)) : null;
 
                 return (
                   <div key={index} className={`p-4 rounded-lg border ${
@@ -4619,15 +4691,34 @@ export default function ConversationView() {
                       </span>
                     </div>
                     <div className="prose prose-sm max-w-none">
-                      {message.bodyHtml ? (
+                      {resolvedHtml ? (
                         <div
                           className="text-sm font-sans text-slate-700 leading-relaxed"
-                          dangerouslySetInnerHTML={{ __html: messageBody }}
+                          dangerouslySetInnerHTML={{ __html: resolvedHtml }}
                         />
                       ) : (
                         <p className="text-sm font-sans text-slate-700 leading-relaxed whitespace-pre-wrap">
                           {messageBody}
                         </p>
+                      )}
+                      {message.attachments && message.attachments.length > 0 && (
+                        <div className="mt-3 space-y-1">
+                          <p className="text-xs font-sans text-slate-500">Attachments</p>
+                          <div className="flex flex-wrap gap-2">
+                            {message.attachments.map((att, idx) => (
+                              <a
+                                key={`${index}-full-att-${idx}`}
+                                href={`/api/messages/${(message as any).id}/attachments/${idx}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-200 bg-slate-50 text-xs font-sans text-slate-700 hover:bg-slate-100"
+                              >
+                                {att.filename || att.mimeType || "Attachment"}
+                                {att.inline ? " (inline)" : ""}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

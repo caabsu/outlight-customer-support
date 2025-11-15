@@ -11,6 +11,15 @@ export type Message = {
   bodyText: string | null;
   direction: string;
   replyToEmail: string | null;
+  attachments?: {
+    filename?: string;
+    mimeType?: string;
+    size?: number;
+    attachmentId?: string;
+    contentId?: string;
+    inline?: boolean;
+    data?: string; // base64 (standard) when available
+  }[];
 };
 
 export type Conversation = {
