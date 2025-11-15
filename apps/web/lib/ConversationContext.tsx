@@ -683,6 +683,7 @@ export function ConversationProvider({
   // Load workspaces on mount
   useEffect(() => {
     loadWorkspaces();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refetch conversations when workspace changes
@@ -690,6 +691,7 @@ export function ConversationProvider({
     if (currentWorkspaceId) {
       fetchConversations(true, 0, false, 1);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
 
   return (
