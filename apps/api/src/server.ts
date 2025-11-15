@@ -772,9 +772,12 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
 async function getUnrepliedConversations(workspaceId?: string) {
   const whereClause: any = {
     archived: false,
+    needsReply: true, // Only unresolved conversations should be considered unreplied
     NOT: [
       { tags: { has: "non-customer-support" } },
-      { tags: { has: "admin" } }
+      { tags: { has: "admin" } },
+      { userTags: { has: "non-customer-support" } },
+      { userTags: { has: "admin" } }
     ]
   };
 
