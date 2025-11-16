@@ -3188,9 +3188,9 @@ export default function ConversationView() {
                 return (
                   <div
                     key={conv.id}
-                  className="w-full p-4 border border-border bg-background rounded-lg"
-                >
-                  <div className="flex items-start gap-3 mb-2">
+                    className="w-full p-4 border border-border bg-background rounded-lg"
+                  >
+                    <div className="flex items-start gap-3 mb-2">
                     <input
                       type="checkbox"
                       className="mt-1 h-4 w-4 text-green-600 rounded border-slate-300 focus:ring-green-500"
@@ -3351,8 +3351,9 @@ export default function ConversationView() {
                     </button>
                   </div>
                 </div>
-              ))
-            ) : (
+              );
+            })
+          ) : (
               <div className="p-8 text-center">
                 <p className="text-sm font-sans text-muted-foreground">No related conversations found</p>
               </div>
