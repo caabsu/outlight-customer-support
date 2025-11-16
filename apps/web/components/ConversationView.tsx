@@ -125,6 +125,10 @@ type AttachmentPayload = {
   data: string;
 };
 
+const buildAttachmentUrl = (messageId: string, index: number, inline = false) => {
+  return `/api/messages/${messageId}/attachments/${index}${inline ? "?inline=true" : ""}`;
+};
+
 const readFileAsBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -2051,25 +2055,42 @@ export default function ConversationView() {
                 <div className="mt-3 space-y-1">
                   <p className="text-xs font-sans text-slate-500">Attachments</p>
                   <div className="flex flex-wrap gap-2">
-                    {message.attachments.map((att, idx) => (
-                      <a
-                        key={`${message.id}-att-${idx}`}
-                        href={`/api/messages/${message.id}/attachments/${idx}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-200 bg-slate-50 text-xs font-sans text-slate-700 hover:bg-slate-100"
-                        title={att.inline ? "Inline attachment" : "Download attachment"}
-                      >
-                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m0 0l-4-4m4 4l4-4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
-                        </svg>
-                        <span>
-                          {att.filename || att.mimeType || "Attachment"}
-                          {att.inline ? " (inline)" : ""}
-                        </span>
-                        {att.size ? <span className="text-[10px] text-slate-500">({Math.round(att.size / 1024)} KB)</span> : null}
-                      </a>
-                    ))}
+                    {message.attachments.map((att, idx) => {
+                      const isImage = att.mimeType?.startsWith("image/");
+                      const previewSrc = att.data
+                        ? `data:${att.mimeType || "application/octet-stream"};base64,${att.data}`
+                        : buildAttachmentUrl(message.id, idx, true);
+                      return (
+                        <div
+                          key={`${message.id}-att-${idx}`}
+                          className="flex flex-col gap-1 rounded border border-slate-200 bg-slate-50 p-2"
+                        >
+                          {isImage && (
+                            <img
+                              src={previewSrc}
+                              alt={att.filename || `Attachment ${idx + 1}`}
+                              className="max-h-32 object-contain rounded border border-slate-200 bg-white"
+                            />
+                          )}
+                          <a
+                            href={buildAttachmentUrl(message.id, idx)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-200 bg-white text-xs font-sans text-slate-700 hover:bg-slate-100"
+                            title={att.inline ? "Inline attachment" : "Download attachment"}
+                          >
+                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m0 0l-4-4m4 4l4-4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                            </svg>
+                            <span>
+                              {att.filename || att.mimeType || "Attachment"}
+                              {att.inline ? " (inline)" : ""}
+                            </span>
+                            {att.size ? <span className="text-[10px] text-slate-500">({Math.round(att.size / 1024)} KB)</span> : null}
+                          </a>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -4905,18 +4926,35 @@ export default function ConversationView() {
                         <div className="mt-3 space-y-1">
                           <p className="text-xs font-sans text-slate-500">Attachments</p>
                           <div className="flex flex-wrap gap-2">
-                            {message.attachments.map((att, idx) => (
-                              <a
-                                key={`${index}-full-att-${idx}`}
-                                href={`/api/messages/${(message as any).id}/attachments/${idx}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-200 bg-slate-50 text-xs font-sans text-slate-700 hover:bg-slate-100"
-                              >
-                                {att.filename || att.mimeType || "Attachment"}
-                                {att.inline ? " (inline)" : ""}
-                              </a>
-                            ))}
+                            {message.attachments.map((att, idx) => {
+                              const isImage = att.mimeType?.startsWith("image/");
+                              const previewSrc = att.data
+                                ? `data:${att.mimeType || "application/octet-stream"};base64,${att.data}`
+                                : buildAttachmentUrl(message.id, idx, true);
+                              return (
+                                <div
+                                  key={`${index}-full-att-${idx}`}
+                                  className="flex flex-col gap-1 rounded border border-slate-200 bg-slate-50 p-2"
+                                >
+                                  {isImage && (
+                                    <img
+                                      src={previewSrc}
+                                      alt={att.filename || `Attachment ${idx + 1}`}
+                                      className="max-h-40 object-contain rounded border border-slate-200 bg-white"
+                                    />
+                                  )}
+                                  <a
+                                    href={buildAttachmentUrl(message.id, idx)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-2 px-3 py-2 rounded border border-slate-200 bg-white text-xs font-sans text-slate-700 hover:bg-slate-100"
+                                  >
+                                    {att.filename || att.mimeType || "Attachment"}
+                                    {att.inline ? " (inline)" : ""}
+                                  </a>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
