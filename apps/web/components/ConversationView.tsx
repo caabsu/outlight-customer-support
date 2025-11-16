@@ -3186,8 +3186,8 @@ export default function ConversationView() {
               filteredHistory.map((conv) => {
                 const isSelected = selectedRelatedIds.has(conv.id);
                 return (
-                <div
-                  key={conv.id}
+                  <div
+                    key={conv.id}
                   className="w-full p-4 border border-border bg-background rounded-lg"
                 >
                   <div className="flex items-start gap-3 mb-2">
@@ -3351,7 +3351,7 @@ export default function ConversationView() {
                     </button>
                   </div>
                 </div>
-              })
+              ))
             ) : (
               <div className="p-8 text-center">
                 <p className="text-sm font-sans text-muted-foreground">No related conversations found</p>
