@@ -6,6 +6,7 @@ import type { Conversation, Message } from "@/lib/ConversationContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AIAssistant from "./AIAssistant";
+import DraftAssistantModal from "./DraftAssistantModal";
 import { useCurrentUser } from "@/components/AuthProvider";
 
 // --- TYPES ---
@@ -196,25 +197,11 @@ export default function ConversationView() {
   const [questionText, setQuestionText] = useState("");
   const [questionReferencedEmail, setQuestionReferencedEmail] = useState("");
   const [submittingQuestion, setSubmittingQuestion] = useState(false);
-  const [draftsByConversationId, setDraftsByConversationId] = useState<Record<string, any>>({});
-  const [loadingDraftByConversationId, setLoadingDraftByConversationId] = useState<Record<string, boolean>>({});
-  const [draftError, setDraftError] = useState<string | null>(null);
-  const [showDraftPopup, setShowDraftPopup] = useState(false);
-  const [draftMinimized, setDraftMinimized] = useState(false);
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
-  const [showKBTab, setShowKBTab] = useState(false);
-  const [expandedKBSections, setExpandedKBSections] = useState<Record<string, boolean>>({ general: true, toolSpecific: true });
-  const [editingDraft, setEditingDraft] = useState(false);
-  const [editedDraftText, setEditedDraftText] = useState("");
-  const [customContextByConversationId, setCustomContextByConversationId] = useState<Record<string, string>>({});
-  const [showContextInput, setShowContextInput] = useState(false);
+  const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
 
   const [rightSidebarWidth, setRightSidebarWidth] = useState(350);
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-  const draftData = selectedConversation?.id ? draftsByConversationId[selectedConversation.id] : null;
-  const loadingDraft = selectedConversation?.id ? loadingDraftByConversationId[selectedConversation.id] || false : false;
-  const currentCustomContext = selectedConversation?.id ? (customContextByConversationId[selectedConversation.id] || "") : "";
-  const autoLoadAttemptedRef = useRef<Set<string>>(new Set());
 
   // --- EFFECTS ---
 
@@ -223,33 +210,7 @@ export default function ConversationView() {
   
   // Reset UI state on conversation change
   useEffect(() => {
-    setShowDraftPopup(false);
-    setDraftMinimized(false);
-    setShowKBTab(false);
-    setDraftError(null);
-  }, [selectedConversation?.id]);
-
-  // Auto-load Draft
-  useEffect(() => {
-    if (!selectedConversation?.id) return;
-    if (draftsByConversationId[selectedConversation.id]) return;
-    if (loadingDraftByConversationId[selectedConversation.id]) return;
-    if (autoLoadAttemptedRef.current.has(selectedConversation.id)) return;
-
-    autoLoadAttemptedRef.current.add(selectedConversation.id);
-    
-    fetch(`/api/conversations/${selectedConversation.id}/draft`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ forceRegenerate: false })
-    })
-    .then(res => res.ok ? res.json() : Promise.reject("Failed to fetch draft"))
-    .then(data => {
-      if (data.fromDatabase && data.draft?.trim().length > 0) {
-        setDraftsByConversationId(prev => ({ ...prev, [selectedConversation.id]: data }));
-      }
-    })
-    .catch(() => {});
+    setIsDraftModalOpen(false);
   }, [selectedConversation?.id]);
 
   // Fetch History
@@ -469,12 +430,7 @@ export default function ConversationView() {
       if (replyEditorRef.current) replyEditorRef.current.innerHTML = "";
       setReplyText("");
       setReplyAttachments([]);
-      setDraftsByConversationId(prev => {
-        const newDrafts = { ...prev };
-        delete newDrafts[selectedConversation.id];
-        return newDrafts;
-      });
-      setShowDraftPopup(false);
+      setIsDraftModalOpen(false);
       await refreshConversations();
     } catch (error) {
       alert(`Failed to send email: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -483,43 +439,12 @@ export default function ConversationView() {
     }
   };
 
-  const generateDraft = async (customContext?: string) => {
-    if (!selectedConversation) return;
-    const conversationId = selectedConversation.id;
-    const contextToUse = customContext !== undefined ? customContext : (customContextByConversationId[conversationId] || "");
-    
-    setLoadingDraftByConversationId(prev => ({ ...prev, [conversationId]: true }));
-    setDraftError(null);
-    setDraftsByConversationId(prev => ({ ...prev, [conversationId]: null }));
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 300000);
-      
-      const response = await fetch(`/api/conversations/${conversationId}/draft`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ additionalContext: contextToUse || undefined }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) throw new Error(`API Error: ${response.status}`);
-      const data = await response.json();
-      setDraftsByConversationId(prev => ({ ...prev, [conversationId]: data }));
-      
-      if (data.tags?.length > 0) {
-         const targetConversation = conversations.find(c => c.id === conversationId);
-         if (targetConversation) {
-            const uniqueTags = Array.from(new Set([...(targetConversation.tags || []), ...data.tags]));
-            updateConversationOptimistic(conversationId, { tags: uniqueTags });
-         }
-      }
-    } catch (error) {
-      setDraftError(error instanceof Error ? error.message : "Failed to generate draft");
-    } finally {
-      setLoadingDraftByConversationId(prev => ({ ...prev, [conversationId]: false }));
+  const handleInsertDraft = (text: string) => {
+    if (replyEditorRef.current) {
+      replyEditorRef.current.innerText = text;
     }
+    setReplyText(text);
+    setIsDraftModalOpen(false);
   };
 
   // Helper for Reply-To
@@ -761,40 +686,14 @@ export default function ConversationView() {
                 </label>
               </button>
               
-              <button
-                onClick={() => setShowContextInput(!showContextInput)}
-                className={`ml-auto flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${showContextInput ? 'bg-violet-100 text-violet-700' : 'hover:bg-slate-200 text-slate-500'}`}
-                title="Add Custom Instructions"
-              >
-                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                 Instructions
-              </button>
-
-              {/* AI Draft Button in Toolbar */}
               <button 
-                onClick={() => generateDraft(customContextByConversationId[selectedConversation?.id || ''])} 
-                disabled={loadingDraft}
-                className="flex items-center gap-1.5 px-2 py-1 hover:bg-violet-100 text-violet-600 rounded text-xs font-medium transition-colors ml-1"
+                onClick={() => setIsDraftModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm ml-auto"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                {loadingDraft ? "Drafting..." : "AI Draft"}
+                AI Draft Assistant
               </button>
             </div>
-
-            {/* Custom Context Input */}
-            {showContextInput && (
-               <div className="px-2 py-2 bg-violet-50 border-b border-violet-100">
-                  <input
-                     type="text"
-                     autoFocus
-                     value={customContextByConversationId[selectedConversation?.id || ''] || ''}
-                     onChange={(e) => setCustomContextByConversationId(prev => ({...prev, [selectedConversation?.id || '']: e.target.value}))}
-                     placeholder="E.g., 'Offer a 10% discount', 'Be very apologetic', 'Explain the delay'..."
-                     className="w-full px-3 py-1.5 text-xs border border-violet-200 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-violet-400 focus:border-violet-400 text-violet-900 placeholder-violet-400 bg-white"
-                     onKeyDown={(e) => e.key === 'Enter' && generateDraft(customContextByConversationId[selectedConversation?.id || ''])} 
-                  />
-               </div>
-            )}
 
             {/* Editor */}
             <div 
@@ -957,22 +856,14 @@ export default function ConversationView() {
           </div>
         </div>
         
-        {/* Draft Popup Overlay (if active) */}
-        {showDraftPopup && draftData && (
-           <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-30 flex flex-col p-4">
-              <div className="flex justify-between items-center mb-4">
-                 <h3 className="font-bold text-lg">AI Draft</h3>
-                 <button onClick={() => setShowDraftPopup(false)} className="p-1 hover:bg-slate-100 rounded">✕</button>
-              </div>
-              <div className="flex-1 overflow-y-auto border rounded-lg p-4 bg-white shadow-sm mb-4 whitespace-pre-wrap text-sm">
-                 {draftData.draft}
-              </div>
-              <div className="flex gap-2">
-                 <button onClick={() => { setReplyText(draftData.draft); setShowDraftPopup(false); }} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700">Use Draft</button>
-                 <button onClick={() => generateDraft()} className="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg font-medium hover:bg-slate-200">Regenerate</button>
-              </div>
-           </div>
-        )}
+        <DraftAssistantModal
+          isOpen={isDraftModalOpen}
+          onClose={() => setIsDraftModalOpen(false)}
+          onInsert={handleInsertDraft}
+          conversationId={selectedConversation.id}
+          customerName={selectedConversation.customer.name || "Customer"}
+          customerEmail={selectedConversation.customer.primaryEmail}
+        />
 
         {/* AI Assistant Chat (Fixed Bottom of Sidebar) */}
         <div className="border-t border-slate-200 bg-slate-50 p-0">
