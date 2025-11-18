@@ -393,18 +393,32 @@ export async function getCustomerOrders(customerId: string, limit: number = 50):
  */
 export async function getOrder(orderId: number): Promise<ShopifyOrder> {
   try {
-    // Fetch the complete order without field filtering to ensure transactions are included
-    // The fields parameter can sometimes exclude data even when explicitly requested
-    const response = await shopifyRequest<{ order: ShopifyOrder }>(
-      `/orders/${orderId}.json`
-    );
+    // Fetch the order plus transactions (transactions are not embedded by default)
+    const response = await shopifyRequest<{ order: ShopifyOrder }>(`/orders/${orderId}.json`);
 
-    // Log transaction data for debugging
-    if (!response.order.transactions || response.order.transactions.length === 0) {
-      console.warn(`Order ${orderId} has no transactions. This may indicate an API permission issue.`);
+    let transactions: ShopifyTransaction[] = [];
+    try {
+      const txResponse = await shopifyRequest<{ transactions: ShopifyTransaction[] }>(
+        `/orders/${orderId}/transactions.json`
+      );
+      transactions = txResponse.transactions || [];
+    } catch (txError) {
+      console.error(`Failed to fetch transactions for order ${orderId}:`, txError);
     }
 
-    return response.order;
+    const orderWithTx: ShopifyOrder = {
+      ...response.order,
+      transactions,
+    };
+
+    // Log transaction data for debugging
+    if (!orderWithTx.transactions || orderWithTx.transactions.length === 0) {
+      console.warn(
+        `Order ${orderId} has no transactions. This may indicate an API permission issue or an unpaid order.`
+      );
+    }
+
+    return orderWithTx;
   } catch (error) {
     console.error('Error getting order:', error);
     throw error;
