@@ -300,6 +300,36 @@ export default function ConversationView() {
 
   // --- ACTIONS ---
 
+  const handleSubmitQuestion = async () => {
+    if (!questionText.trim() || !currentUser) return;
+    setSubmittingQuestion(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/questions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: questionText,
+          askedBy: currentUser.id,
+          referencedEmail: questionReferencedEmail || null,
+          conversationId: selectedConversation?.id || null,
+        }),
+      });
+      if (response.ok) {
+        setQuestionText("");
+        setQuestionReferencedEmail("");
+        setShowAskQuestionModal(false);
+        alert("Question submitted successfully!");
+      } else {
+        throw new Error("Failed to submit question");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Failed to submit question.");
+    } finally {
+      setSubmittingQuestion(false);
+    }
+  };
+
   const handleShopifySearch = async () => {
     if (!shopifySearchQuery.trim()) return;
     setSearchingShopify(true);
@@ -453,36 +483,6 @@ export default function ConversationView() {
     }
   };
 
-  const handleSubmitQuestion = async () => {
-    if (!questionText.trim() || !currentUser) return;
-    setSubmittingQuestion(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/questions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question: questionText,
-          askedBy: currentUser.id,
-          referencedEmail: questionReferencedEmail || null,
-          conversationId: selectedConversation?.id || null,
-        }),
-      });
-      if (response.ok) {
-        setQuestionText("");
-        setQuestionReferencedEmail("");
-        setShowAskQuestionModal(false);
-        alert("Question submitted successfully!");
-      } else {
-        throw new Error("Failed to submit question");
-      }
-    } catch (error) {
-      console.error(error);
-      alert("Failed to submit question.");
-    } finally {
-      setSubmittingQuestion(false);
-    }
-  };
-
   const generateDraft = async (customContext?: string) => {
     if (!selectedConversation) return;
     const conversationId = selectedConversation.id;
@@ -624,7 +624,7 @@ export default function ConversationView() {
   
   // ... Reuse other handlers (handleMarkResolved, handleShopifySearch, etc) ...
   // For brevity in this rewrite, I'll focus on the UI structure. 
-  // Assume all action handlers from the original file are present.
+  // Assume all action handlers from the original file are present. 
   
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleString("en-US", {
@@ -640,7 +640,7 @@ export default function ConversationView() {
         <div className="text-center space-y-4 max-w-md">
           <div className="w-20 h-20 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mx-auto mb-6">
             <svg className="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-slate-900">No Conversation Selected</h2>
@@ -685,18 +685,13 @@ export default function ConversationView() {
             
             {/* Header Actions */}
             <div className="flex items-center gap-2">
-              <button className="p-2 text-slate-400 hover:text-amber-400 transition-colors">
-                <svg className={`w-5 h-5 ${selectedConversation.starred ? "text-amber-400 fill-current" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                </svg>
-              </button>
-              <div className="h-4 w-px bg-slate-200 mx-1"></div>
-              <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors" title="Archive">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-              </button>
-              <button className="p-2 text-slate-400 hover:text-red-500 transition-colors" title="Mark as Spam">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-              </button>
+               <button 
+                  onClick={() => setShowAskQuestionModal(true)}
+                  className="flex items-center gap-2 px-3 py-2 bg-orange-100 text-orange-700 hover:bg-orange-200 rounded-lg text-xs font-semibold transition-colors"
+               >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  Ask Question
+               </button>
             </div>
           </div>
         </header>
@@ -765,16 +760,41 @@ export default function ConversationView() {
                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                 </label>
               </button>
+              
+              <button
+                onClick={() => setShowContextInput(!showContextInput)}
+                className={`ml-auto flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${showContextInput ? 'bg-violet-100 text-violet-700' : 'hover:bg-slate-200 text-slate-500'}`}
+                title="Add Custom Instructions"
+              >
+                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                 Instructions
+              </button>
+
               {/* AI Draft Button in Toolbar */}
               <button 
-                onClick={() => generateDraft()}
+                onClick={() => generateDraft(customContextByConversationId[selectedConversation?.id || ''])} 
                 disabled={loadingDraft}
-                className="flex items-center gap-1.5 px-2 py-1 hover:bg-violet-100 text-violet-600 rounded text-xs font-medium transition-colors ml-auto"
+                className="flex items-center gap-1.5 px-2 py-1 hover:bg-violet-100 text-violet-600 rounded text-xs font-medium transition-colors ml-1"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                 {loadingDraft ? "Drafting..." : "AI Draft"}
               </button>
             </div>
+
+            {/* Custom Context Input */}
+            {showContextInput && (
+               <div className="px-2 py-2 bg-violet-50 border-b border-violet-100">
+                  <input
+                     type="text"
+                     autoFocus
+                     value={customContextByConversationId[selectedConversation?.id || ''] || ''}
+                     onChange={(e) => setCustomContextByConversationId(prev => ({...prev, [selectedConversation?.id || '']: e.target.value}))}
+                     placeholder="E.g., 'Offer a 10% discount', 'Be very apologetic', 'Explain the delay'..."
+                     className="w-full px-3 py-1.5 text-xs border border-violet-200 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-violet-400 focus:border-violet-400 text-violet-900 placeholder-violet-400 bg-white"
+                     onKeyDown={(e) => e.key === 'Enter' && generateDraft(customContextByConversationId[selectedConversation?.id || ''])} 
+                  />
+               </div>
+            )}
 
             {/* Editor */}
             <div 
@@ -840,6 +860,25 @@ export default function ConversationView() {
                    {detectingEmail ? "..." : "AI Detect"}
                 </button>
              </h3>
+             
+             {/* Manual Search */}
+             <div className="flex gap-2 mb-3">
+                <input 
+                  type="text" 
+                  value={shopifySearchQuery} 
+                  onChange={(e) => setShopifySearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleShopifySearch()}
+                  placeholder="Search email or name..." 
+                  className="flex-1 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-500"
+                />
+                <button 
+                  onClick={handleShopifySearch}
+                  disabled={searchingShopify}
+                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-xs font-medium border border-slate-300"
+                >
+                  {searchingShopify ? "..." : "Search"}
+                </button>
+             </div>
              
              {loadingShopify ? (
                 <div className="text-center py-4 text-slate-400 text-sm">Loading...</div>
