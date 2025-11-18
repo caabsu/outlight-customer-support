@@ -3342,6 +3342,13 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
 ${additionalContext}
 
 === END HIGH-PRIORITY INFORMATION ===
+
+PRIORITY ORDER (OBEY IN THIS SEQUENCE):
+1) High-priority customer information above (interpret and integrate, do not paste)
+2) Product Knowledge Base (product facts, specs, shipping, warranty)
+3) General Knowledge Base policies
+4) Shopify order data (orders/transactions/tracking facts only)
+If any conflict arises, follow the earliest item in this list.
 `;
     }
 
@@ -3514,6 +3521,7 @@ HOW TO USE THEM:
 - Do NOT include phrases like "custom instructions" or any system/meta text in the draft.
 - If products are mentioned, call search_product() for each before drafting.
 - When conflicts arise, prioritize this context over the knowledge base policies.
+- PRIORITY ORDER: (1) Custom instructions/context, (2) Product KB, (3) General KB, (4) Shopify order facts.
 
 ` : ''}
 ${latestInboundMessage ? `
@@ -4094,6 +4102,7 @@ ${draft.contextNotes ? `Additional Context/Notes:\n${draft.contextNotes}\n` : ''
 ⚠️  Do NOT copy or insert this text directly into the email.
 ⚠️  Translate it into polished, customer-ready language; never mention that it came from "custom instructions".
 ⚠️  This context OVERRIDES any conflicting knowledge base information.
+⚠️  PRIORITY ORDER: (1) Custom context below, (2) Product KB, (3) General KB, (4) Shopify order facts.
 
 WHAT TO DO WITH THIS INFORMATION:
 • Read and understand the context provided below
