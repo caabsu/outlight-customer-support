@@ -144,7 +144,7 @@ export function ConversationProvider({
   const [excludeNonSupport, setExcludeNonSupport] = useState(true);
   const [showNeedsReply, setShowNeedsReply] = useState(true);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<"all" | "needs-reply" | "resolved">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "needs-reply" | "resolved">("needs-reply");
   const [dateRange, setDateRange] = useState<"all" | "today" | "week" | "month">("all");
   const [adminOnly, setAdminOnly] = useState(false);
 

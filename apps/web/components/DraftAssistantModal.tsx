@@ -37,13 +37,13 @@ export default function DraftAssistantModal({
   const [editedDraft, setEditedDraft] = useState("");
   const [activeTab, setActiveTab] = useState<"preview" | "reasoning" | "context" | "debug">("preview");
 
-  // Auto-generate on first open if no data
-  useEffect(() => {
-    if (isOpen && !data && !isLoading) {
-      handleGenerate();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  // Auto-generate removed to prevent empty drafts on open
+  // useEffect(() => {
+  //   if (isOpen && !data && !isLoading) {
+  //     handleGenerate();
+  //   }
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [isOpen]);
 
   const addLog = (msg: string) => setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
