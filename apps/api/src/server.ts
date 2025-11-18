@@ -4,19 +4,15 @@ import dotenv from "dotenv";
 // Load from .env.local first, fallback to .env
 dotenv.config({ path: ".env.local" });
 dotenv.config(); // This will load .env if .env.local doesn't exist
-import OpenAI from "openai";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, FunctionDeclarationSchemaType } from "@google/generative-ai";
 
 import { googleAuthStart, googleAuthCallback, pollOnce } from "./gmail";
 import * as gmailMulti from "./gmail-multi";
 import { prisma } from "./db";
 import * as shopify from "./shopify";
 
-// Initialize OpenAI with timeout configuration
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  timeout: 240000, // 4 minutes max per API call (to fit within Railway's 5min limit)
-  maxRetries: 0, // Don't retry on timeout - fail fast
-});
+// Initialize Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 const app = express();
 app.use(cors());
@@ -267,7 +263,7 @@ app.post("/gmail/resync-all", async (req: Request, res: Response) => {
         let syncResult: any = null;
         const mockRes = {
           json: (data: any) => { syncResult = data; },
-          status: (code: number) => ({
+          status: (code: number) => ({ 
             json: (data: any) => { syncResult = { error: data, statusCode: code }; }
           })
         } as any;
@@ -1271,7 +1267,7 @@ app.get("/messages/:id/attachments/:index", async (req: Request, res: Response) 
       const buffer = Buffer.from(attachment.data, "base64");
       res.setHeader("Content-Type", attachment.mimeType || "application/octet-stream");
       if (!inline) {
-        res.setHeader("Content-Disposition", `attachment; filename="${attachment.filename || "attachment"}"`);
+        res.setHeader("Content-Disposition", `attachment; filename="${attachment.filename || "attachment"}"`)
       }
       return res.send(buffer);
     }
@@ -1296,7 +1292,7 @@ app.get("/messages/:id/attachments/:index", async (req: Request, res: Response) 
     const buffer = Buffer.from(data, "base64");
     res.setHeader("Content-Type", attachment.mimeType || "application/octet-stream");
     if (!inline) {
-      res.setHeader("Content-Disposition", `attachment; filename="${attachment.filename || "attachment"}"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${attachment.filename || "attachment"}"`)
     }
 
     res.send(buffer);
@@ -1589,7 +1585,7 @@ app.get("/analytics", async (req: Request, res: Response) => {
   }
 });
 
-// Email Summary Endpoint using GPT
+// Email Summary Endpoint using Gemini
 app.post("/conversations/:id/summary", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -1609,7 +1605,7 @@ app.post("/conversations/:id/summary", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
-    // Build email thread context for GPT
+    // Build email thread context
     const emailThread = conversation.messages.map((msg: any) => {
       const direction = msg.direction === "inbound" ? "Customer" : "Agent";
       const content = msg.bodyText || msg.bodyHtml?.replace(/<[^>]*>/g, '') || '';
@@ -1617,7 +1613,6 @@ app.post("/conversations/:id/summary", async (req: Request, res: Response) => {
     }).join('\n\n');
 
     // Load knowledge base (if exists)
-    // Load both general knowledge and summary-specific knowledge
     let knowledgeBaseContext = "";
     try {
       const knowledgeBase = await prisma.knowledgeBase.findMany({
@@ -1635,37 +1630,29 @@ app.post("/conversations/:id/summary", async (req: Request, res: Response) => {
           knowledgeBase.map(kb => `- ${kb.title}: ${kb.content}`).join('\n');
       }
     } catch (error) {
-      // Knowledge base table might not exist yet, continue without it
       console.log("Knowledge base not available yet");
     }
 
-    // Generate summary using GPT-4o-mini
-    // Note: Will upgrade to GPT-5 when Responses API SDK support is available
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `You are a helpful customer support assistant. Summarize email conversations concisely, highlighting:
+    // Generate summary using Gemini
+    const model = genAI.getGenerativeModel({ model: "gemini-3-pro-preview" });
+    
+    const prompt = `You are a helpful customer support assistant. Summarize email conversations concisely, highlighting:
 1. Main issue/question
 2. Key points discussed
 3. Current status
 4. Suggested next steps (if applicable)
 
-Keep summaries under 150 words.${knowledgeBaseContext}`
-        },
-        {
-          role: "user",
-          content: `Summarize this email conversation:\n\nSubject: ${conversation.subject}\n\n${emailThread}`
-        }
-      ],
-      temperature: 0.5,
-      max_tokens: 300
-    });
+Keep summaries under 150 words.${knowledgeBaseContext}
 
-    const summary = completion.choices[0].message.content;
+Summarize this email conversation:
+Subject: ${conversation.subject}
 
-    // Save summary to database (optional - can cache it)
+${emailThread}`;
+
+    const result = await model.generateContent(prompt);
+    const summary = result.response.text();
+
+    // Save summary to database
     await prisma.conversation.update({
       where: { id },
       data: {
@@ -1757,13 +1744,10 @@ app.delete("/knowledge-base/:id", async (req: Request, res: Response) => {
 
 /**
  * Get knowledge base access for AI tools
- * GET /knowledge-base/tool-access
- * Returns what knowledge each AI tool has access to
  */
 app.get("/knowledge-base/tool-access", async (req: Request, res: Response) => {
   console.log("[Tool Access] Request received for knowledge base tool access");
   try {
-    // Fetch all active knowledge base entries
     const allEntries = await prisma.knowledgeBase.findMany({
       where: { active: true },
       orderBy: { createdAt: "asc" },
@@ -1777,12 +1761,11 @@ app.get("/knowledge-base/tool-access", async (req: Request, res: Response) => {
       }
     });
 
-    // Organize by tool
     const toolAccess = {
       draft: {
         name: "Draft Response Generator",
         description: "AI tool that generates email draft responses to customer inquiries",
-        model: "gpt-5-mini-2025-08-07",
+        model: "gemini-3-pro-preview",
         categories: ["general", "draft-reply"],
         entries: allEntries.filter(e =>
           e.category === "general" || e.category === "draft-reply"
@@ -1797,7 +1780,7 @@ app.get("/knowledge-base/tool-access", async (req: Request, res: Response) => {
       summary: {
         name: "Conversation Summarizer",
         description: "AI tool that generates concise summaries of email conversations",
-        model: "gpt-4o-mini",
+        model: "gemini-3-pro-preview",
         categories: ["general", "summary"],
         entries: allEntries.filter(e =>
           e.category === "general" || e.category === "summary"
@@ -1811,7 +1794,7 @@ app.get("/knowledge-base/tool-access", async (req: Request, res: Response) => {
       emailExtractor: {
         name: "Email Extractor",
         description: "AI tool that extracts customer emails from forwarded messages",
-        model: "gpt-4",
+        model: "gemini-3-pro-preview",
         categories: [],
         entries: [],
         capabilities: [
@@ -1823,7 +1806,7 @@ app.get("/knowledge-base/tool-access", async (req: Request, res: Response) => {
       kbWriter: {
         name: "Knowledge Base Writer",
         description: "AI assistant for creating new knowledge base content",
-        model: "gpt-4",
+        model: "gemini-3-pro-preview",
         categories: [],
         entries: [],
         capabilities: [
@@ -1835,7 +1818,7 @@ app.get("/knowledge-base/tool-access", async (req: Request, res: Response) => {
       kbEditor: {
         name: "Knowledge Base Editor",
         description: "AI assistant for improving existing knowledge base content",
-        model: "gpt-4",
+        model: "gemini-3-pro-preview",
         categories: [],
         entries: [],
         capabilities: [
@@ -1846,7 +1829,6 @@ app.get("/knowledge-base/tool-access", async (req: Request, res: Response) => {
       }
     };
 
-    console.log(`[Tool Access] Returning tool access data with ${allEntries.length} total KB entries`);
     res.json(toolAccess);
   } catch (error) {
     console.error("[Tool Access] Error fetching tool access:", error);
@@ -1857,9 +1839,9 @@ app.get("/knowledge-base/tool-access", async (req: Request, res: Response) => {
   }
 });
 
-// ============================================================================
+// ============================================================================ 
 // ONBOARDING & TRAINING ENDPOINTS
-// ============================================================================
+// ============================================================================ 
 
 // Get all onboarding sections
 app.get("/onboarding/sections", async (req: Request, res: Response) => {
@@ -2478,9 +2460,9 @@ app.get("/analytics/users", async (req: Request, res: Response) => {
   }
 });
 
-// ============================================================================
-// AI ENDPOINTS
-// ============================================================================
+// ============================================================================ 
+// AI ENDPOINTS (MIGRATED TO GEMINI)
+// ============================================================================ 
 
 /**
  * Extract customer email from email content using AI
@@ -2495,8 +2477,9 @@ app.post("/ai/extract-email", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "fromEmail and emailBody are required" });
     }
 
-    // System prompt for email extraction
-    const systemPrompt = `You are an email extraction specialist. Your ONLY job is to extract a customer email address from the provided email content.
+    const model = genAI.getGenerativeModel({ model: "gemini-3-pro-preview" });
+    
+    const prompt = `You are an email extraction specialist. Your ONLY job is to extract a customer email address from the provided email content.
 
 CRITICAL RULES:
 1. Return ONLY the email address - no other text, no explanation, no quotes
@@ -2509,10 +2492,7 @@ SPECIAL CASES:
 - For emails FROM mailer@shopify.com: Look for customer email in the body text
 - For order confirmations: Find the customer's email in "Customer email:" or similar fields
 
-OUTPUT FORMAT: customer@example.com (Just the email, nothing else)`;
-
-    // Prepare user message
-    const userMessage = `Extract the customer email from this email:
+Extract the customer email from this email:
 
 From: ${fromEmail}
 Subject: ${subject}
@@ -2520,18 +2500,8 @@ Subject: ${subject}
 Body:
 ${emailBody}`;
 
-    // Call OpenAI API
-    const response = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage }
-      ],
-      temperature: 0,
-      max_tokens: 50
-    });
-
-    const extractedEmail = response.choices[0].message.content?.trim() || 'NONE';
+    const result = await model.generateContent(prompt);
+    const extractedEmail = result.response.text().trim() || 'NONE';
 
     res.json({ email: extractedEmail });
   } catch (error) {
@@ -2549,13 +2519,14 @@ ${emailBody}`;
  */
 app.post("/ai/write-kb", async (req: Request, res: Response) => {
   try {
-    const { prompt, category, existingContent } = req.body;
+    const { prompt: userPrompt, category, existingContent } = req.body;
 
-    if (!prompt) {
+    if (!userPrompt) {
       return res.status(400).json({ error: "prompt is required" });
     }
 
-    // System prompt tailored for KB writing
+    const model = genAI.getGenerativeModel({ model: "gemini-3-pro-preview" });
+
     const systemPrompt = `You are a professional knowledge base content writer for Outlight, a lighting products company. Your role is to create clear, accurate, and helpful knowledge base articles for customer support.
 
 WRITING GUIDELINES:
@@ -2576,24 +2547,14 @@ CATEGORY GUIDANCE:
 OUTPUT:
 Return ONLY the knowledge base content itself - no meta-commentary, no "here is...", no quotes around it. Just the content that will be saved to the knowledge base.`;
 
-    let userMessage = `Write knowledge base content based on this request:\n\n${prompt}`;
+    let fullPrompt = `${systemPrompt}\n\nWrite knowledge base content based on this request:\n\n${userPrompt}`;
 
     if (existingContent) {
-      userMessage += `\n\nExisting content to build upon or reference:\n${existingContent}`;
+      fullPrompt += `\n\nExisting content to build upon or reference:\n${existingContent}`;
     }
 
-    // Call OpenAI API
-    const response = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage }
-      ],
-      temperature: 0.7,
-      max_tokens: 1000
-    });
-
-    const content = response.choices[0].message.content?.trim() || '';
+    const result = await model.generateContent(fullPrompt);
+    const content = result.response.text().trim();
 
     res.json({ content });
   } catch (error) {
@@ -2618,9 +2579,9 @@ app.post("/ai/edit-kb", async (req: Request, res: Response) => {
     }
 
     const editingInstructions = instructions || "Improve clarity, grammar, and professional tone";
+    const model = genAI.getGenerativeModel({ model: "gemini-3-pro-preview" });
 
-    // System prompt tailored for KB editing
-    const systemPrompt = `You are a professional editor for Outlight's customer support knowledge base. Your role is to improve existing knowledge base content while maintaining accuracy and intent.
+    const prompt = `You are a professional editor for Outlight's customer support knowledge base. Your role is to improve existing knowledge base content while maintaining accuracy and intent.
 
 EDITING PRINCIPLES:
 1. Preserve the original meaning and facts
@@ -2637,22 +2598,14 @@ CONTEXT:
 - Editing goal: ${editingInstructions}
 
 OUTPUT:
-Return ONLY the improved knowledge base content - no meta-commentary, no explanations of changes, no "here is the edited version". Just the edited content itself.`;
+Return ONLY the improved knowledge base content - no meta-commentary, no explanations of changes, no "here is the edited version". Just the edited content itself.
 
-    const userMessage = `Edit this knowledge base content:\n\n${content}`;
+Edit this knowledge base content:
 
-    // Call OpenAI API
-    const response = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage }
-      ],
-      temperature: 0.3,  // Lower temperature for editing to stay closer to original
-      max_tokens: 1500
-    });
+${content}`;
 
-    const improvedContent = response.choices[0].message.content?.trim() || '';
+    const result = await model.generateContent(prompt);
+    const improvedContent = result.response.text().trim();
 
     res.json({ content: improvedContent });
   } catch (error) {
@@ -2663,9 +2616,9 @@ Return ONLY the improved knowledge base content - no meta-commentary, no explana
   }
 });
 
-// ============================================================================
+// ============================================================================ 
 // SHOPIFY API ENDPOINTS
-// ============================================================================
+// ============================================================================ 
 
 /**
  * Test Shopify connection
@@ -2953,7 +2906,7 @@ app.get("/tracking/:trackingNumber", async (req: Request, res: Response) => {
         "17token": apiKey,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify([{
+      body: JSON.stringify([{ 
         number: trackingNumber
       }]),
     });
@@ -3001,7 +2954,7 @@ app.get("/tracking/:trackingNumber", async (req: Request, res: Response) => {
         "17token": apiKey,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify([{
+      body: JSON.stringify([{ 
         number: trackingNumber
       }]),
     });
@@ -3131,12 +3084,7 @@ app.post("/tracking/batch", async (req: Request, res: Response) => {
 });
 
 /**
- * AI Draft Functionality with Tool Access
- * POST /conversations/:id/draft
- *
- * NOTE: Knowledge base is now loaded dynamically from the database
- * Categories used: 'general' and 'draft-reply'
- * Only active entries are included
+ * AI Draft Functionality with Tool Access (Gemini Integration)
  */
 
 app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
@@ -3153,24 +3101,12 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
     console.log(`[Draft] Starting draft generation for conversation ${conversationId} (forceRegenerate: ${forceRegenerate}, hasAdditionalContext: ${!!additionalContext})`);
 
     // Check if draft already exists and return it unless forceRegenerate is true OR custom context is provided
-    // IMPORTANT: If custom context is provided, we must always regenerate to include that context
     if (!forceRegenerate && !additionalContext) {
       const existingDraft = await prisma.draftResponse.findUnique({
         where: { conversationId }
       });
 
       if (existingDraft) {
-        // Detect old drafts with URL filtering artifacts and force regeneration
-        const hasOldUrlFiltering = existingDraft.draft && (
-          existingDraft.draft.includes('[URL removed') ||
-          existingDraft.draft.includes('[url removed') ||
-          existingDraft.draft.includes('not in knowledge base')
-        );
-
-        if (hasOldUrlFiltering) {
-          console.log(`[Draft] Detected old draft with URL filtering artifacts, forcing regeneration`);
-          // Skip cache and continue to generate new draft
-        } else {
           console.log(`[Draft] Returning existing draft for conversation ${conversationId}`);
 
           // Handle old data format: convert string actionSteps to array if needed
@@ -3178,7 +3114,6 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
           if (actionSteps && typeof actionSteps === 'string') {
             // Old format: string with newlines - convert to array
             actionSteps = (actionSteps as string).split('\n').filter(s => s.trim());
-            console.log(`[Draft] Converted old string actionSteps to array format`);
           }
 
           return res.json({
@@ -3197,11 +3132,10 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
             customInstructions: (existingDraft as any).customInstructions || null,
             usedCustomContext: !!((existingDraft as any).customInstructions)
           });
-        }
       }
     }
 
-    // Load knowledge base from database (general + draft-reply categories, active only)
+    // Load knowledge base from database
     let knowledgeBaseText = "";
     try {
       const knowledgeBase = await prisma.knowledgeBase.findMany({
@@ -3222,10 +3156,7 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
             return `${categoryLabel} ${kb.title}\n\n${kb.content}`;
           })
           .join("\n\n---\n\n");
-        console.log(`[Draft] Loaded ${knowledgeBase.length} knowledge base entries from database`);
       } else {
-        console.log(`[Draft] No active knowledge base entries found, using fallback`);
-        // Fallback to basic knowledge if database is empty
         knowledgeBaseText = "No knowledge base entries configured. Please add entries in the Knowledge Base management page.";
       }
     } catch (error) {
@@ -3250,8 +3181,6 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
 
     // Build email thread context
     const emailThread = conversation.messages.map((msg: any) => {
-      // Use bodyText (plain text) if it has content, otherwise fall back to bodyHtml
-      // Check for empty/whitespace-only strings, not just falsy values
       const bodyText = msg.bodyText?.trim();
       const bodyHtml = msg.bodyHtml?.trim();
       const body = bodyText || bodyHtml || "[No message body]";
@@ -3265,531 +3194,194 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
       };
     });
 
-    // Identify the LATEST inbound message (the one we need to respond to)
     const inboundMessages = emailThread.filter(msg => msg.direction === "inbound");
     const latestInboundMessage = inboundMessages.length > 0 ? inboundMessages[inboundMessages.length - 1] : null;
 
-    // Define tools for AI to use
+    // Define tools for Gemini
     const tools = [
       {
-        type: "function",
-        function: {
-          name: "search_customer_and_orders",
-          description: "Search for a Shopify customer and their orders by email, name, or order number. Returns customer details and all their orders. Use this FIRST before analyzing the email.",
-          parameters: {
-            type: "object",
-            properties: {
-              query: {
-                type: "string",
-                description: "Email address, customer name, or order number (e.g., 'john@example.com', 'John Smith', '1001', or '#1001')"
-              }
-            },
-            required: ["query"]
-          }
+        name: "search_customer_and_orders",
+        description: "Search for a Shopify customer and their orders by email, name, or order number.",
+        parameters: {
+          type: FunctionDeclarationSchemaType.OBJECT,
+          properties: {
+            query: {
+              type: FunctionDeclarationSchemaType.STRING,
+              description: "Email address, customer name, or order number (e.g., 'john@example.com', 'John Smith', '1001', or '#1001')"
+            }
+          },
+          required: ["query"]
         }
       },
       {
-        type: "function",
-        function: {
-          name: "get_tracking_info",
-          description: "Get detailed tracking information for a package using 17track. Returns tracking status, location, and timeline.",
-          parameters: {
-            type: "object",
-            properties: {
-              tracking_number: {
-                type: "string",
-                description: "The tracking number from the order fulfillment"
-              }
-            },
-            required: ["tracking_number"]
-          }
+        name: "get_tracking_info",
+        description: "Get detailed tracking information for a package using 17track.",
+        parameters: {
+          type: FunctionDeclarationSchemaType.OBJECT,
+          properties: {
+            tracking_number: {
+              type: FunctionDeclarationSchemaType.STRING,
+              description: "The tracking number from the order fulfillment"
+            }
+          },
+          required: ["tracking_number"]
         }
       },
       {
-        type: "function",
-        function: {
-          name: "search_product",
-          description: "Search the Product Knowledge Base for detailed product information. CRITICAL: Use this tool in TWO scenarios: (1) When a customer mentions a product name, SKU, or asks product-specific questions, and (2) AFTER calling search_customer_and_orders, ALWAYS search for EVERY product found in the order's line_items to get product-specific shipping times, care instructions, warranties, specifications, and FAQs. Returns comprehensive product data that OVERRIDES general policies.",
-          parameters: {
-            type: "object",
-            properties: {
-              query: {
-                type: "string",
-                description: "Product name, SKU, or search keywords. Examples: 'Widget Pro', 'WGT001', 'blue widget'. IMPORTANT: After getting order data, search for each product title from line_items (e.g., if line_items contains 'York Pendant Light', search for 'York' or 'York Pendant Light')."
-              }
-            },
-            required: ["query"]
-          }
+        name: "search_product",
+        description: "Search the Product Knowledge Base for detailed product information.",
+        parameters: {
+          type: FunctionDeclarationSchemaType.OBJECT,
+          properties: {
+            query: {
+              type: FunctionDeclarationSchemaType.STRING,
+              description: "Product name, SKU, or search keywords."
+            }
+          },
+          required: ["query"]
         }
       }
     ];
 
-    // Build system prompt with optional additional context
-    let systemPrompt = `You are an expert AI assistant for Outlight customer support. You have been trained on the company's complete knowledge base and have access to internal tools.`;
+    // Initialize Gemini model with tools
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3-pro-preview",
+      tools: [{ functionDeclarations: tools }]
+    });
 
-    // Add additional context section if provided - THIS TAKES HIGHEST PRIORITY
-    if (additionalContext && additionalContext.trim()) {
-      systemPrompt += `
+    const chat = model.startChat({
+      history: [
+        {
+          role: "user",
+          parts: [{ text: `You are an expert AI assistant for Outlight customer support.
 
-=== HIGH-PRIORITY CUSTOMER INFORMATION (DO NOT PASTE) ===
-- This context overrides other policies when there is a conflict.
-- Extract the intent and facts, then rewrite them in your own words.
-- NEVER copy or quote this block in the customer-facing draft.
-- Do not mention "custom instructions" or any meta commentary in the draft.
-- If products are mentioned here, call search_product() for each before drafting.
-- Shape the draft around this information with clear, professional phrasing.
-
-${additionalContext}
-
-=== END HIGH-PRIORITY INFORMATION ===
-
-PRIORITY ORDER (OBEY IN THIS SEQUENCE):
-1) High-priority customer information above (interpret and integrate, do not paste)
-2) Product Knowledge Base (product facts, specs, shipping, warranty)
-3) General Knowledge Base policies
-4) Shopify order data (orders/transactions/tracking facts only)
-If any conflict arises, follow the earliest item in this list.
-`;
-    }
-
-    systemPrompt += `
-
-═══════════════════════════════════════════════════════════
-📚 KNOWLEDGE BASE - READ AND MEMORIZE ALL POLICIES
-═══════════════════════════════════════════════════════════
-
+KNOWLEDGE BASE:
 ${knowledgeBaseText}
 
-═══════════════════════════════════════════════════════════
-🛠️ AVAILABLE TOOLS
-═══════════════════════════════════════════════════════════
-
-You have access to these tools:
-1. search_customer_and_orders(query): Search Shopify by email, name, or order number. Returns customer details and order history with line_items containing product names.
-2. get_tracking_info(tracking_number): Get package tracking from 17track. Returns current status and location.
-3. search_product(query): Search Product Knowledge Base for product-specific information. 🚨 CRITICAL: ALWAYS use this after search_customer_and_orders to look up EVERY product from the order's line_items.
-
-═══════════════════════════════════════════════════════════
-📦 PRODUCT KNOWLEDGE BASE - PRIORITY OVER GENERAL POLICIES
-═══════════════════════════════════════════════════════════
-
-🚨 CRITICAL: Product-specific information ALWAYS overrides general knowledge base policies
-
-When to use search_product:
-- Customer mentions a product name (e.g., "Widget Pro", "Deluxe Package")
-- Customer asks about product specifications, features, materials, dimensions
-- Questions about shipping times, care instructions, warranties for specific products
-- Product availability, colors, sizes inquiries
-- Return/warranty policies specific to a product
-
-How to use search_product effectively:
-1. Extract the product name or SKU from customer's message
-2. Call search_product with the product name as query parameter
-3. If product found, use the returned data (shipping times, instructions, warranty info, etc.)
-4. Product data overrides general policies - if product says "5-7 days shipping", use that instead of general "3-5 days"
-5. If product not found, fall back to general knowledge base
-
-Product data includes: name, SKU, description, specifications, features, price, availability, shipping times, care instructions, warranty info, return policy, FAQs, and more.
-
-═══════════════════════════════════════════════════════════
-⚡ WORKFLOW - EXECUTE IN THIS EXACT ORDER
-═══════════════════════════════════════════════════════════
-
-Step 1: READ THE EMAIL THREAD AND IDENTIFY LATEST MESSAGE
-- ⚠️  CRITICAL: Your draft must RESPOND TO THE LATEST INBOUND MESSAGE (the most recent customer email)
-- Read the full thread for context, but your response addresses the LATEST message
-- Understand the customer's issue, tone, and urgency in their MOST RECENT message
-- Extract: customer email, order numbers, tracking numbers, dates mentioned, PRODUCT NAMES
-
-Step 2: GATHER DATA USING TOOLS (CRITICAL - FOLLOW EXACTLY)
-- FIRST: Call search_customer_and_orders with customer email or order number
-- SECOND: 🚨 MANDATORY: Extract ALL product names from the order's line_items (each item has a "title" field)
-- THIRD: 🚨 MANDATORY: For EVERY product found in line_items, call search_product(product_name)
-  * Example: If line_items contains [{"title": "York Pendant Light"}, {"title": "Aven Wall Sconce"}]
-  * You MUST call: search_product("York") AND search_product("Aven")
-  * Do NOT skip this step - product-specific data is CRITICAL for accurate responses
-- FOURTH: If customer mentions a product name in their email, also call search_product for that
-- FIFTH: If tracking numbers exist in the order data, call get_tracking_info
-- Collect ALL necessary information before proceeding to analysis
-
-Step 3: ANALYZE WITH KNOWLEDGE BASE AND PRODUCT DATA
-- 🚨 PRIORITY ORDER - USE DATA IN THIS EXACT ORDER:
-  1. FIRST: Product Knowledge Base data (from search_product tool) - HIGHEST PRIORITY
-  2. SECOND: General Knowledge Base policies
-  3. THIRD: Shopify order data (only for order details, NOT for product info)
-
-- Product KB ALWAYS overrides everything else for product-specific information
-- If Product KB has shipping time, warranty, care instructions, etc. - use ONLY that data, ignore Shopify
-- Match the issue to knowledge base categories
-- Apply ALL relevant policies (return windows, refund timelines, etc.)
-- Calculate dates carefully (30 days from DELIVERY, not order date)
-
-Step 4: DECIDE: DRAFT or ACTION STEPS
-- shouldDraft = true: Customer needs an email response (returns, order status, damaged items, etc.)
-- shouldDraft = false: Internal action needed (chargebacks, non-support, escalations)
-
-Step 5: GENERATE RESPONSE
-- For drafts: Write complete, ready-to-send email using customer's first name
-  * CRITICAL: ANSWER THE CUSTOMER'S SPECIFIC QUESTION
-  * If they ask "when will it be delivered?", provide delivery date or estimate
-  * If they ask about tracking, provide tracking status and link
-  * Don't give generic responses - address their exact question directly
-- For action steps: Provide clear numbered steps for the support agent
-- Include ALL relevant order info (order ID, dates, return window status)
-
-═══════════════════════════════════════════════════════════
-🚨 CRITICAL REQUIREMENTS
-═══════════════════════════════════════════════════════════
-
-✅ USE TOOLS FIRST: Always gather data before drafting
-✅ FOLLOW POLICIES: Apply knowledge base rules exactly
-✅ LINK POLICY - CRITICAL ENFORCEMENT:
-   ❌ NEVER hardcode or invent URLs
-   ❌ NEVER guess URL patterns or formats
-   ❌ ONLY use URLs that appear EXACTLY as written in the knowledge base articles
-   ❌ If a URL is not explicitly mentioned in the knowledge base, DO NOT use it
-   ❌ If you need tracking links, ONLY use the format specified in knowledge base
-   ❌ NEVER include generic domain links, contact pages, or other URLs not in KB
-
-   ✅ If you need to reference something without a KB-approved URL, use text only: "visit our website" or "contact support"
-✅ DATE MATH: For returns, count 30 days from DELIVERY date
-✅ PERSONALIZE: Use customer's first name in drafts
-✅ BE SPECIFIC: Include exact order numbers (#1234), dates (YYYY-MM-DD)
-✅ JSON ONLY: Your final response must be PURE JSON - no markdown, no code blocks, no explanations
-
-═══════════════════════════════════════════════════════════
-📋 OUTPUT FORMAT (STRICT JSON)
-═══════════════════════════════════════════════════════════
-
-When drafting an email (shouldDraft = true):
-{
-  "internalReasoning": "Step-by-step internal analysis",
-  "tags": ["order-status", "return"],
-  "category": "order-status",
-  "reasoning": "Customer asking about delayed shipment on order #4025",
-  "shouldDraft": true,
-  "draft": "Hi [FirstName],\\n\\nThank you for reaching out...\\n\\nBest regards,\\nOutlight Support",
-  "actionSteps": null,
-  "orderInfo": {
-    "orderId": "#4025",
-    "orderDate": "2025-10-04",
-    "deliveryDate": "2025-10-15",
-    "isWithinReturnWindow": true
-  }
-}
-
-When providing action steps (shouldDraft = false):
-{
-  "internalReasoning": "Chargeback detected, requires admin escalation",
-  "tags": ["chargeback"],
-  "category": "chargeback",
-  "reasoning": "Bank dispute - DO NOT respond to customer",
-  "shouldDraft": false,
-  "draft": null,
-  "actionSteps": [
-    "Tag conversation as 'chargeback'",
-    "Escalate to admin immediately",
-    "Gather order documentation for dispute",
-    "DO NOT contact customer directly"
-  ],
-  "orderInfo": {
-    "orderId": "#3891",
-    "orderDate": "2025-09-20",
-    "deliveryDate": "2025-09-28",
-    "isWithinReturnWindow": false
-  }
-}`;
-
-    // Initial AI call with function calling
-    const messages: any[] = [
-      {
-        role: "system",
-        content: systemPrompt
-      },
-      {
-        role: "user",
-        content: `You are now analyzing a customer support email thread. Follow the workflow exactly:
-${additionalContext && additionalContext.trim() ? `
-
-══════════════════════════════════════════════════════════════════════════════════════════════════════
-🚨 REMINDER: CUSTOM INSTRUCTIONS ARE IN EFFECT
-══════════════════════════════════════════════════════════════════════════════════════════════════════
-
-HOW TO USE THEM:
-- Treat this as high-priority guidance to interpret, not text to paste.
-- Translate the ideas into the draft in your own words with natural wording.
-- Do NOT include phrases like "custom instructions" or any system/meta text in the draft.
-- If products are mentioned, call search_product() for each before drafting.
-- When conflicts arise, prioritize this context over the knowledge base policies.
-- PRIORITY ORDER: (1) Custom instructions/context, (2) Product KB, (3) General KB, (4) Shopify order facts.
-
+${additionalContext ? `
+HIGH-PRIORITY CUSTOMER INFORMATION:
+${additionalContext}
 ` : ''}
-${latestInboundMessage ? `
-═══════════════════════════════════════════════════════════
-🎯 LATEST MESSAGE TO RESPOND TO (MOST RECENT FROM CUSTOMER):
-═══════════════════════════════════════════════════════════
+
+Respond in JSON format ONLY.` }]
+        }
+      ]
+    });
+
+    // Construct message to start processing
+    const userMessage = `Analyze this email thread and generate a draft response.
+
+CUSTOMER INFO: ${conversation.customer ? `Name: ${conversation.customer.name}, Email: ${conversation.customer.primaryEmail}` : 'Unknown'}
+
+EMAIL THREAD:
+${JSON.stringify(emailThread, null, 2)}
+
+${latestInboundMessage ? `LATEST MESSAGE TO RESPOND TO:
 From: ${latestInboundMessage.from}
 Date: ${latestInboundMessage.date}
 Subject: ${latestInboundMessage.subject}
+${latestInboundMessage.body}` : ''}
 
-${latestInboundMessage.body}
+INSTRUCTIONS:
+1. Use tools to gather data (search_customer_and_orders, get_tracking_info, search_product).
+2. Apply knowledge base policies.
+3. Generate a JSON response with: internalReasoning, tags, category, reasoning, shouldDraft, draft (or actionSteps), and orderInfo.
+`;
 
-⚠️  YOUR DRAFT MUST RESPOND TO THIS LATEST MESSAGE ABOVE ⚠️
-` : ''}
+    let result = await chat.sendMessage(userMessage);
+    let response = result.response;
+    let functionCalls = response.functionCalls();
 
-═══════════════════════════════════════════════════════════
-📧 FULL EMAIL THREAD (FOR CONTEXT):
-═══════════════════════════════════════════════════════════
-${JSON.stringify(emailThread, null, 2)}
-
-═══════════════════════════════════════════════════════════
-👤 CUSTOMER INFO:
-═══════════════════════════════════════════════════════════
-${conversation.customer ? `Name: ${conversation.customer.name}, Email: ${conversation.customer.primaryEmail}` : 'Unknown customer'}
-
-Remember:
-1. ${latestInboundMessage ? '⚠️  RESPOND TO THE LATEST MESSAGE SHOWN ABOVE - not the first message in the thread' : 'Read all messages'}
-2. Use search_customer_and_orders to get order data
-3. Use get_tracking_info if needed
-4. Apply knowledge base policies
-5. Return ONLY pure JSON (no markdown, no code blocks)`
-      }
-    ];
-
-    let finalResult: any = null;
+    // Loop to handle function calls
     let toolCallCount = 0;
     const MAX_TOOL_CALLS = 5;
 
-    // Tool calling loop
-    while (toolCallCount < MAX_TOOL_CALLS) {
-      console.log(`[Draft] Tool call iteration ${toolCallCount + 1}/${MAX_TOOL_CALLS}`);
+    while (functionCalls && functionCalls.length > 0 && toolCallCount < MAX_TOOL_CALLS) {
+      toolCallCount++;
+      console.log(`[Draft] Handling function calls (iteration ${toolCallCount})`);
+      
+      const functionResponses = [];
 
-      // Use tools parameter for function calling phase
-      const completionParams: any = {
-        model: "gpt-5-mini-2025-08-07", // Faster, more cost-efficient version of GPT-5
-        messages,
-        // Note: GPT-5 mini supports default temperature (1)
-      };
+      for (const call of functionCalls) {
+        const name = call.name;
+        const args = call.args;
+        let functionResult;
 
-      // Only add tools if we haven't finished calling them
-      if (toolCallCount < MAX_TOOL_CALLS) {
-        completionParams.tools = tools;
-        completionParams.tool_choice = "auto";
-      } else {
-        // Force JSON output on final response
-        completionParams.response_format = { type: "json_object" };
-      }
+        console.log(`[Draft] Calling tool: ${name}`, args);
 
-      const apiCallStart = Date.now();
-      console.log(`[Draft] Making OpenAI API call (attempt ${toolCallCount + 1}, elapsed: ${((Date.now() - startTime) / 1000).toFixed(1)}s)`);
-      const completion = await openai.chat.completions.create(completionParams);
-      console.log(`[Draft] API call completed in ${((Date.now() - apiCallStart) / 1000).toFixed(1)}s`);
-      const assistantMessage = completion.choices[0].message;
-      messages.push(assistantMessage);
-
-      // Check if AI wants to call a tool
-      if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-        toolCallCount++;
-        console.log(`[Draft] Executing ${assistantMessage.tool_calls.length} tool call(s)`);
-
-        // Execute each tool call
-        for (const toolCall of assistantMessage.tool_calls) {
-          const functionName = (toolCall as any).function.name;
-          const functionArgs = JSON.parse((toolCall as any).function.arguments);
-          console.log(`[Draft] Calling function: ${functionName}`, functionArgs);
-
-          let toolResult: any = null;
-
-          if (functionName === "search_customer_and_orders") {
-            try {
-              toolResult = await shopify.searchCustomerAndOrders(functionArgs.query);
-              console.log(`[Draft] Shopify search result:`, toolResult.searchType);
-            } catch (error) {
-              console.error(`[Draft] Shopify search error:`, error);
-              toolResult = { error: "Failed to search Shopify", details: String(error) };
-            }
-          } else if (functionName === "get_tracking_info") {
-            try {
-              // Register and fetch tracking from 17track
-              const registerResponse = await fetch("https://api.17track.net/track/v2.2/register", {
+        try {
+          if (name === "search_customer_and_orders") {
+            functionResult = await shopify.searchCustomerAndOrders(args.query as string);
+          } else if (name === "get_tracking_info") {
+            // Register first
+            await fetch("https://api.17track.net/track/v2.2/register", {
                 method: "POST",
                 headers: {
                   "17token": process.env.SEVENTEENTRACK_API_KEY || "",
                   "Content-Type": "application/json",
                 },
-                body: JSON.stringify([{ number: functionArgs.tracking_number }]),
-              });
-
-              // Wait a moment then fetch tracking info
-              await new Promise(resolve => setTimeout(resolve, 1000));
-
-              const trackResponse = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
+                body: JSON.stringify([{ number: args.tracking_number }]),
+            });
+            // Fetch info
+            const trackResponse = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
                 method: "POST",
                 headers: {
                   "17token": process.env.SEVENTEENTRACK_API_KEY || "",
                   "Content-Type": "application/json",
                 },
-                body: JSON.stringify([{ number: functionArgs.tracking_number }]),
-              });
-
-              toolResult = await trackResponse.json();
-              console.log(`[Draft] 17track result received`);
-            } catch (error) {
-              console.error(`[Draft] 17track error:`, error);
-              toolResult = { error: "Failed to fetch tracking", details: String(error) };
-            }
-          } else if (functionName === "search_product") {
-            try {
-              // Search Product Knowledge Base with multiple strategies
-              const queryLower = functionArgs.query.toLowerCase().trim();
-              const queryWords = queryLower.split(/\s+/).filter(w => w.length > 2); // Extract significant words
-
-              // Strategy 1: Try exact and partial name/SKU matching first
-              let products = await prisma.product.findMany({
+                body: JSON.stringify([{ number: args.tracking_number }]),
+            });
+            functionResult = await trackResponse.json();
+          } else if (name === "search_product") {
+            const query = args.query as string;
+            const products = await prisma.product.findMany({
                 where: {
                   workspaceId: conversation.workspaceId,
                   status: 'active',
                   OR: [
-                    { name: { contains: functionArgs.query, mode: 'insensitive' } },
-                    { sku: { contains: functionArgs.query, mode: 'insensitive' } },
-                    { aiSearchKeywords: { has: queryLower } },
-                    { tags: { has: queryLower } },
-                    { description: { contains: functionArgs.query, mode: 'insensitive' } },
-                    // Also try matching variant titles if they exist
-                    { variants: { array_contains: [{ title: queryLower }] } }
+                    { name: { contains: query, mode: 'insensitive' } },
+                    { sku: { contains: query, mode: 'insensitive' } },
+                    { tags: { has: query } }
                   ]
                 },
-                take: 5,
-                orderBy: { name: 'asc' }
-              });
-
-              // Strategy 2: If no results and query has multiple words, try searching by individual words
-              if (products.length === 0 && queryWords.length > 0) {
-                console.log(`[Draft] Product search: No exact matches for "${functionArgs.query}", trying word-based search with words:`, queryWords);
-
-                // Build OR conditions for each significant word
-                const wordConditions = queryWords.flatMap(word => [
-                  { name: { contains: word, mode: 'insensitive' as const } },
-                  { description: { contains: word, mode: 'insensitive' as const } },
-                  { aiSearchKeywords: { has: word } },
-                  { tags: { has: word } }
-                ]);
-
-                products = await prisma.product.findMany({
-                  where: {
-                    workspaceId: conversation.workspaceId,
-                    status: 'active',
-                    OR: wordConditions
-                  },
-                  take: 5,
-                  orderBy: { name: 'asc' }
-                });
-              }
-
-              if (products.length === 0) {
-                toolResult = {
-                  found: false,
-                  message: `No products found matching "${functionArgs.query}". This product may not be in the Product Knowledge Base yet. IMPORTANT: You should still help the customer using the Shopify order data and general knowledge base. If the customer is asking for product specifications (bulb type, voltage, dimensions, etc.), acknowledge that specific product documentation is not available and ask the customer to provide any details from their order confirmation or product packaging, OR offer to send detailed specifications separately.`,
-                  query: functionArgs.query,
-                  searchedWords: queryWords
-                };
-                console.log(`[Draft] Product search: No results for "${functionArgs.query}" (searched words: ${queryWords.join(', ')})`);
-              } else {
-                // Format for AI consumption - only include relevant fields
-                const formattedProducts = products.map(p => ({
-                  name: p.name,
-                  sku: p.sku,
-                  category: p.category,
-                  description: p.description,
-                  specifications: p.specifications,
-                  features: p.features,
-                  price: p.price,
-                  variants: p.variants, // Include variants with different prices
-                  availabilityStatus: p.availabilityStatus,
-                  shippingTime: p.shippingTime,
-                  shippingRestrictions: p.shippingRestrictions,
-                  instructions: p.instructions,
-                  careInstructions: p.careInstructions,
-                  warrantyInfo: p.warrantyInfo,
-                  returnPolicy: p.returnPolicy,
-                  faqs: p.faqs
-                }));
-
-                toolResult = {
-                  found: true,
-                  products: formattedProducts,
-                  count: products.length,
-                  message: `Found ${products.length} product(s) matching "${functionArgs.query}". SUCCESS! Use this product-specific data (shipping times, instructions, specifications, warranty, FAQs) - it OVERRIDES general knowledge base policies. Product names found: ${products.map(p => p.name).join(', ')}`
-                };
-                console.log(`[Draft] Product search: ✅ Found ${products.length} product(s) for "${functionArgs.query}":`, products.map(p => p.name).join(', '));
-              }
-            } catch (error) {
-              console.error(`[Draft] Product search error:`, error);
-              toolResult = {
-                error: "Failed to search products",
-                details: String(error),
-                message: "Product search failed. Use general knowledge base."
-              };
-            }
+                take: 5
+            });
+            functionResult = { found: products.length > 0, products, count: products.length };
           }
-
-          // Add tool result to messages
-          messages.push({
-            role: "tool",
-            tool_call_id: toolCall.id,
-            content: JSON.stringify(toolResult)
-          });
+        } catch (err) {
+          console.error(`[Draft] Tool execution error:`, err);
+          functionResult = { error: String(err) };
         }
 
-        // Continue loop to get next response
-        continue;
-      } else {
-        // No more tool calls - AI is done, parse the final response
-        console.log(`[Draft] AI finished, parsing final response`);
-        try {
-          finalResult = JSON.parse(assistantMessage.content || "{}");
-          console.log(`[Draft] Successfully parsed JSON result`);
-        } catch (error) {
-          console.error(`[Draft] JSON parse error:`, error);
-          console.error(`[Draft] Raw content:`, assistantMessage.content);
-          // If not JSON, wrap it
-          finalResult = {
-            reasoning: assistantMessage.content,
-            error: "AI did not return valid JSON"
-          };
-        }
-        break;
+        functionResponses.push({
+          functionResponse: {
+            name: name,
+            response: functionResult
+          }
+        });
       }
+
+      // Send function results back to model
+      result = await chat.sendMessage(functionResponses);
+      response = result.response;
+      functionCalls = response.functionCalls();
     }
 
-    // If we hit max iterations without getting a final result, make one more call with JSON mode
-    if (!finalResult && toolCallCount >= MAX_TOOL_CALLS) {
-      console.log(`[Draft] Max tool calls reached (elapsed: ${((Date.now() - startTime) / 1000).toFixed(1)}s), requesting final JSON response`);
-      messages.push({
-        role: "user",
-        content: "Please provide the final response in the required JSON format."
-      });
-
-      const finalApiCallStart = Date.now();
-      const finalCompletion = await openai.chat.completions.create({
-        model: "gpt-5-mini-2025-08-07", // Faster, more cost-efficient version of GPT-5
-        messages,
-        response_format: { type: "json_object" }
-      });
-      console.log(`[Draft] Final API call completed in ${((Date.now() - finalApiCallStart) / 1000).toFixed(1)}s`);
-
-      try {
-        finalResult = JSON.parse(finalCompletion.choices[0].message.content || "{}");
-      } catch (error) {
-        console.error(`[Draft] Final JSON parse error:`, error);
-        finalResult = {
-          reasoning: "Failed to generate proper response",
-          error: "Maximum iterations reached without valid JSON"
-        };
-      }
+    // Get final text response
+    const finalText = response.text();
+    
+    // Clean markdown code blocks if present
+    const jsonString = finalText.replace(/^```json\n|\n```$/g, '').trim();
+    
+    let finalResult;
+    try {
+      finalResult = JSON.parse(jsonString);
+    } catch (e) {
+      console.error("[Draft] Failed to parse JSON response:", finalText);
+      throw new Error("AI returned invalid JSON");
     }
 
-    // Update conversation tags if new tags were added
+    // Update conversation tags
     if (finalResult.tags && finalResult.tags.length > 0) {
       const uniqueTags = Array.from(new Set([...(conversation.tags || []), ...finalResult.tags]));
       await prisma.conversation.update({
@@ -3798,42 +3390,33 @@ Remember:
       });
     }
 
-    // Save draft to database for persistence
-    try {
-      await prisma.draftResponse.upsert({
-        where: { conversationId },
-        create: {
-          conversationId,
-          internalReasoning: finalResult.internalReasoning || null,
-          tags: finalResult.tags || [],
-          category: finalResult.category || null,
-          reasoning: finalResult.reasoning || null,
-          shouldDraft: finalResult.shouldDraft || false,
-          draft: finalResult.draft || null,
-          actionSteps: finalResult.actionSteps || null,
-          orderInfo: finalResult.orderInfo || null,
-          customInstructions: additionalContext || null
-        },
-        update: {
-          internalReasoning: finalResult.internalReasoning || null,
-          tags: finalResult.tags || [],
-          category: finalResult.category || null,
-          reasoning: finalResult.reasoning || null,
-          shouldDraft: finalResult.shouldDraft || false,
-          draft: finalResult.draft || null,
-          actionSteps: finalResult.actionSteps || null,
-          orderInfo: finalResult.orderInfo || null,
-          customInstructions: additionalContext || null
-        }
-      });
-      console.log(`[Draft] Saved draft to database for conversation ${conversationId}${additionalContext ? ' (with custom instructions)' : ''}`);
-    } catch (error) {
-      console.error("[Draft] Error saving draft to database:", error);
-      // Don't fail the request if draft save fails
-    }
-
-    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[Draft] ✅ Draft generation completed in ${totalTime}s (${toolCallCount} tool calls)`);
+    // Save draft to database
+    await prisma.draftResponse.upsert({
+      where: { conversationId },
+      create: {
+        conversationId,
+        internalReasoning: finalResult.internalReasoning || null,
+        tags: finalResult.tags || [],
+        category: finalResult.category || null,
+        reasoning: finalResult.reasoning || null,
+        shouldDraft: finalResult.shouldDraft || false,
+        draft: finalResult.draft || null,
+        actionSteps: finalResult.actionSteps || null,
+        orderInfo: finalResult.orderInfo || null,
+        customInstructions: additionalContext || null
+      },
+      update: {
+        internalReasoning: finalResult.internalReasoning || null,
+        tags: finalResult.tags || [],
+        category: finalResult.category || null,
+        reasoning: finalResult.reasoning || null,
+        shouldDraft: finalResult.shouldDraft || false,
+        draft: finalResult.draft || null,
+        actionSteps: finalResult.actionSteps || null,
+        orderInfo: finalResult.orderInfo || null,
+        customInstructions: additionalContext || null
+      }
+    });
 
     res.json({
       ...finalResult,
@@ -3843,9 +3426,9 @@ Remember:
       fromDatabase: false,
       usedCustomContext: !!(additionalContext && additionalContext.trim())
     });
+
   } catch (error) {
-    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.error(`[Draft] ❌ Error generating draft after ${totalTime}s:`, error);
+    console.error(`[Draft] Error generating draft:`, error);
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to generate draft"
     });
@@ -3876,9 +3459,9 @@ app.delete("/conversations/:id/draft", async (req: Request, res: Response) => {
   }
 });
 
-// ============================================================================
-// STANDALONE DRAFT ENDPOINTS - External Email Draft Tool
-// ============================================================================
+// ============================================================================ 
+// STANDALONE DRAFT ENDPOINTS
+// ============================================================================ 
 
 // Get all standalone drafts (with pagination and filtering)
 app.get("/standalone-drafts", async (req: Request, res: Response) => {
@@ -4054,49 +3637,49 @@ async function processStandaloneDraft(draftId: string) {
     }
 
     // Load knowledge base (same as conversation drafts)
-    const knowledgeBase = await prisma.knowledgeBase.findMany({
-      where: {
-        active: true,
-        OR: [
-          { category: "general" },
-          { category: "draft-reply" },
-        ],
-      },
-      orderBy: { createdAt: "asc" },
-    });
-
     let knowledgeBaseText = "";
-    if (knowledgeBase.length > 0) {
-      knowledgeBaseText = knowledgeBase
-        .map(kb => {
-          const categoryLabel = kb.category === "general" ? "[GENERAL]" : "[DRAFT-SPECIFIC]";
-          return `${categoryLabel} ${kb.title}\n\n${kb.content}`;
-        })
-        .join("\n\n---\n\n");
+    try {
+      const knowledgeBase = await prisma.knowledgeBase.findMany({
+        where: {
+          active: true,
+          OR: [
+            { category: "general" },
+            { category: "draft-reply" },
+          ],
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      if (knowledgeBase.length > 0) {
+        knowledgeBaseText = knowledgeBase
+          .map(kb => {
+            const categoryLabel = kb.category === "general" ? "[GENERAL]" : "[DRAFT-SPECIFIC]";
+            return `${categoryLabel} ${kb.title}\n\n${kb.content}`;
+          })
+          .join("\n\n---\n\n");
+      }
+    } catch (error) {
+      console.error(`[StandaloneDraft ${draftId}] Error loading knowledge base:`, error);
+      knowledgeBaseText = "Error loading knowledge base. Using basic guidelines.";
     }
 
     // Build system prompt (identical to conversation draft for consistency)
-    let systemPrompt = `You are an expert AI assistant for Outlight customer support. You have been trained on the company's complete knowledge base and have access to internal tools.
+    let systemPrompt = `You are an expert AI assistant for Outlight customer support.
 
-═══════════════════════════════════════════════════════════
-📧 EMAIL INFORMATION
-═══════════════════════════════════════════════════════════
+KNOWLEDGE BASE:
+${knowledgeBaseText}
 
-Subject: ${draft.subject}
-
-Email Body:
-${draft.emailBody}
-
-${draft.contextNotes ? `Additional Context/Notes:\n${draft.contextNotes}\n` : ''}
+${draft.contextNotes ? `Additional Context/Notes:
+${draft.contextNotes}
+` : ''}
 `;
 
     // Add custom instructions if provided (HIGHEST PRIORITY)
     if (draft.customInstructions && draft.customInstructions.trim()) {
       systemPrompt += `
 
-═══════════════════════════════════════════════════════════
 🔴 CRITICAL: CUSTOM CONTEXT & GUIDANCE - HIGHEST PRIORITY
-═══════════════════════════════════════════════════════════
+🔴
 
 ⚠️  IMPORTANT: The information below is CONTEXTUAL GUIDANCE to help you craft a better response.
 ⚠️  Do NOT copy or insert this text directly into the email.
@@ -4115,9 +3698,7 @@ WHAT TO DO WITH THIS INFORMATION:
 CUSTOM CONTEXT PROVIDED:
 ${draft.customInstructions}
 
-═══════════════════════════════════════════════════════════
-END OF CUSTOM CONTEXT
-═══════════════════════════════════════════════════════════
+🔴 END OF CUSTOM CONTEXT
 
 CRITICAL REMINDERS:
 1. The above context is GUIDANCE - craft a professional email using this information as your source of truth
@@ -4152,201 +3733,14 @@ END OF KNOWLEDGE BASE
 ═══════════════════════════════════════════════════════════
 
 You have access to these tools:
-1. search_customer_and_orders(query): Search Shopify by email, name, or order number. Returns customer details and order history with line_items containing product names.
-2. get_tracking_info(tracking_number): Get package tracking from 17track. Returns current status and location.
-3. search_product(query): Search Product Knowledge Base for product-specific information. 🚨 CRITICAL: ALWAYS use this after search_customer_and_orders to look up EVERY product from the order's line_items.
-
-═══════════════════════════════════════════════════════════
-📦 PRODUCT KNOWLEDGE BASE - PRIORITY OVER GENERAL POLICIES
-═══════════════════════════════════════════════════════════
-
-🚨 CRITICAL: Product-specific information ALWAYS overrides general knowledge base policies
-
-When to use search_product:
-- Customer mentions a product name (e.g., "York", "Aven", "Deluxe Package")
-- Customer asks about product specifications, features, materials, dimensions
-- Questions about shipping times, care instructions, warranties for specific products
-- Product availability, colors, sizes inquiries
-- MANDATORY: After getting Shopify order data, search for EVERY product in line_items
-
-How to use search_product effectively:
-1. Extract product names from order line_items OR customer's email
-2. Call search_product with the product name as query parameter
-3. If product found, use the returned data (shipping times, instructions, warranty info, specifications, etc.)
-4. Product data overrides general policies - if product says "5-7 days shipping", use that instead of general policy
-5. If product not found, fall back to general knowledge base
-
-═══════════════════════════════════════════════════════════
-⚡ WORKFLOW - EXECUTE IN THIS EXACT ORDER
-═══════════════════════════════════════════════════════════
-
-Step 1: READ THE EMAIL
-- ⚠️  CRITICAL: Understand what the customer is SPECIFICALLY asking
-- Read the email carefully to identify their main question or issue
-- Extract: customer email, order numbers, tracking numbers, dates mentioned, PRODUCT NAMES
-- Identify the customer's tone and urgency
-
-Step 2: GATHER DATA USING TOOLS (CRITICAL - FOLLOW EXACTLY)
-- FIRST: Call search_customer_and_orders with customer email or order number
-- SECOND: 🚨 MANDATORY: Extract ALL product names from the order's line_items (each item has a "title" field)
-- THIRD: 🚨 MANDATORY: For EVERY product found in line_items, call search_product(product_name)
-  * Example: If line_items contains [{"title": "York Pendant Light"}, {"title": "Aven Wall Sconce"}]
-  * You MUST call: search_product("York") AND search_product("Aven")
-  * Do NOT skip this step - product-specific data is CRITICAL for accurate responses
-- FOURTH: If customer mentions a product name in their email, also call search_product for that
-- FIFTH: If tracking numbers exist in the order data, call get_tracking_info
-- Collect ALL necessary information before proceeding
-
-Step 3: ANALYZE WITH KNOWLEDGE BASE AND PRODUCT DATA
-- 🚨 PRIORITY ORDER - USE DATA IN THIS EXACT ORDER:
-  1. FIRST: Product Knowledge Base data (from search_product tool) - HIGHEST PRIORITY
-  2. SECOND: General Knowledge Base policies
-  3. THIRD: Shopify order data (only for order details, NOT for product info)
-
-- Product KB ALWAYS overrides everything else for product-specific information
-- If Product KB has shipping time, warranty, care instructions, etc. - use ONLY that data, ignore Shopify
-- Match the issue to knowledge base categories
-- Apply ALL relevant policies (return windows, refund timelines, etc.)
-- Calculate dates carefully (30 days from DELIVERY, not order date)
-
-Step 4: DECIDE: DRAFT or ACTION STEPS
-- shouldDraft = true: Customer needs an email response (returns, order status, damaged items, etc.)
-- shouldDraft = false: Internal action needed (chargebacks, non-support, escalations)
-
-Step 5: GENERATE RESPONSE
-- For drafts: Write complete, ready-to-send email using customer's first name
-  * CRITICAL: ANSWER THE CUSTOMER'S SPECIFIC QUESTION
-  * If they ask "when will it be delivered?", provide delivery date or estimate
-  * If they ask about tracking, provide tracking status and link
-  * Don't give generic responses - address their exact question directly
-- For action steps: Provide clear numbered steps for the support agent
-- Include ALL relevant order info (order ID, dates, return window status)
-
-═══════════════════════════════════════════════════════════
-🚨 CRITICAL REQUIREMENTS
-═══════════════════════════════════════════════════════════
-
-✅ USE TOOLS FIRST: Always gather data before drafting
-✅ FOLLOW POLICIES: Apply knowledge base rules exactly
-✅ LINK POLICY - CRITICAL ENFORCEMENT:
-   ❌ NEVER hardcode or invent URLs
-   ❌ NEVER guess URL patterns or formats
-   ❌ ONLY use URLs that appear EXACTLY as written in the knowledge base articles
-   ❌ If a URL is not explicitly mentioned in the knowledge base, DO NOT use it
-   ❌ If you need tracking links, ONLY use the format specified in knowledge base
-   ❌ NEVER include generic domain links, contact pages, or other URLs not in KB
-
-   ✅ If you need to reference something without a KB-approved URL, use text only: "visit our website" or "contact support"
-✅ DATE MATH: For returns, count 30 days from DELIVERY date
-✅ PERSONALIZE: Use customer's first name in drafts
-✅ BE SPECIFIC: Include exact order numbers (#1234), dates (YYYY-MM-DD)
-✅ JSON ONLY: Your final response must be PURE JSON - no markdown, no code blocks, no explanations
-
-═══════════════════════════════════════════════════════════
-📋 OUTPUT FORMAT (STRICT JSON)
-═══════════════════════════════════════════════════════════
-
-When drafting an email (shouldDraft = true):
-{
-  "internalReasoning": "Step-by-step internal analysis",
-  "tags": ["order-status", "return"],
-  "category": "order-status",
-  "reasoning": "Customer asking about delayed shipment on order #4025",
-  "shouldDraft": true,
-  "draft": "Hi [FirstName],\\n\\nThank you for reaching out...\\n\\nBest regards,\\nOutlight Support",
-  "actionSteps": null,
-  "orderInfo": {
-    "orderId": "#4025",
-    "orderDate": "2025-10-04",
-    "deliveryDate": "2025-10-15",
-    "isWithinReturnWindow": true
-  }
-}
-
-When providing action steps (shouldDraft = false):
-{
-  "internalReasoning": "Chargeback detected, requires admin escalation",
-  "tags": ["chargeback"],
-  "category": "chargeback",
-  "reasoning": "Bank dispute - DO NOT respond to customer",
-  "shouldDraft": false,
-  "draft": null,
-  "actionSteps": [
-    "Tag conversation as 'chargeback'",
-    "Escalate to admin immediately",
-    "Gather order documentation for dispute",
-    "DO NOT contact customer directly"
-  ],
-  "orderInfo": {
-    "orderId": "#3891",
-    "orderDate": "2025-09-20",
-    "deliveryDate": "2025-09-28",
-    "isWithinReturnWindow": false
-  }
-}
-
-═══════════════════════════════════════════════════════════
-`;
-
-    // Define tools (same as conversation draft)
-    const tools = [
-      {
-        type: "function" as const,
-        function: {
-          name: "search_customer_and_orders",
-          description: "Search for a Shopify customer and their orders using email, name, or order number. Returns customer details and all associated orders with tracking information.",
-          parameters: {
-            type: "object",
-            properties: {
-              query: {
-                type: "string",
-                description: "Email address, customer name, or order number (e.g., 'john@example.com', 'John Smith', '1001', or '#1001')"
-              }
-            },
-            required: ["query"]
-          }
-        }
-      },
-      {
-        type: "function" as const,
-        function: {
-          name: "get_tracking_info",
-          description: "Get detailed tracking information for a package using 17track. Provides current location, status, and estimated delivery.",
-          parameters: {
-            type: "object",
-            properties: {
-              tracking_number: {
-                type: "string",
-                description: "The tracking number from the order fulfillment"
-              }
-            },
-            required: ["tracking_number"]
-          }
-        }
-      },
-      {
-        type: "function" as const,
-        function: {
-          name: "search_product",
-          description: "Search the Product Knowledge Base for detailed product information. CRITICAL: Use this tool in TWO scenarios: (1) When a customer mentions a product name, SKU, or asks product-specific questions, and (2) AFTER calling search_customer_and_orders, ALWAYS search for EVERY product found in the order's line_items to get product-specific shipping times, care instructions, warranties, specifications, and FAQs. Returns comprehensive product data that OVERRIDES general policies.",
-          parameters: {
-            type: "object",
-            properties: {
-              query: {
-                type: "string",
-                description: "Product name, SKU, or search keywords. Examples: 'Widget Pro', 'WGT001', 'blue widget'. IMPORTANT: After getting order data, search for each product title from line_items (e.g., if line_items contains 'York Pendant Light', search for 'York' or 'York Pendant Light')."
-              }
-            },
-            required: ["query"]
-          }
-        }
-      }
-    ];
+1. search_customer_and_orders(query): Search Shopify by email, name, or order number.
+2. get_tracking_info(tracking_number): Get package tracking from 17track.
+3. search_product(query): Search Product Knowledge Base for product-specific information.`;
 
     // Prepare messages
     const messages: any[] = [
       { role: "system", content: systemPrompt },
-      { role: "user", content: "Please analyze this external email and generate an appropriate response draft." }
+      { role: "user", content: `Analyze this email and generate a professional response draft. Return JSON with: { draft: string, reasoning: string, tags: string[] }` }
     ];
 
     // AI generation loop (max 5 iterations)
@@ -4357,9 +3751,8 @@ When providing action steps (shouldDraft = false):
       console.log(`[StandaloneDraft ${draftId}] AI iteration ${iteration + 1}/${MAX_ITERATIONS}`);
 
       const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-4o-mini", // Fast and cost-effective
         messages,
-        tools,
         temperature: 0.7,
         max_tokens: 2000,
       });
@@ -4380,677 +3773,112 @@ When providing action steps (shouldDraft = false):
 
           let toolResult: any;
 
-          if (functionName === "search_customer_and_orders") {
-            try {
-              toolResult = await shopify.searchCustomerAndOrders(functionArgs.query);
-              console.log(`[StandaloneDraft ${draftId}] Shopify search result:`, toolResult.searchType);
-            } catch (error) {
-              toolResult = { error: "Failed to search Shopify", details: String(error) };
-            }
-          } else if (functionName === "get_tracking_info") {
-            try {
+          try {
+            if (functionName === "search_customer_and_orders") {
+              toolResult = await shopify.searchCustomerAndOrders(functionArgs.query as string);
+            } else if (functionName === "get_tracking_info") {
               // Register with 17track
-              const registerResponse = await fetch("https://api.17track.net/track/v2.2/register", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "17token": process.env.SEVENTEENTRACK_API_KEY || "",
-                },
-                body: JSON.stringify([{
-                  number: functionArgs.tracking_number
-                }]),
-              });
-
-              if (!registerResponse.ok) {
-                throw new Error(`17track registration failed: ${registerResponse.statusText}`);
-              }
-
-              // Wait for processing
-              await new Promise(resolve => setTimeout(resolve, 1000));
-
-              // Fetch tracking info
-              const trackResponse = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "17token": process.env.SEVENTEENTRACK_API_KEY || "",
-                },
-                body: JSON.stringify([{
-                  number: functionArgs.tracking_number
-                }]),
-              });
-
-              if (!trackResponse.ok) {
-                throw new Error(`17track fetch failed: ${trackResponse.statusText}`);
-              }
-
-              toolResult = await trackResponse.json();
-            } catch (error) {
-              toolResult = { error: "Failed to fetch tracking", details: String(error) };
-            }
-          } else if (functionName === "search_product") {
-            try {
-              // Search Product Knowledge Base (same logic as conversation drafts)
-              const queryLower = functionArgs.query.toLowerCase().trim();
-              const queryWords = queryLower.split(/\s+/).filter((w: string) => w.length > 2);
-
-              // Strategy 1: Try exact and partial name/SKU matching first
-              // NOTE: Standalone drafts don't have workspaceId, so we search all active products
-              // TODO: Add workspaceId to StandaloneDraft model to filter by workspace
-              let products = await prisma.product.findMany({
-                where: {
-                  // workspaceId not available for standalone drafts - search all workspaces
-                  status: 'active',
-                  OR: [
-                    { name: { contains: functionArgs.query, mode: 'insensitive' } },
-                    { sku: { contains: functionArgs.query, mode: 'insensitive' } },
-                    { aiSearchKeywords: { has: queryLower } },
-                    { tags: { has: queryLower } },
-                    { description: { contains: functionArgs.query, mode: 'insensitive' } },
-                    { variants: { array_contains: [{ title: queryLower }] } }
-                  ]
-                },
-                take: 5,
-                orderBy: { name: 'asc' }
-              });
-
-              // Strategy 2: If no results and query has multiple words, try word-based search
-              if (products.length === 0 && queryWords.length > 0) {
-                console.log(`[StandaloneDraft ${draftId}] Product search: No exact matches for "${functionArgs.query}", trying word-based search`);
-
-                const wordConditions = queryWords.flatMap((word: string) => [
-                  { name: { contains: word, mode: 'insensitive' as const } },
-                  { description: { contains: word, mode: 'insensitive' as const } },
-                  { aiSearchKeywords: { has: word } },
-                  { tags: { has: word } }
-                ]);
-
-                products = await prisma.product.findMany({
-                  where: {
-                    status: 'active',
-                    OR: wordConditions
+              await fetch("https://api.17track.net/track/v2.2/register", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "17token": process.env.SEVENTEENTRACK_API_KEY || "",
                   },
-                  take: 5,
-                  orderBy: { name: 'asc' }
-                });
-              }
-
-              if (products.length === 0) {
-                toolResult = {
-                  found: false,
-                  message: `No products found matching "${functionArgs.query}". This product may not be in the Product Knowledge Base yet. IMPORTANT: You should still help the customer using the Shopify order data and general knowledge base. If the customer is asking for product specifications (bulb type, voltage, dimensions, etc.), acknowledge that specific product documentation is not available and ask the customer to provide any details from their order confirmation or product packaging, OR offer to send detailed specifications separately.`,
-                  query: functionArgs.query,
-                  searchedWords: queryWords
-                };
-                console.log(`[StandaloneDraft ${draftId}] Product search: No results for "${functionArgs.query}"`);
-              } else {
-                const formattedProducts = products.map((p: any) => ({
-                  name: p.name,
-                  sku: p.sku,
-                  category: p.category,
-                  description: p.description,
-                  specifications: p.specifications,
-                  features: p.features,
-                  price: p.price,
-                  variants: p.variants,
-                  availabilityStatus: p.availabilityStatus,
-                  shippingTime: p.shippingTime,
-                  shippingRestrictions: p.shippingRestrictions,
-                  instructions: p.instructions,
-                  careInstructions: p.careInstructions,
-                  warrantyInfo: p.warrantyInfo,
-                  returnPolicy: p.returnPolicy,
-                  faqs: p.faqs
-                }));
-
-                toolResult = {
-                  found: true,
-                  products: formattedProducts,
-                  count: products.length,
-                  message: `Found ${products.length} product(s) matching "${functionArgs.query}". SUCCESS! Use this product-specific data (shipping times, instructions, specifications, warranty, FAQs) - it OVERRIDES general knowledge base policies. Product names found: ${products.map((p: any) => p.name).join(', ')}`
-                };
-                console.log(`[StandaloneDraft ${draftId}] Product search: ✅ Found ${products.length} product(s) for "${functionArgs.query}":`, products.map((p: any) => p.name).join(', '));
-              }
-            } catch (error) {
-              console.error(`[StandaloneDraft ${draftId}] Product search error:`, error);
-              toolResult = {
-                error: "Failed to search products",
-                details: String(error),
-                message: "Product search failed. Use general knowledge base."
-              };
+                  body: JSON.stringify([{ number: functionArgs.tracking_number }]),
+              });
+              // Fetch info
+              const trackResponse = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "17token": process.env.SEVENTEENTRACK_API_KEY || "",
+                  },
+                  body: JSON.stringify([{ number: functionArgs.tracking_number }]),
+              });
+              toolResult = await trackResponse.json();
+            } else if (functionName === "search_product") {
+              const query = functionArgs.query as string;
+              const products = await prisma.product.findMany({
+                  where: {
+                    workspaceId: conversation.workspaceId, // NOTE: workspaceId is not available for standalone drafts
+                    status: 'active',
+                    OR: [
+                      { name: { contains: query, mode: 'insensitive' } },
+                      { sku: { contains: query, mode: 'insensitive' } },
+                      { tags: { has: query } }
+                    ]
+                  },
+                  take: 5
+              });
+              toolResult = { found: products.length > 0, products, count: products.length };
             }
+          } catch (err) {
+            console.error(`[StandaloneDraft ${draftId}] Tool execution error:`, err);
+            toolResult = { error: String(err) };
           }
 
-          // Add tool result to messages
-          messages.push({
-            role: "tool",
-            tool_call_id: toolCall.id,
-            content: JSON.stringify(toolResult)
+          functionResponses.push({
+            functionResponse: {
+              name: name,
+              response: toolResult
+            }
           });
         }
 
-        // Continue loop to get AI's next response
-        continue;
+        // Send function results back to model
+        result = await chat.sendMessage(functionResponses);
+        response = result.response;
+        functionCalls = response.functionCalls();
       }
 
-      // No tool calls - check if we have final JSON response
-      if (assistantMessage.content) {
-        try {
-          // Try to parse as JSON
-          const content = assistantMessage.content.trim();
-          // Remove markdown code blocks if present
-          const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/);
-          const jsonText = jsonMatch ? jsonMatch[1] : content;
-          finalResponse = JSON.parse(jsonText);
-          console.log(`[StandaloneDraft ${draftId}] Got final JSON response`);
-          break;
-        } catch (e) {
-          console.log(`[StandaloneDraft ${draftId}] Response not JSON, continuing...`);
-        }
-      }
+      // Continue loop to get AI's next response
+      continue;
     }
 
-    // If we still don't have a response, make one final call requesting JSON
-    if (!finalResponse) {
-      console.log(`[StandaloneDraft ${draftId}] Making final JSON-only call`);
-      messages.push({
-        role: "user",
-        content: "Please provide your final response in pure JSON format (no markdown, no code blocks) matching the structure specified."
-      });
-
-      const finalCompletion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages,
-        response_format: { type: "json_object" },
-        temperature: 0.7,
-        max_tokens: 2000,
-      });
-
-      const content = finalCompletion.choices[0].message.content;
-      if (content) {
-        finalResponse = JSON.parse(content);
-      }
+    // Get final text response
+    const finalText = response.text();
+    
+    // Clean markdown code blocks if present
+    const jsonString = finalText.replace(/^```json\n|\n```$/g, '').trim();
+    
+    let finalResult;
+    try {
+      finalResult = JSON.parse(jsonString);
+    } catch (e) {
+      console.error(`[StandaloneDraft ${draftId}] Failed to parse JSON response:`, finalText);
+      throw new Error("AI returned invalid JSON");
     }
-
-    if (!finalResponse) {
-      throw new Error("Failed to get valid response from AI");
-    }
-
-    // Calculate processing time
-    const processingTime = `${((Date.now() - startTime) / 1000).toFixed(1)}s`;
 
     // Update draft with results
     await prisma.standaloneDraft.update({
       where: { id: draftId },
       data: {
         status: "completed",
-        internalReasoning: finalResponse.internalReasoning || null,
-        tags: finalResponse.tags || [],
-        category: finalResponse.category || null,
-        reasoning: finalResponse.reasoning || null,
-        shouldDraft: finalResponse.shouldDraft !== false,
-        draft: finalResponse.draft || null,
-        actionSteps: finalResponse.actionSteps || null,
-        orderInfo: finalResponse.orderInfo || null,
-        processingTime,
-        toolCallsMade: toolCallCount,
-        completedAt: new Date(),
-      },
+        draft: finalResult.draft,
+        reasoning: finalResult.reasoning,
+        tags: finalResult.tags || [],
+        completedAt: new Date()
+      }
     });
 
-    console.log(`[StandaloneDraft ${draftId}] Completed successfully in ${processingTime}`);
+    console.log(`[StandaloneDraft ${draftId}] Completed successfully`);
 
   } catch (error) {
-    console.error(`[StandaloneDraft ${draftId}] Processing failed:`, error);
-
+    console.error(`[StandaloneDraft ${draftId}] Failed:`, error);
     // Update draft with error
     await prisma.standaloneDraft.update({
       where: { id: draftId },
       data: {
         status: "failed",
-        error: error instanceof Error ? error.message : String(error),
-        completedAt: new Date(),
-      },
+        error: String(error)
+      }
     });
   }
 }
 
-// ==================== PRODUCT KNOWLEDGE BASE ENDPOINTS ====================
 
-// Get all products for a workspace
-app.get("/products", async (req: Request, res: Response) => {
-  try {
-    const { workspaceId, search, category, status } = req.query;
-
-    if (!workspaceId) {
-      return res.status(400).json({ error: "workspaceId is required" });
-    }
-
-    const where: any = {
-      workspaceId: workspaceId as string
-    };
-
-    // Search filter
-    if (search && typeof search === 'string') {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { sku: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } }
-      ];
-    }
-
-    // Category filter
-    if (category && category !== 'all') {
-      where.category = category as string;
-    }
-
-    // Status filter
-    if (status && status !== 'all') {
-      where.status = status as string;
-    }
-
-    const products = await prisma.product.findMany({
-      where,
-      orderBy: { name: 'asc' }
-    });
-
-    console.log(`[Products] Loaded ${products.length} products for workspace ${workspaceId}`);
-    res.json({ products });
-  } catch (error) {
-    console.error("[Products] Error fetching products:", error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    res.status(500).json({
-      error: "Failed to fetch products",
-      details: errorMessage
-    });
-  }
+app.listen(3001, () => {
+  console.log("Server running on http://localhost:3001");
 });
 
-// Get single product
-app.get("/products/:id", async (req: Request, res: Response) => {
-  try {
-    const product = await prisma.product.findUnique({
-      where: { id: req.params.id }
-    });
-
-    if (!product) {
-      return res.status(404).json({ error: "Product not found" });
-    }
-
-    res.json(product);
-  } catch (error) {
-    console.error("[Products] Error fetching product:", error);
-    res.status(500).json({ error: "Failed to fetch product" });
-  }
-});
-
-// Create product
-app.post("/products", async (req: Request, res: Response) => {
-  try {
-    const { workspaceId, ...productData } = req.body;
-
-    if (!workspaceId) {
-      return res.status(400).json({ error: "workspaceId is required" });
-    }
-
-    console.log("[Products] Creating product with data:", JSON.stringify({ workspaceId, ...productData }, null, 2));
-
-    const product = await prisma.product.create({
-      data: {
-        workspaceId,
-        ...productData
-      }
-    });
-
-    console.log(`[Products] Created product: ${product.name} (${product.id})`);
-    res.json(product);
-  } catch (error) {
-    console.error("[Products] Error creating product:", error);
-    // Return more detailed error for debugging
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    res.status(500).json({
-      error: "Failed to create product",
-      details: errorMessage,
-      data: req.body
-    });
-  }
-});
-
-// Update product
-app.patch("/products/:id", async (req: Request, res: Response) => {
-  try {
-    const product = await prisma.product.update({
-      where: { id: req.params.id },
-      data: req.body
-    });
-
-    console.log(`[Products] Updated product: ${product.name} (${product.id})`);
-    res.json(product);
-  } catch (error) {
-    console.error("[Products] Error updating product:", error);
-    res.status(500).json({ error: "Failed to update product" });
-  }
-});
-
-// Delete product
-app.delete("/products/:id", async (req: Request, res: Response) => {
-  try {
-    await prisma.product.delete({
-      where: { id: req.params.id }
-    });
-
-    console.log(`[Products] Deleted product: ${req.params.id}`);
-    res.json({ success: true });
-  } catch (error) {
-    console.error("[Products] Error deleting product:", error);
-    res.status(500).json({ error: "Failed to delete product" });
-  }
-});
-
-// Bulk create products
-app.post("/products/bulk-create", async (req: Request, res: Response) => {
-  try {
-    const { workspaceId, products } = req.body;
-
-    if (!workspaceId) {
-      return res.status(400).json({ error: "workspaceId is required" });
-    }
-
-    if (!Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({ error: "products array is required" });
-    }
-
-    const createdProducts = await prisma.$transaction(
-      products.map((product: any) =>
-        prisma.product.create({
-          data: {
-            workspaceId,
-            ...product
-          }
-        })
-      )
-    );
-
-    console.log(`[Products] Bulk created ${createdProducts.length} products`);
-    res.json({ products: createdProducts, count: createdProducts.length });
-  } catch (error) {
-    console.error("[Products] Error bulk creating products:", error);
-    res.status(500).json({ error: "Failed to bulk create products" });
-  }
-});
-
-// Get products statistics
-app.get("/products/stats/:workspaceId", async (req: Request, res: Response) => {
-  try {
-    const { workspaceId } = req.params;
-
-    const total = await prisma.product.count({
-      where: { workspaceId }
-    });
-
-    const active = await prisma.product.count({
-      where: { workspaceId, status: 'active' }
-    });
-
-    const incomplete = await prisma.product.count({
-      where: {
-        workspaceId,
-        OR: [
-          { description: null },
-          { shippingTime: null },
-          { price: null }
-        ]
-      }
-    });
-
-    const categories = await prisma.product.groupBy({
-      by: ['category'],
-      where: { workspaceId },
-      _count: true
-    });
-
-    res.json({
-      total,
-      active,
-      incomplete,
-      categories: categories.map(c => ({
-        name: c.category || 'Uncategorized',
-        count: c._count
-      }))
-    });
-  } catch (error) {
-    console.error("[Products] Error fetching stats:", error);
-    res.status(500).json({ error: "Failed to fetch product statistics" });
-  }
-});
-
-// Search products for AI (optimized for AI tool calling)
-app.post("/products/search-for-ai", async (req: Request, res: Response) => {
-  try {
-    const { workspaceId, query } = req.body;
-
-    if (!workspaceId || !query) {
-      return res.status(400).json({ error: "workspaceId and query are required" });
-    }
-
-    const queryLower = query.toLowerCase();
-
-    // Search by name, SKU, keywords, and tags
-    const products = await prisma.product.findMany({
-      where: {
-        workspaceId,
-        status: 'active',
-        OR: [
-          { name: { contains: query, mode: 'insensitive' } },
-          { sku: { contains: query, mode: 'insensitive' } },
-          { aiSearchKeywords: { has: queryLower } },
-          { tags: { has: queryLower } },
-          { description: { contains: query, mode: 'insensitive' } }
-        ]
-      },
-      take: 5,
-      orderBy: { name: 'asc' }
-    });
-
-    if (products.length === 0) {
-      console.log(`[Products AI Search] No products found for query: "${query}"`);
-      return res.json({
-        found: false,
-        message: "No products found matching your search. Use general knowledge base.",
-        query
-      });
-    }
-
-    // Format for AI consumption - only include relevant fields
-    const formattedProducts = products.map(p => ({
-      name: p.name,
-      sku: p.sku,
-      category: p.category,
-      description: p.description,
-      specifications: p.specifications,
-      features: p.features,
-      price: p.price,
-      availabilityStatus: p.availabilityStatus,
-      shippingTime: p.shippingTime,
-      shippingRestrictions: p.shippingRestrictions,
-      instructions: p.instructions,
-      careInstructions: p.careInstructions,
-      warrantyInfo: p.warrantyInfo,
-      returnPolicy: p.returnPolicy,
-      faqs: p.faqs
-    }));
-
-    console.log(`[Products AI Search] Found ${products.length} products for query: "${query}"`);
-    res.json({
-      found: true,
-      products: formattedProducts,
-      count: products.length
-    });
-  } catch (error) {
-    console.error("[Products AI Search] Error:", error);
-    res.status(500).json({ error: "Failed to search products" });
-  }
-});
-
-// ==========================================
-// AI ASSISTANT CHATBOT
-// ==========================================
-
-app.post("/ai-assistant/chat", async (req: Request, res: Response) => {
-  try {
-    const { message, workspaceId, history } = req.body;
-
-    console.log("[AI Assistant] Received chat request:", message);
-
-    // Fetch Knowledge Base articles
-    const kbEntries = await prisma.knowledgeBase.findMany({
-      where: { active: true },
-      select: { title: true, content: true, category: true, tags: true }
-    });
-
-    // Fetch Product Knowledge Base
-    let products: any[] = [];
-    if (workspaceId) {
-      products = await prisma.product.findMany({
-        where: {
-          workspaceId,
-          status: "active"
-        },
-        select: {
-          name: true,
-          sku: true,
-          category: true,
-          description: true,
-          features: true,
-          price: true,
-          variants: true,
-          availabilityStatus: true,
-          shippingTime: true,
-          instructions: true,
-          careInstructions: true,
-          warrantyInfo: true,
-          returnPolicy: true,
-          colors: true,
-          sizes: true,
-        },
-        take: 50
-      });
-    }
-
-    // Build context from knowledge bases
-    const kbContext = kbEntries.map(entry =>
-      `[${entry.category}] ${entry.title}\n${entry.content}`
-    ).join("\n\n---\n\n");
-
-    const productsContext = products.length > 0
-      ? products.map(p =>
-          `Product: ${p.name}${p.sku ? ` (SKU: ${p.sku})` : ""}\n` +
-          `Category: ${p.category || "N/A"}\n` +
-          `Description: ${p.description || "N/A"}\n` +
-          (p.features && p.features.length > 0 ? `Features: ${p.features.join(", ")}\n` : "") +
-          (p.price ? `Price: ${p.price}\n` : "") +
-          (p.variants && Array.isArray(p.variants) && p.variants.length > 0
-            ? `Variants:\n${p.variants.map((v: any) => `  - ${v.option}: ${v.price}${v.sku ? ` (SKU: ${v.sku})` : ""}`).join("\n")}\n`
-            : "") +
-          (p.availabilityStatus ? `Availability: ${p.availabilityStatus}\n` : "") +
-          (p.shippingTime ? `Shipping: ${p.shippingTime}\n` : "") +
-          (p.colors && p.colors.length > 0 ? `Colors: ${p.colors.join(", ")}\n` : "") +
-          (p.sizes && p.sizes.length > 0 ? `Sizes: ${p.sizes.join(", ")}\n` : "") +
-          (p.warrantyInfo ? `Warranty: ${p.warrantyInfo}\n` : "")
-        ).join("\n---\n\n")
-      : "No product data available.";
-
-    // Build conversation history
-    const conversationHistory = history && history.length > 0
-      ? history.map((msg: any) => ({
-          role: msg.role,
-          content: msg.content
-        }))
-      : [];
-
-    // Create AI Assistant prompt
-    const messages: any[] = [
-      {
-        role: "system",
-        content: `You are a helpful AI Assistant for customer support agents. Your role is to help agents quickly find information from the Knowledge Base and Product Knowledge Base.
-
-📚 GENERAL KNOWLEDGE BASE:
-${kbContext}
-
-📦 PRODUCT KNOWLEDGE BASE (PRIMARY SOURCE FOR PRODUCT INFO):
-${productsContext}
-
-🚨 CRITICAL DATA SOURCE PRIORITY:
-
-For PRODUCT INFORMATION (specs, features, shipping times, warranties, pricing, variants):
-1. **PRODUCT KNOWLEDGE BASE** - ALWAYS PRIMARY AND MOST TRUSTED SOURCE
-   - This is the single source of truth for all product details
-   - ALWAYS use Product KB data when answering product questions
-   - Product KB is manually curated and maintained by the team
-
-2. **Shopify API** - ONLY for order/transaction data, NOT for product info
-   - Use Shopify ONLY for: order status, tracking numbers, customer order history
-   - NEVER use Shopify for product details, specs, or features
-   - Product KB overrides any Shopify product data
-
-For POLICY INFORMATION (returns, refunds, shipping policies):
-- Use General Knowledge Base
-
-Instructions:
-- Answer questions clearly and concisely
-- When asked about products, ALWAYS reference the Product KB as the authoritative source
-- When asked about policies, reference the General KB
-- If you don't know something, say so - don't make up information
-- Format your responses with clear structure (bullet points, sections, etc.)
-- Be helpful and friendly to support agents
-
-You are NOT generating customer-facing email drafts. You are helping internal support agents find information quickly.`
-      },
-      ...conversationHistory,
-      {
-        role: "user",
-        content: message
-      }
-    ];
-
-    // Call OpenAI
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Fast and cost-effective
-      messages,
-      temperature: 0.7,
-      max_tokens: 1000
-    });
-
-    const response = completion.choices[0].message.content;
-    console.log("[AI Assistant] Response generated");
-
-    res.json({ response });
-  } catch (error) {
-    console.error("[AI Assistant] Error:", error);
-    res.status(500).json({ error: "AI Assistant failed" });
-  }
-});
-
-const port = process.env.PORT || 3001;
-
-// Start server immediately for fast startup
-app.listen(port, () => {
-  console.log(`✓ API server listening on http://localhost:${port}`);
-  console.log(`✓ Ready to accept requests`);
-
-  // Test database connection in background (don't block startup)
-  prisma.$connect()
-    .then(() => {
-      console.log("✓ Database connected successfully");
-    })
-    .catch((error) => {
-      console.error("✗ Warning: Database connection failed");
-      if (error instanceof Error) {
-        console.error(`  Error: ${error.message}`);
-      }
-      console.error("\nPlease check:");
-      console.error("  1. .env or .env.local file exists with DATABASE_URL");
-      console.error("  2. Database is accessible");
-      console.error("  3. Run 'npx prisma generate' and 'npx prisma db push'");
-    });
-});
+```
