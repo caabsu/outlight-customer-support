@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 // Load from .env.local first, fallback to .env
 dotenv.config({ path: ".env.local" });
 dotenv.config(); // This will load .env if .env.local doesn't exist
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, FunctionDeclarationSchemaType } from "@google/generative-ai";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
 
 import { googleAuthStart, googleAuthCallback, pollOnce } from "./gmail";
 import * as gmailMulti from "./gmail-multi";
@@ -3203,10 +3203,10 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
         name: "search_customer_and_orders",
         description: "Search for a Shopify customer and their orders by email, name, or order number.",
         parameters: {
-          type: FunctionDeclarationSchemaType.OBJECT,
+          type: SchemaType.OBJECT,
           properties: {
             query: {
-              type: FunctionDeclarationSchemaType.STRING,
+              type: SchemaType.STRING,
               description: "Email address, customer name, or order number (e.g., 'john@example.com', 'John Smith', '1001', or '#1001')"
             }
           },
@@ -3217,10 +3217,10 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
         name: "get_tracking_info",
         description: "Get detailed tracking information for a package using 17track.",
         parameters: {
-          type: FunctionDeclarationSchemaType.OBJECT,
+          type: SchemaType.OBJECT,
           properties: {
             tracking_number: {
-              type: FunctionDeclarationSchemaType.STRING,
+              type: SchemaType.STRING,
               description: "The tracking number from the order fulfillment"
             }
           },
@@ -3231,10 +3231,10 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
         name: "search_product",
         description: "Search the Product Knowledge Base for detailed product information.",
         parameters: {
-          type: FunctionDeclarationSchemaType.OBJECT,
+          type: SchemaType.OBJECT,
           properties: {
             query: {
-              type: FunctionDeclarationSchemaType.STRING,
+              type: SchemaType.STRING,
               description: "Product name, SKU, or search keywords."
             }
           },
@@ -3246,7 +3246,7 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
     // Initialize Gemini model with tools
     const model = genAI.getGenerativeModel({
       model: "gemini-3-pro-preview",
-      tools: [{ functionDeclarations: tools }]
+      tools: [{ functionDeclarations: tools as any }]
     });
 
     const chat = model.startChat({
@@ -3304,14 +3304,14 @@ INSTRUCTIONS:
 
       for (const call of functionCalls) {
         const name = call.name;
-        const args = call.args;
+        const args = call.args as any;
         let functionResult;
 
         console.log(`[Draft] Calling tool: ${name}`, args);
 
         try {
           if (name === "search_customer_and_orders") {
-            functionResult = await shopify.searchCustomerAndOrders(args.query as string);
+            functionResult = await shopify.searchCustomerAndOrders(args.query);
           } else if (name === "get_tracking_info") {
             // Register first
             await fetch("https://api.17track.net/track/v2.2/register", {
@@ -3333,7 +3333,7 @@ INSTRUCTIONS:
             });
             functionResult = await trackResponse.json();
           } else if (name === "search_product") {
-            const query = args.query as string;
+            const query = args.query;
             const products = await prisma.product.findMany({
                 where: {
                   workspaceId: conversation.workspaceId,
@@ -3615,9 +3615,6 @@ app.delete("/standalone-drafts/:id", async (req: Request, res: Response) => {
 
 // Background processing function for standalone drafts
 async function processStandaloneDraft(draftId: string) {
-  const startTime = Date.now();
-  let toolCallCount = 0;
-
   try {
     console.log(`[StandaloneDraft ${draftId}] Starting processing...`);
 
@@ -3636,7 +3633,7 @@ async function processStandaloneDraft(draftId: string) {
       throw new Error("Draft not found");
     }
 
-    // Load knowledge base (same as conversation drafts)
+    // Load knowledge base
     let knowledgeBaseText = "";
     try {
       const knowledgeBase = await prisma.knowledgeBase.findMany({
@@ -3663,7 +3660,7 @@ async function processStandaloneDraft(draftId: string) {
       knowledgeBaseText = "Error loading knowledge base. Using basic guidelines.";
     }
 
-    // Build system prompt (identical to conversation draft for consistency)
+    // Build system prompt
     let systemPrompt = `You are an expert AI assistant for Outlight customer support.
 
 KNOWLEDGE BASE:
@@ -3674,179 +3671,44 @@ ${draft.contextNotes}
 ` : ''}
 `;
 
-    // Add custom instructions if provided (HIGHEST PRIORITY)
+    // Add custom instructions if provided
     if (draft.customInstructions && draft.customInstructions.trim()) {
       systemPrompt += `
 
 🔴 CRITICAL: CUSTOM CONTEXT & GUIDANCE - HIGHEST PRIORITY
-🔴
-
-⚠️  IMPORTANT: The information below is CONTEXTUAL GUIDANCE to help you craft a better response.
-⚠️  Do NOT copy or insert this text directly into the email.
-⚠️  Translate it into polished, customer-ready language; never mention that it came from "custom instructions".
-⚠️  This context OVERRIDES any conflicting knowledge base information.
-⚠️  PRIORITY ORDER: (1) Custom context below, (2) Product KB, (3) General KB, (4) Shopify order facts.
-
-WHAT TO DO WITH THIS INFORMATION:
-• Read and understand the context provided below
-• Use it to guide the draft and weave the ideas into your own words
-• Expand on any brief points with full, professional explanations
-• Integrate the information naturally into your email
-• Add appropriate context, tone, and professionalism
-• DO NOT treat this as raw email content to paste or quote verbatim
-
-CUSTOM CONTEXT PROVIDED:
 ${draft.customInstructions}
-
-🔴 END OF CUSTOM CONTEXT
-
-CRITICAL REMINDERS:
-1. The above context is GUIDANCE - craft a professional email using this information as your source of truth
-2. This context OVERRIDES any conflicting knowledge base information
-3. 🔍 PRODUCT EXTRACTION: If the custom context mentions ANY product names (e.g., "Aven", "York", "Widget Pro"),
-   you MUST call search_product() for each product mentioned to retrieve the specific information requested
-4. Custom context often references Product KB data - ALWAYS search for mentioned products FIRST
 `;
     }
 
-    // Add knowledge base
-    if (knowledgeBaseText) {
-      systemPrompt += `
+    // Initialize Gemini Model
+    const model = genAI.getGenerativeModel({ model: "gemini-3-pro-preview" });
 
-═══════════════════════════════════════════════════════════
-📚 KNOWLEDGE BASE - READ AND MEMORIZE ALL POLICIES
-═══════════════════════════════════════════════════════════
+    // Prompt for JSON output
+    const prompt = `${systemPrompt}
 
-${knowledgeBaseText}
+Analyze this email and generate a professional response draft.
+Subject: ${draft.subject}
+Body: ${draft.emailBody}
 
-═══════════════════════════════════════════════════════════
-END OF KNOWLEDGE BASE
-═══════════════════════════════════════════════════════════
-`;
-    }
+Return JSON with: { draft: string, reasoning: string, tags: string[] }`;
 
-    // Add available tools section
-    systemPrompt += `
-
-═══════════════════════════════════════════════════════════
-🛠️ AVAILABLE TOOLS
-═══════════════════════════════════════════════════════════
-
-You have access to these tools:
-1. search_customer_and_orders(query): Search Shopify by email, name, or order number.
-2. get_tracking_info(tracking_number): Get package tracking from 17track.
-3. search_product(query): Search Product Knowledge Base for product-specific information.`;
-
-    // Prepare messages
-    const messages: any[] = [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: `Analyze this email and generate a professional response draft. Return JSON with: { draft: string, reasoning: string, tags: string[] }` }
-    ];
-
-    // AI generation loop (max 5 iterations)
-    const MAX_ITERATIONS = 5;
-    let finalResponse: any = null;
-
-    for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-      console.log(`[StandaloneDraft ${draftId}] AI iteration ${iteration + 1}/${MAX_ITERATIONS}`);
-
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini", // Fast and cost-effective
-        messages,
-        temperature: 0.7,
-        max_tokens: 2000,
-      });
-
-      const assistantMessage = completion.choices[0].message;
-      messages.push(assistantMessage);
-
-      // Check if AI wants to call tools
-      if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-        console.log(`[StandaloneDraft ${draftId}] AI requested ${assistantMessage.tool_calls.length} tool call(s)`);
-        toolCallCount += assistantMessage.tool_calls.length;
-
-        // Execute each tool call
-        for (const toolCall of assistantMessage.tool_calls) {
-          const functionName = (toolCall as any).function.name;
-          const functionArgs = JSON.parse((toolCall as any).function.arguments);
-          console.log(`[StandaloneDraft ${draftId}] Calling tool: ${functionName}`, functionArgs);
-
-          let toolResult: any;
-
-          try {
-            if (functionName === "search_customer_and_orders") {
-              toolResult = await shopify.searchCustomerAndOrders(functionArgs.query as string);
-            } else if (functionName === "get_tracking_info") {
-              // Register with 17track
-              await fetch("https://api.17track.net/track/v2.2/register", {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "17token": process.env.SEVENTEENTRACK_API_KEY || "",
-                  },
-                  body: JSON.stringify([{ number: functionArgs.tracking_number }]),
-              });
-              // Fetch info
-              const trackResponse = await fetch("https://api.17track.net/track/v2.2/gettrackinfo", {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "17token": process.env.SEVENTEENTRACK_API_KEY || "",
-                  },
-                  body: JSON.stringify([{ number: functionArgs.tracking_number }]),
-              });
-              toolResult = await trackResponse.json();
-            } else if (functionName === "search_product") {
-              const query = functionArgs.query as string;
-              const products = await prisma.product.findMany({
-                  where: {
-                    workspaceId: conversation.workspaceId, // NOTE: workspaceId is not available for standalone drafts
-                    status: 'active',
-                    OR: [
-                      { name: { contains: query, mode: 'insensitive' } },
-                      { sku: { contains: query, mode: 'insensitive' } },
-                      { tags: { has: query } }
-                    ]
-                  },
-                  take: 5
-              });
-              toolResult = { found: products.length > 0, products, count: products.length };
-            }
-          } catch (err) {
-            console.error(`[StandaloneDraft ${draftId}] Tool execution error:`, err);
-            toolResult = { error: String(err) };
-          }
-
-          functionResponses.push({
-            functionResponse: {
-              name: name,
-              response: toolResult
-            }
-          });
-        }
-
-        // Send function results back to model
-        result = await chat.sendMessage(functionResponses);
-        response = result.response;
-        functionCalls = response.functionCalls();
-      }
-
-      // Continue loop to get AI's next response
-      continue;
-    }
-
-    // Get final text response
-    const finalText = response.text();
+    const result = await model.generateContent(prompt);
+    const finalText = result.response.text();
     
     // Clean markdown code blocks if present
-    const jsonString = finalText.replace(/^```json\n|\n```$/g, '').trim();
+    const jsonString = finalText.replace(/^```json\n|\n```$/g, '').replace(/^```\n|\n```$/g, '').trim();
     
     let finalResult;
     try {
       finalResult = JSON.parse(jsonString);
     } catch (e) {
       console.error(`[StandaloneDraft ${draftId}] Failed to parse JSON response:`, finalText);
-      throw new Error("AI returned invalid JSON");
+      // Fallback if not JSON
+      finalResult = {
+        draft: finalText,
+        reasoning: "Generated without structured format due to parsing error.",
+        tags: []
+      };
     }
 
     // Update draft with results
@@ -3880,5 +3742,3 @@ You have access to these tools:
 app.listen(3001, () => {
   console.log("Server running on http://localhost:3001");
 });
-
-```
