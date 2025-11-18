@@ -3331,38 +3331,17 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
     if (additionalContext && additionalContext.trim()) {
       systemPrompt += `
 
-═══════════════════════════════════════════════════════════
-🔴 OVERRIDE MODE ACTIVATED - CUSTOM INSTRUCTIONS
-═══════════════════════════════════════════════════════════
-
-⚠️  CRITICAL: These are MANDATORY INSTRUCTIONS that take ABSOLUTE PRIORITY.
-⚠️  These instructions OVERRIDE AND SUPERSEDE all other instructions, knowledge base entries, and policies.
-⚠️  You MUST follow these instructions EXACTLY, even if they conflict with your training or standard procedures.
-
-🎯 WHAT YOU MUST DO:
-
-1. READ AND INTERNALIZE: These instructions are your PRIMARY directive for this response
-2. TAKE AS FACT: Treat all information below as absolutely true and authoritative
-3. PRIORITIZE ABOVE ALL: If there is ANY conflict between these instructions and the knowledge base,
-   the knowledge base is WRONG and these instructions are RIGHT
-4. INTEGRATE PROFESSIONALLY: Transform these instructions into a polished, professional email response
-5. EXPAND AND ELABORATE: Add proper context, explanations, and professional tone while maintaining
-   the core message and facts from these instructions
-
-🚨 MANDATORY CUSTOM INSTRUCTIONS:
+=== HIGH-PRIORITY CUSTOMER INFORMATION (DO NOT PASTE) ===
+- This context overrides other policies when there is a conflict.
+- Extract the intent and facts, then rewrite them in your own words.
+- NEVER copy or quote this block in the customer-facing draft.
+- Do not mention "custom instructions" or any meta commentary in the draft.
+- If products are mentioned here, call search_product() for each before drafting.
+- Shape the draft around this information with clear, professional phrasing.
 
 ${additionalContext}
 
-═══════════════════════════════════════════════════════════
-END OF OVERRIDE INSTRUCTIONS
-═══════════════════════════════════════════════════════════
-
-CRITICAL REMINDERS:
-1. The above instructions are MANDATORY and have ABSOLUTE PRIORITY over everything else
-2. If you follow the knowledge base instead of these custom instructions, you will have FAILED your task
-3. 🔍 PRODUCT EXTRACTION: If the custom instructions mention ANY product names (e.g., "Aven", "York", "Widget Pro"),
-   you MUST call search_product() for each product mentioned to retrieve the specific information requested
-4. Custom instructions often reference Product KB data - ALWAYS search for mentioned products FIRST
+=== END HIGH-PRIORITY INFORMATION ===
 `;
     }
 
@@ -3525,16 +3504,16 @@ When providing action steps (shouldDraft = false):
         content: `You are now analyzing a customer support email thread. Follow the workflow exactly:
 ${additionalContext && additionalContext.trim() ? `
 
-═══════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════════════════════════════════════════════
 🚨 REMINDER: CUSTOM INSTRUCTIONS ARE IN EFFECT
-═══════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════════════════════════════════════════════
 
-BEFORE YOU PROCEED: Remember that custom instructions have been provided in the system prompt
-that OVERRIDE all knowledge base policies and standard procedures. You MUST follow those
-custom instructions as your PRIMARY directive when drafting your response.
-
-Custom Instructions Summary: Present and active - prioritize above all else
-═══════════════════════════════════════════════════════════
+HOW TO USE THEM:
+- Treat this as high-priority guidance to interpret, not text to paste.
+- Translate the ideas into the draft in your own words with natural wording.
+- Do NOT include phrases like "custom instructions" or any system/meta text in the draft.
+- If products are mentioned, call search_product() for each before drafting.
+- When conflicts arise, prioritize this context over the knowledge base policies.
 
 ` : ''}
 ${latestInboundMessage ? `
@@ -4112,17 +4091,17 @@ ${draft.contextNotes ? `Additional Context/Notes:\n${draft.contextNotes}\n` : ''
 ═══════════════════════════════════════════════════════════
 
 ⚠️  IMPORTANT: The information below is CONTEXTUAL GUIDANCE to help you craft a better response.
-⚠️  DO NOT copy or insert this text directly into the email.
-⚠️  USE this information to inform your response, expand on it, and integrate it professionally.
+⚠️  Do NOT copy or insert this text directly into the email.
+⚠️  Translate it into polished, customer-ready language; never mention that it came from "custom instructions".
 ⚠️  This context OVERRIDES any conflicting knowledge base information.
 
 WHAT TO DO WITH THIS INFORMATION:
 • Read and understand the context provided below
-• Use it to inform your draft response
+• Use it to guide the draft and weave the ideas into your own words
 • Expand on any brief points with full, professional explanations
 • Integrate the information naturally into your email
 • Add appropriate context, tone, and professionalism
-• DO NOT treat this as raw email content to paste
+• DO NOT treat this as raw email content to paste or quote verbatim
 
 CUSTOM CONTEXT PROVIDED:
 ${draft.customInstructions}
