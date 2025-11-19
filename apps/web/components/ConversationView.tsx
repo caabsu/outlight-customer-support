@@ -1216,36 +1216,123 @@ export default function ConversationView() {
       {/* Related Conversations Modal */}
       {showRelatedModal && (
         <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl h-[80vh] flex flex-col">
-            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
-              <h3 className="text-lg font-bold text-slate-800">Related Conversations</h3>
-              <button onClick={() => setShowRelatedModal(false)} className="p-1 hover:bg-slate-200 rounded-full text-slate-500">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                   <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                   Related Conversations
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">History for {selectedConversation.customer.primaryEmail}</p>
+              </div>
+              <button onClick={() => setShowRelatedModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+
+            {/* Bulk Actions Toolbar */}
+            <div className="p-3 bg-white border-b border-slate-200 flex items-center gap-3">
+               <div className="flex items-center gap-2 mr-4 border-r border-slate-200 pr-4">
+                  <input 
+                     type="checkbox" 
+                     className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                     checked={history.length > 0 && selectedRelatedIds.size === history.length}
+                     onChange={(e) => {
+                        if (e.target.checked) setSelectedRelatedIds(new Set(history.map(h => h.id)));
+                        else setSelectedRelatedIds(new Set());
+                     }}
+                  />
+                  <span className="text-xs font-medium text-slate-600">{selectedRelatedIds.size} Selected</span>
+               </div>
+               
+               <button 
+                  onClick={handleMergeRelatedConversations}
+                  disabled={selectedRelatedIds.size < 2 || mergingRelated}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-300 text-slate-700 rounded-lg text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+               >
+                  <svg className="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                  Merge Threads
+               </button>
+
+               <button 
+                  onClick={() => {
+                     Array.from(selectedRelatedIds).forEach(id => handleMarkRelatedNonSupport(id, { stopPropagation: () => {} } as any));
+                  }}
+                  disabled={selectedRelatedIds.size === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+               >
+                  <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                  Mark Non-CS
+               </button>
+
+               <button 
+                  onClick={() => {
+                     Array.from(selectedRelatedIds).forEach(id => handleResolveRelated(id, { stopPropagation: () => {} } as any));
+                  }}
+                  disabled={selectedRelatedIds.size === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-green-50 hover:border-green-200 text-slate-700 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+               >
+                  <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  Resolve
+               </button>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto p-4 bg-slate-50 space-y-3">
                {history.map(h => (
-                  <div key={h.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 group">
-                     <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                           <span className="font-semibold text-sm text-slate-900 truncate">{h.subject || "(No Subject)"}</span>
-                           {h.id === selectedConversation.id && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Current</span>}
+                  <div 
+                     key={h.id} 
+                     className={`flex items-start gap-3 p-4 bg-white border rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer ${selectedRelatedIds.has(h.id) ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50/10' : 'border-slate-200'}`}
+                     onClick={() => toggleRelatedSelection(h.id)}
+                  >
+                     <input 
+                        type="checkbox" 
+                        checked={selectedRelatedIds.has(h.id)}
+                        onChange={() => toggleRelatedSelection(h.id)}
+                        className="mt-1 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0"
+                     />
+                     
+                     <div className="flex-1 min-w-0" onClick={(e) => { e.stopPropagation(); selectConversation(h.id); setShowRelatedModal(false); }}>
+                        <div className="flex justify-between items-start mb-1">
+                           <h4 className={`text-sm font-semibold truncate pr-4 ${h.id === selectedConversation.id ? 'text-blue-600' : 'text-slate-900'}`}>
+                              {h.subject || "(No Subject)"}
+                              {h.id === selectedConversation.id && <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded-full">Current</span>}
+                           </h4>
+                           <span className="text-xs text-slate-500 whitespace-nowrap">{formatDate(h.lastMessageAt)}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
-                           <span>{formatDate(h.lastMessageAt)}</span>
-                           <div className="flex gap-1 items-center">
-                              {h.userTags?.includes("non-customer-support") && <span className="px-1 bg-gray-200 rounded text-gray-600 text-[10px]">Non-CS</span>}
-                              {h.archived && <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded">Resolved</span>}
-                           </div>
+                        
+                        <p className="text-xs text-slate-600 line-clamp-2 mb-2">
+                           {h.messages[0]?.bodyText || "No preview available..."}
+                        </p>
+                        
+                        <div className="flex items-center gap-2">
+                           {h.userTags?.map(tag => (
+                              <span key={tag} className={`text-[10px] px-2 py-0.5 rounded-full border ${tag === 'non-customer-support' ? 'bg-gray-100 text-gray-600 border-gray-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                                 {tag}
+                              </span>
+                           ))}
+                           {h.archived && <span className="text-[10px] px-2 py-0.5 bg-green-50 text-green-700 border border-green-100 rounded-full flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Resolved</span>}
+                           {h.needsReply && <span className="text-[10px] px-2 py-0.5 bg-orange-50 text-orange-700 border border-orange-100 rounded-full">Needs Reply</span>}
                         </div>
                      </div>
-                     <div className="flex items-center gap-2 ml-4">
-                        <button onClick={() => { selectConversation(h.id); setShowRelatedModal(false); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="View">
+
+                     <div className="flex flex-col gap-1 border-l border-slate-100 pl-3 ml-1">
+                        <button 
+                           onClick={(e) => { e.stopPropagation(); selectConversation(h.id); setShowRelatedModal(false); }} 
+                           className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" 
+                           title="View Thread"
+                        >
                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                         </button>
                      </div>
                   </div>
                ))}
+               {history.length === 0 && (
+                  <div className="text-center py-12 text-slate-400">
+                     <p>No related conversations found.</p>
+                  </div>
+               )}
             </div>
           </div>
         </div>
@@ -1463,18 +1550,49 @@ export default function ConversationView() {
       {/* Ask Question Modal */}
       {showAskQuestionModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
-              <h3 className="text-lg font-bold mb-4">Ask a Question</h3>
-              <textarea 
-                 className="w-full border rounded-lg p-3 mb-4 h-32"
-                 placeholder="What would you like to know?"
-                 value={questionText}
-                 onChange={e => setQuestionText(e.target.value)}
-              />
-              <div className="flex justify-end gap-2">
-                 <button onClick={() => setShowAskQuestionModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">Cancel</button>
-                 <button onClick={handleSubmitQuestion} disabled={submittingQuestion} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
-                    {submittingQuestion ? "Submitting..." : "Submit"}
+           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg flex flex-col max-h-[90vh]">
+              <div className="p-6 border-b border-slate-200">
+                <h3 className="text-lg font-bold text-slate-900">Ask a Question</h3>
+                <p className="text-sm text-slate-500 mt-1">Submit a question to the internal Knowledge Base.</p>
+              </div>
+              
+              <div className="p-6 overflow-y-auto space-y-4">
+                <div>
+                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Question</label>
+                   <textarea 
+                      className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="What do you need help with?"
+                      rows={4}
+                      value={questionText}
+                      onChange={e => setQuestionText(e.target.value)}
+                   />
+                </div>
+                
+                <div>
+                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Referenced Content (Optional)</label>
+                   <textarea 
+                      className="w-full border border-slate-300 rounded-lg p-3 text-sm font-mono bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Paste relevant email content or context here..."
+                      rows={4}
+                      value={questionReferencedEmail}
+                      onChange={e => setQuestionReferencedEmail(e.target.value)}
+                   />
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-slate-200 flex justify-end gap-3 bg-slate-50 rounded-b-xl">
+                 <button 
+                    onClick={() => setShowAskQuestionModal(false)} 
+                    className="px-4 py-2 text-slate-600 hover:bg-white border border-transparent hover:border-slate-200 rounded-lg font-medium transition-all"
+                 >
+                    Cancel
+                 </button>
+                 <button 
+                    onClick={handleSubmitQuestion} 
+                    disabled={submittingQuestion || !questionText.trim()} 
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold shadow-sm disabled:opacity-50 transition-all"
+                 >
+                    {submittingQuestion ? "Submitting..." : "Submit Question"}
                  </button>
               </div>
            </div>

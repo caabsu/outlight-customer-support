@@ -148,13 +148,16 @@ export default function DraftAssistantModal({
           {/* ... (header and inputs remain the same) ... */}
           
           {/* Header */}
-          <div className="p-5 border-b border-slate-200">
+          <div className="p-5 border-b border-slate-200 flex justify-between items-center">
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
               AI Draft Assistant
             </h2>
-            <p className="text-xs text-slate-500 mt-1">Powered by Gemini 3.0 Pro</p>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
           </div>
+          <p className="text-xs text-slate-500 mt-1 px-5 pb-2">Powered by Gemini 3.0 Pro</p>
 
           {/* Inputs */}
           <div className="p-5 flex-1 overflow-y-auto space-y-6">
@@ -231,7 +234,7 @@ export default function DraftAssistantModal({
                     className="w-full py-2 bg-white border border-red-200 text-red-600 hover:bg-red-50 rounded-lg font-medium text-xs transition-colors flex items-center justify-center gap-2"
                 >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    Delete & Restart
+                    Delete
                 </button>
             )}
           </div>
