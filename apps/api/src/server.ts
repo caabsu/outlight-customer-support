@@ -3269,7 +3269,7 @@ Respond in JSON format ONLY.` }]
     });
 
     // Construct message to start processing
-    const userMessage = `Analyze this email thread and generate a draft response.
+    const userMessage = `Analyze this email thread and generate a highly personalized, professional response draft.
 
 CUSTOMER INFO: ${conversation.customer ? `Name: ${conversation.customer.name}, Email: ${conversation.customer.primaryEmail}` : 'Unknown'}
 
@@ -3282,10 +3282,18 @@ Date: ${latestInboundMessage.date}
 Subject: ${latestInboundMessage.subject}
 ${latestInboundMessage.body}` : ''}
 
-INSTRUCTIONS:
-1. Use tools to gather data (search_customer_and_orders, get_tracking_info, search_product).
-2. Apply knowledge base policies.
-3. Generate a JSON response with: internalReasoning, tags, category, reasoning, shouldDraft, draft (or actionSteps), and orderInfo.
+CRITICAL INSTRUCTIONS:
+1. **GATHER DATA FIRST**: Use tools (search_customer_and_orders, get_tracking_info, search_product) to find relevant orders, tracking status, or product details mentioned in the email.
+2. **CUSTOMIZE**: Do not just copy-paste the Knowledge Base. Use it as a policy reference, but tailor the tone and content to the specific customer's situation and the data you found.
+3. **BE SMART**: If the customer asks about an order status, look it up and give the specific status (e.g., "shipped on [Date]"). If they ask about a return, check if they are within the window based on the order date.
+4. **OUTPUT**: Generate a JSON response with: 
+   - internalReasoning: Your thought process.
+   - tags: Suggested tags.
+   - category: Email category.
+   - reasoning: Why you drafted this response.
+   - shouldDraft: true/false.
+   - draft: The final HTML email body.
+   - orderInfo: A summary object of the order data found (e.g., { orderId, status, tracking, items }).
 `;
 
     let result = await chat.sendMessage(userMessage);

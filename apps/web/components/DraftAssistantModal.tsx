@@ -76,6 +76,7 @@ export default function DraftAssistantModal({
       setData(result);
       setEditedDraft(result.draft);
       addLog("Draft generated successfully.");
+      addLog("✨ GENERATION COMPLETE ✨");
       
       if (result.orderInfo) addLog("✅ Found relevant order data.");
       if (result.knowledgeBase) addLog("✅ Applied Knowledge Base policies.");

@@ -827,6 +827,47 @@ export default function ConversationView() {
              )}
           </div>
 
+  const [showRelatedModal, setShowRelatedModal] = useState(false);
+
+  // ... (existing code) ...
+
+  const handleMarkRelatedNonSupport = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Optimistic update
+    setHistory(prev => prev.map(h => h.id === id ? { ...h, userTags: [...(h.userTags || []), "non-customer-support"] } : h));
+    try {
+      const updatedTags = [...(history.find(h => h.id === id)?.userTags || []), "non-customer-support"];
+      await fetch(`/api/conversations/${id}/tags`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: updatedTags }),
+      });
+    } catch (error) {
+      console.error("Failed to mark related as non-support:", error);
+      // Revert on error? For now just log.
+    }
+  };
+
+  const handleResolveRelated = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setHistory(prev => prev.map(h => h.id === id ? { ...h, archived: true } : h));
+    try {
+       await fetch(`/api/conversations/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived: true }),
+      });
+    } catch (error) {
+      console.error("Failed to resolve related:", error);
+    }
+  };
+
+  // ... (existing code) ...
+
+  // --- RENDER ---
+  
+  // ... (inside the sidebar render) ...
+
           {/* Section: History */}
           <div className="p-4 border-b border-slate-200">
              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2 justify-between">
@@ -834,9 +875,12 @@ export default function ConversationView() {
                   <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   Related Conversations
                 </div>
-                <Link href={`/analytics/user/${selectedConversation.customerId}`} target="_blank" className="text-[10px] text-blue-600 hover:underline">
+                <button 
+                  onClick={() => setShowRelatedModal(true)}
+                  className="text-[10px] text-blue-600 hover:underline"
+                >
                   View All
-                </Link>
+                </button>
              </h3>
              
              {selectedRelatedIds.size > 0 && (
@@ -850,29 +894,18 @@ export default function ConversationView() {
                    >
                      {mergingRelated ? 'Merging...' : 'Merge'}
                    </button>
-                   <button 
-                      onClick={() => {
-                        // Bulk mark non-support logic would go here - strictly speaking I should implement a bulk endpoint, 
-                        // but for now I'll iterate or just alert as a placeholder if the backend doesn't support bulk tag update yet.
-                        // Assuming the user wants the UI back first.
-                        alert("Bulk 'Non-Support' coming soon"); 
-                      }}
-                      className="flex-1 py-1 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-700 hover:bg-slate-50"
-                   >
-                      Non-CS
-                   </button>
                  </div>
                </div>
              )}
 
              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {history.map(h => (
+                {history.slice(0, 5).map(h => (
                    <div key={h.id} className={`group flex items-start gap-2 p-2 rounded hover:bg-slate-100 transition-colors ${selectedConversation.id === h.id ? 'bg-blue-50/50' : ''}`}>
                       <input 
                         type="checkbox" 
                         checked={selectedRelatedIds.has(h.id)}
                         onChange={() => toggleRelatedSelection(h.id)}
-                        className="mt-1 h-3 w-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        className="mt-1 h-3 w-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0"
                       />
                       <div className="flex-1 cursor-pointer min-w-0" onClick={() => selectConversation(h.id)}>
                         <div className="flex justify-between items-baseline mb-0.5">
@@ -883,9 +916,19 @@ export default function ConversationView() {
                         </div>
                         <div className="flex justify-between items-center text-[10px] text-slate-500">
                            <span>{formatDate(h.lastMessageAt)}</span>
-                           <div className="flex gap-1">
+                           <div className="flex gap-1 items-center">
                               {h.userTags?.includes("non-customer-support") && <span className="px-1 bg-gray-200 rounded text-gray-600">Non-CS</span>}
                               {h.archived && <span className="px-1 bg-green-100 text-green-700 rounded">Resolved</span>}
+                              
+                              {/* Quick Actions on Hover */}
+                              <div className="hidden group-hover:flex gap-1 ml-1">
+                                <button onClick={(e) => handleMarkRelatedNonSupport(h.id, e)} title="Mark Non-CS" className="text-gray-400 hover:text-gray-600">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                                </button>
+                                <button onClick={(e) => handleResolveRelated(h.id, e)} title="Resolve" className="text-gray-400 hover:text-green-600">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                </button>
+                              </div>
                            </div>
                         </div>
                       </div>
@@ -895,6 +938,53 @@ export default function ConversationView() {
                 {loadingHistory && <div className="flex justify-center py-4"><div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>}
              </div>
           </div>
+          
+      {/* Related Conversations Modal */}
+      {showRelatedModal && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl h-[80vh] flex flex-col">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
+              <h3 className="text-lg font-bold text-slate-800">Related Conversations</h3>
+              <button onClick={() => setShowRelatedModal(false)} className="p-1 hover:bg-slate-200 rounded-full text-slate-500">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+               {history.map(h => (
+                  <div key={h.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 group">
+                     <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                           <span className="font-semibold text-sm text-slate-900 truncate">{h.subject || "(No Subject)"}</span>
+                           {h.id === selectedConversation.id && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Current</span>}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                           <span>{formatDate(h.lastMessageAt)}</span>
+                           <span>•</span>
+                           <span className="truncate">{h.messages[0]?.bodyText?.substring(0, 60)}...</span>
+                        </div>
+                     </div>
+                     <div className="flex items-center gap-2 ml-4">
+                        {h.userTags?.includes("non-customer-support") && <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded">Non-CS</span>}
+                        {h.archived && <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded">Resolved</span>}
+                        
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                           <button onClick={() => selectConversation(h.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="View">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                           </button>
+                           <button onClick={(e) => handleMarkRelatedNonSupport(h.id, e)} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded" title="Mark Non-CS">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                           </button>
+                           <button onClick={(e) => handleResolveRelated(h.id, e)} className="p-1.5 text-slate-500 hover:bg-green-50 hover:text-green-600 rounded" title="Resolve">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                           </button>
+                        </div>
+                     </div>
+                  </div>
+               ))}
+            </div>
+          </div>
+        </div>
+      )}
 
           {/* Section: Quick Actions */}
           <div className="p-4">
