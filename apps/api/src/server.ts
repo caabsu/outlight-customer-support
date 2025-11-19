@@ -318,7 +318,8 @@ app.get("/conversations", async (req: Request, res: Response) => {
       adminOnly,
       workspaceId,
       page,
-      limit
+      limit,
+      includeArchived
     } = req.query;
 
     // Workspace is required
@@ -327,7 +328,7 @@ app.get("/conversations", async (req: Request, res: Response) => {
     }
 
     // Log all active filters for debugging
-    console.log(`[Filter Debug] Request filters: workspace=${workspaceId}, excludeNonSupport=${excludeNonSupport}, adminOnly=${adminOnly}, needsReply=${needsReply}, resolved=${resolved}, archived=${archived}, starred=${starred}, showSent=${showSent}`);
+    console.log(`[Filter Debug] Request filters: workspace=${workspaceId}, excludeNonSupport=${excludeNonSupport}, adminOnly=${adminOnly}, needsReply=${needsReply}, resolved=${resolved}, archived=${archived}, includeArchived=${includeArchived}, starred=${starred}, showSent=${showSent}`);
 
     const where: any = {
       workspaceId: workspaceId as string
@@ -339,6 +340,8 @@ app.get("/conversations", async (req: Request, res: Response) => {
 
     if (archived === "true") {
       where.archived = true;
+    } else if (includeArchived === "true") {
+      // Show both archived and unarchived - do nothing to where.archived
     } else {
       // By default, don't show archived
       where.archived = false;

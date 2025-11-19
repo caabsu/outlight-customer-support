@@ -169,9 +169,13 @@ export function ConversationProvider({
       params.set('limit', '50');
 
       if (showArchived) params.set('archived', 'true');
+      // If status is 'all', we want to see everything, including archived/resolved
+      if (statusFilter === 'all') params.set('includeArchived', 'true');
+      
       if (showStarred) params.set('starred', 'true');
       // CS-only filter should work WITH admin filter (exclude non-customer-support even from admin emails)
-      if (excludeNonSupport && !adminOnly) params.set('excludeNonSupport', 'true');
+      // FIX: If status is 'all', we ignore excludeNonSupport to show EVERYTHING as requested
+      if (excludeNonSupport && !adminOnly && statusFilter !== 'all') params.set('excludeNonSupport', 'true');
       if (showSent) params.set('showSent', 'true');
       // ADMIN is just another tag filter that requires "admin" tag
       if (adminOnly) params.set('adminOnly', 'true');
@@ -252,7 +256,8 @@ export function ConversationProvider({
       conversationsList = conversationsList.filter((conv: Conversation) => {
         // CS-only filter: exclude non-customer-support AND admin (unless adminOnly is specifically active)
         // NEW V2: Check userTags instead of tags
-        if (excludeNonSupport) {
+        // FIX: If status is 'all', we ignore excludeNonSupport
+        if (excludeNonSupport && statusFilter !== 'all') {
           if (conv.userTags?.includes("non-customer-support")) {
             console.log(`[Client Filter V2 Safety] BLOCKING non-customer-support: ${conv.id} "${conv.subject}"`);
             return false;
@@ -272,7 +277,8 @@ export function ConversationProvider({
         }
 
         // If not showing archived, REMOVE archived conversations
-        if (!showArchived && conv.archived) {
+        // UNLESS statusFilter is 'all' (which includes archived) or showArchived is true
+        if (!showArchived && statusFilter !== 'all' && conv.archived) {
           console.log(`[Client Filter V2 Safety] BLOCKING archived: ${conv.id} "${conv.subject}"`);
           return false;
         }
