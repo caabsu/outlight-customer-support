@@ -1016,20 +1016,26 @@ export default function ConversationView() {
                                   <div className="grid grid-cols-3 gap-2 pt-1">
                                      <button 
                                         onClick={(e) => { e.stopPropagation(); window.open(`https://${process.env.NEXT_PUBLIC_SHOPIFY_STORE || 'admin.shopify.com'}/orders/${order.id}`, '_blank'); }} 
-                                        className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-center font-medium"
+                                        className="flex items-center justify-center gap-1 px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-center font-medium text-[10px]"
+                                        title="View in Shopify"
                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                                         View
                                      </button>
                                      <button 
                                         onClick={(e) => handleRefundOrder(order, e)}
-                                        className="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-center font-medium"
+                                        className="flex items-center justify-center gap-1 px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-center font-medium text-[10px]"
+                                        title="Process Refund"
                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
                                         Refund
                                      </button>
                                      <button 
                                         onClick={(e) => handleCancelOrder(order, e)}
-                                        className="px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-center font-medium"
+                                        className="flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-center font-medium text-[10px]"
+                                        title="Cancel Order"
                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                                         Cancel
                                      </button>
                                   </div>
