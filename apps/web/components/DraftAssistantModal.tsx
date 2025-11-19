@@ -81,7 +81,9 @@ export default function DraftAssistantModal({
     if (!text) return "";
     return text
       .replace(/<br\s*\/?>/gi, "\n") // Convert breaks to newlines
-      .replace(/<\/?[^>]+(>|$)/g, "") // Strip other HTML tags
+      .replace(/<\/p>/gi, "\n\n") // Paragraph breaks
+      .replace(/<\/div>/gi, "\n") // Div breaks
+      .replace(/<\/?[^>]+(>|$)/g, "") // Strip remaining tags
       .trim();
   };
 

@@ -3347,7 +3347,7 @@ OUTPUT FORMAT (JSON ONLY):
   "tags": ["suggested", "tags"],
   "category": "email_category",
   "shouldDraft": true,
-  "draft": "The HTML email body",
+  "draft": "The plain text email body (use \\n\\n for new paragraphs). Do NOT use HTML tags.",
   "orderInfo": { "summary": "extracted data" }
 }`;
 
@@ -3773,7 +3773,7 @@ EXECUTION PLAN (MENTAL SCRATCHPAD):
 OUTPUT FORMAT (JSON ONLY):
 { 
   "internalReasoning": "Step-by-step thought process...",
-  "draft": "The HTML email body", 
+  "draft": "The plain text email body (use \\n\\n for new paragraphs). Do NOT use HTML tags.", 
   "reasoning": "Short summary of approach", 
   "tags": ["suggested", "tags"] 
 }`;
