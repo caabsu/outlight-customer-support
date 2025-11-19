@@ -736,6 +736,13 @@ export default function ConversationView() {
     }
   };
 
+  // --- DERIVED STATE ---
+  const filteredHistory = history.filter(h => {
+    if (showCSOnly && h.userTags?.includes("non-customer-support")) return false;
+    if (showNeedsReplyOnly && !h.needsReply) return false;
+    return true;
+  });
+
   // --- RENDER ---
 
   if (!selectedConversation) {
@@ -932,7 +939,7 @@ export default function ConversationView() {
         <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
           
           {/* 1. Shopify Section (Fixed Height) */}
-          <div className="h-[280px] border-b border-slate-200 flex flex-col bg-white flex-shrink-0">
+          <div className="h-[400px] border-b border-slate-200 flex flex-col bg-white flex-shrink-0">
              <div className="p-4 border-b border-slate-100 flex-shrink-0 bg-slate-50/50">
                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                     <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
@@ -1058,7 +1065,7 @@ export default function ConversationView() {
                  <div className="flex items-center justify-between mb-2">
                     <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                         <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        History ({history.length})
+                        History ({filteredHistory.length})
                     </h3>
                     <button onClick={() => setShowRelatedModal(true)} className="text-[10px] text-blue-600 hover:underline">View All</button>
                  </div>
@@ -1081,13 +1088,13 @@ export default function ConversationView() {
              </div>
              
              <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                {history.length === 0 && !loadingHistory && (
+                {filteredHistory.length === 0 && !loadingHistory && (
                     <div className="flex flex-col items-center justify-center h-full text-slate-400">
                         <p className="text-xs">No conversations found.</p>
                     </div>
                 )}
                 
-                {history.slice(0, 10).map(h => (
+                {filteredHistory.slice(0, 10).map(h => (
                    <div key={h.id} className={`group relative p-2.5 rounded-lg border transition-all ${selectedConversation.id === h.id ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:border-slate-200 hover:bg-slate-50'}`}>
                       <div className="flex justify-between items-start mb-1" onClick={() => selectConversation(h.id)}>
                          <p className={`text-xs truncate flex-1 pr-2 cursor-pointer ${selectedConversation.id === h.id ? 'font-bold text-blue-700' : 'font-medium text-slate-900'}`}>
@@ -1159,7 +1166,7 @@ export default function ConversationView() {
                    </div>
                    <div>
                       <span className="block text-xs font-bold text-slate-700 group-hover:text-slate-900">Not Customer Support</span>
-                      <span className="block text-[10px] text-slate-400 group-hover:text-slate-500">Ignore this sender</span>
+                      <span className="block text-[10px] text-slate-400 group-hover:text-slate-500">Mark this conversation</span>
                    </div>
                 </button>
 
@@ -1195,11 +1202,54 @@ export default function ConversationView() {
           </div>
         </div>
         
-        {/* AI Assistant Chat (Fixed Bottom of Sidebar) */}
-        <div className="border-t border-slate-200 bg-slate-50 p-0">
-           <AIAssistant workspaceId={currentWorkspaceId ?? undefined} />
-        </div>
       </div>
+      
+      <DraftAssistantModal
+          isOpen={isDraftModalOpen}
+          onClose={() => setIsDraftModalOpen(false)}
+          onInsert={handleInsertDraft}
+          conversationId={selectedConversation.id}
+          customerName={selectedConversation.customer.name || "Customer"}
+          customerEmail={selectedConversation.customer.primaryEmail}
+        />
+
+      {/* Related Conversations Modal */}
+      {showRelatedModal && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl h-[80vh] flex flex-col">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
+              <h3 className="text-lg font-bold text-slate-800">Related Conversations</h3>
+              <button onClick={() => setShowRelatedModal(false)} className="p-1 hover:bg-slate-200 rounded-full text-slate-500">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+               {history.map(h => (
+                  <div key={h.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 group">
+                     <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                           <span className="font-semibold text-sm text-slate-900 truncate">{h.subject || "(No Subject)"}</span>
+                           {h.id === selectedConversation.id && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Current</span>}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                           <span>{formatDate(h.lastMessageAt)}</span>
+                           <div className="flex gap-1 items-center">
+                              {h.userTags?.includes("non-customer-support") && <span className="px-1 bg-gray-200 rounded text-gray-600 text-[10px]">Non-CS</span>}
+                              {h.archived && <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded">Resolved</span>}
+                           </div>
+                        </div>
+                     </div>
+                     <div className="flex items-center gap-2 ml-4">
+                        <button onClick={() => { selectConversation(h.id); setShowRelatedModal(false); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="View">
+                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        </button>
+                     </div>
+                  </div>
+               ))}
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Tracking Modal */}
       {showTrackingModal && (
