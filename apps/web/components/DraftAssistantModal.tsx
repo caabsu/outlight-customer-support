@@ -21,6 +21,7 @@ interface DraftAssistantModalProps {
   conversationId: string;
   customerName: string;
   customerEmail: string;
+  onDraftDeleted?: () => void;
 }
 
 export default function DraftAssistantModal({
@@ -30,6 +31,7 @@ export default function DraftAssistantModal({
   conversationId,
   customerName,
   customerEmail,
+  onDraftDeleted,
 }: DraftAssistantModalProps) {
   const [instruction, setInstruction] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -58,7 +60,7 @@ export default function DraftAssistantModal({
             if (res.ok) {
                 const draftData = await res.json();
                 setData(draftData);
-                setEditedDraft(draftData.draft || "");
+                setEditedDraft(cleanDraftText(draftData.draft || ""));
                 if (draftData.customInstructions) {
                     setInstruction(draftData.customInstructions);
                 }
@@ -74,6 +76,14 @@ export default function DraftAssistantModal({
   }, [isOpen, conversationId]);
 
   const addLog = (msg: string) => setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+
+  const cleanDraftText = (text: string) => {
+    if (!text) return "";
+    return text
+      .replace(/<br\s*\/?>/gi, "\n") // Convert breaks to newlines
+      .replace(/<\/?[^>]+(>|$)/g, "") // Strip other HTML tags
+      .trim();
+  };
 
   const handleGenerate = async () => {
     setIsLoading(true);
@@ -102,7 +112,7 @@ export default function DraftAssistantModal({
       const result: DraftResponse = await response.json();
       
       setData(result);
-      setEditedDraft(result.draft);
+      setEditedDraft(cleanDraftText(result.draft));
       addLog("Draft generated successfully.");
       addLog("✨ GENERATION COMPLETE ✨");
       

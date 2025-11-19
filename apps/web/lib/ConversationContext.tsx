@@ -171,7 +171,7 @@ export function ConversationProvider({
       if (showArchived) params.set('archived', 'true');
       if (showStarred) params.set('starred', 'true');
       // CS-only filter should work WITH admin filter (exclude non-customer-support even from admin emails)
-      if (excludeNonSupport) params.set('excludeNonSupport', 'true');
+      if (excludeNonSupport && !adminOnly) params.set('excludeNonSupport', 'true');
       if (showSent) params.set('showSent', 'true');
       // ADMIN is just another tag filter that requires "admin" tag
       if (adminOnly) params.set('adminOnly', 'true');

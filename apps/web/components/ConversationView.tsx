@@ -200,6 +200,7 @@ export default function ConversationView() {
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
   const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
   const [showRelatedModal, setShowRelatedModal] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
 
   const [rightSidebarWidth, setRightSidebarWidth] = useState(350);
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -212,6 +213,13 @@ export default function ConversationView() {
   // Reset UI state on conversation change
   useEffect(() => {
     setIsDraftModalOpen(false);
+    setHasDraft(false);
+    if (selectedConversation?.id) {
+        // Check if draft exists
+        fetch(`/api/conversations/${selectedConversation.id}/draft`)
+            .then(res => { if (res.ok) setHasDraft(true); })
+            .catch(() => {});
+    }
   }, [selectedConversation?.id]);
 
   // Fetch History
@@ -874,10 +882,10 @@ export default function ConversationView() {
               
               <button 
                 onClick={() => setIsDraftModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm ml-auto"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ml-auto ${hasDraft ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-purple-600 hover:bg-purple-700 text-white'}`}
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                AI Draft Assistant
+                {hasDraft ? "Draft Ready" : "AI Draft Assistant"}
               </button>
             </div>
 
@@ -1095,8 +1103,8 @@ export default function ConversationView() {
                 )}
                 
                 {filteredHistory.slice(0, 10).map(h => (
-                   <div key={h.id} className={`group relative p-2.5 rounded-lg border transition-all ${selectedConversation.id === h.id ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:border-slate-200 hover:bg-slate-50'}`}>
-                      <div className="flex justify-between items-start mb-1" onClick={() => selectConversation(h.id)}>
+                   <div key={h.id} className={`group relative p-3 mb-2 bg-white border rounded-lg shadow-sm transition-all ${selectedConversation.id === h.id ? 'border-blue-400 ring-1 ring-blue-400 bg-blue-50/30' : 'border-slate-200 hover:border-blue-300 hover:shadow-md'}`}>
+                      <div className="flex justify-between items-start mb-1.5 cursor-pointer" onClick={() => selectConversation(h.id)}>
                          <p className={`text-xs truncate flex-1 pr-2 cursor-pointer ${selectedConversation.id === h.id ? 'font-bold text-blue-700' : 'font-medium text-slate-900'}`}>
                             {h.subject || "(No Subject)"}
                          </p>
@@ -1204,15 +1212,15 @@ export default function ConversationView() {
         
       </div>
       
-      <DraftAssistantModal
-          isOpen={isDraftModalOpen}
-          onClose={() => setIsDraftModalOpen(false)}
-          onInsert={handleInsertDraft}
-          conversationId={selectedConversation.id}
-          customerName={selectedConversation.customer.name || "Customer"}
-          customerEmail={selectedConversation.customer.primaryEmail}
-        />
-
+              <DraftAssistantModal
+                isOpen={isDraftModalOpen}
+                onClose={() => { setIsDraftModalOpen(false); if (selectedConversation) fetch(`/api/conversations/${selectedConversation.id}/draft`).then(res => setHasDraft(res.ok)).catch(() => {}); }}
+                onInsert={handleInsertDraft}
+                conversationId={selectedConversation.id}
+                customerName={selectedConversation.customer.name || "Customer"}
+                customerEmail={selectedConversation.customer.primaryEmail}
+                onDraftDeleted={() => setHasDraft(false)}
+              />
       {/* Related Conversations Modal */}
       {showRelatedModal && (
         <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">

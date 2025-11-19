@@ -740,8 +740,8 @@ app.get("/conversations/:id/history", async (req: Request, res: Response) => {
       archived: false,
       workspaceId: conversation.workspaceId,
       NOT: [
-        { tags: { has: "non-customer-support" } },
-        { tags: { has: "admin" } }
+        { userTags: { has: "non-customer-support" } },
+        { userTags: { has: "admin" } }
       ]
     };
     console.log(`[History] Fetching related conversations with tag filters applied`);
