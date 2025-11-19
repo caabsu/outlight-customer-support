@@ -3191,12 +3191,20 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
       if (knowledgeBase.length > 0) {
         knowledgeBaseText = knowledgeBase
           .map(kb => {
-            const categoryLabel = kb.category === "general" ? "[GENERAL]" : "[DRAFT-SPECIFIC]";
-            return `${categoryLabel} ${kb.title}\n\n${kb.content}`;
+            const categoryLabel = kb.category === "general" ? "GENERAL" : "DRAFT-SPECIFIC";
+            return `<article category="${categoryLabel}">
+<title>${kb.title}</title>
+<content>
+${kb.content}
+</content>
+</article>`;
           })
-          .join("\n\n---\n\n");
+          .join("\n\n");
+        
+        // Wrap in main tag
+        knowledgeBaseText = `<knowledge_base>\n${knowledgeBaseText}\n</knowledge_base>`;
       } else {
-        knowledgeBaseText = "No knowledge base entries configured. Please add entries in the Knowledge Base management page.";
+        knowledgeBaseText = "<knowledge_base>No entries available.</knowledge_base>";
       }
     } catch (error) {
       console.error("[Draft] Error loading knowledge base:", error);
@@ -3292,48 +3300,56 @@ app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
       history: [
         {
           role: "user",
-          parts: [{ text: `You are an expert AI assistant for Outlight customer support.
+          parts: [{ text: `You are a Senior Customer Support Agent for Outlight. Your goal is to resolve tickets efficiently, empathetically, and accurately in a single interaction whenever possible.
 
-KNOWLEDGE BASE:
+SYSTEM CONTEXT:
 ${knowledgeBaseText}
 
-${additionalContext ? `
-HIGH-PRIORITY CUSTOMER INFORMATION:
+${additionalContext ? `<custom_instructions>
 ${additionalContext}
-` : ''}
+</custom_instructions>` : ''}
 
-Respond in JSON format ONLY.` }]
+You have access to tools to fetch real-time data. USE THEM. Never guess order details.` }]
+        },
+        {
+          role: "model",
+          parts: [{ text: "Understood. I am ready to act as a Senior Support Agent. I will use the available tools to gather facts before answering, adhere strictly to the Knowledge Base and Custom Instructions, and provide a structured JSON response." }]
         }
       ]
     });
 
     // Construct message to start processing
-    const userMessage = `Analyze this email thread and generate a highly personalized, professional response draft.
+    const userMessage = `Draft a response for the following customer inquiry.
 
-CUSTOMER INFO: ${conversation.customer ? `Name: ${conversation.customer.name}, Email: ${conversation.customer.primaryEmail}` : 'Unknown'}
+CUSTOMER: ${conversation.customer ? `${conversation.customer.name} (${conversation.customer.primaryEmail})` : 'Unknown'}
 
 EMAIL THREAD:
 ${JSON.stringify(emailThread, null, 2)}
 
-${latestInboundMessage ? `LATEST MESSAGE TO RESPOND TO:
-From: ${latestInboundMessage.from}
-Date: ${latestInboundMessage.date}
+${latestInboundMessage ? `LATEST MESSAGE:
 Subject: ${latestInboundMessage.subject}
-${latestInboundMessage.body}` : ''}
+Body: ${latestInboundMessage.body}` : ''}
 
-CRITICAL INSTRUCTIONS:
-1. **GATHER DATA FIRST**: Use tools (search_customer_and_orders, get_tracking_info, search_product) to find relevant orders, tracking status, or product details mentioned in the email.
-2. **CUSTOMIZE**: Do not just copy-paste the Knowledge Base. Use it as a policy reference, but tailor the tone and content to the specific customer's situation and the data you found.
-3. **BE SMART**: If the customer asks about an order status, look it up and give the specific status (e.g., "shipped on [Date]"). If they ask about a return, check if they are within the window based on the order date.
-4. **OUTPUT**: Generate a JSON response with: 
-   - internalReasoning: Your thought process.
-   - tags: Suggested tags.
-   - category: Email category.
-   - reasoning: Why you drafted this response.
-   - shouldDraft: true/false.
-   - draft: The final HTML email body.
-   - orderInfo: A summary object of the order data found (e.g., { orderId, status, tracking, items }).
-`;
+EXECUTION PLAN (MENTAL SCRATCHPAD):
+1. **ANALYZE**: Identify the customer's core intent and sentiment.
+2. **GATHER FACTS**: 
+   - If they mention an order, use 'search_customer_and_orders'.
+   - If they mention a tracking number, use 'get_tracking_info'.
+   - If they ask about a product, use 'search_product'.
+   - *VERIFY* the data matches the customer's claim (e.g., is the order actually delayed?).
+3. **CONSULT POLICIES**: Check <knowledge_base> for relevant return/shipping policies.
+4. **APPLY INSTRUCTIONS**: Check <custom_instructions> for specific overrides or tone requirements.
+5. **DRAFT**: Write the response.
+
+OUTPUT FORMAT (JSON ONLY):
+{
+  "internalReasoning": "Step-by-step thought process: 1. Intent identified as... 2. Tool X found... 3. Policy Y says... 4. Decided to...",
+  "tags": ["suggested", "tags"],
+  "category": "email_category",
+  "shouldDraft": true,
+  "draft": "The HTML email body",
+  "orderInfo": { "summary": "extracted data" }
+}`;
 
     let result = await chat.sendMessage(userMessage);
     let response = result.response;
@@ -3697,10 +3713,19 @@ async function processStandaloneDraft(draftId: string) {
       if (knowledgeBase.length > 0) {
         knowledgeBaseText = knowledgeBase
           .map(kb => {
-            const categoryLabel = kb.category === "general" ? "[GENERAL]" : "[DRAFT-SPECIFIC]";
-            return `${categoryLabel} ${kb.title}\n\n${kb.content}`;
+            const categoryLabel = kb.category === "general" ? "GENERAL" : "DRAFT-SPECIFIC";
+            return `<article category="${categoryLabel}">
+<title>${kb.title}</title>
+<content>
+${kb.content}
+</content>
+</article>`;
           })
-          .join("\n\n---\n\n");
+          .join("\n\n");
+          
+        knowledgeBaseText = `<knowledge_base>\n${knowledgeBaseText}\n</knowledge_base>`;
+      } else {
+        knowledgeBaseText = "<knowledge_base>No entries available.</knowledge_base>";
       }
     } catch (error) {
       console.error(`[StandaloneDraft ${draftId}] Error loading knowledge base:`, error);
@@ -3708,12 +3733,12 @@ async function processStandaloneDraft(draftId: string) {
     }
 
     // Build system prompt
-    let systemPrompt = `You are an expert AI assistant for Outlight customer support.
+    let systemPrompt = `You are a Senior Customer Support Agent for Outlight. Your goal is to resolve tickets efficiently, empathetically, and accurately.
 
-KNOWLEDGE BASE:
+SYSTEM CONTEXT:
 ${knowledgeBaseText}
 
-${draft.contextNotes ? `Additional Context/Notes:
+${draft.contextNotes ? `ADDITIONAL CONTEXT:
 ${draft.contextNotes}
 ` : ''}
 `;
@@ -3721,9 +3746,9 @@ ${draft.contextNotes}
     // Add custom instructions if provided
     if (draft.customInstructions && draft.customInstructions.trim()) {
       systemPrompt += `
-
-🔴 CRITICAL: CUSTOM CONTEXT & GUIDANCE - HIGHEST PRIORITY
+<custom_instructions>
 ${draft.customInstructions}
+</custom_instructions>
 `;
     }
 
@@ -3733,11 +3758,25 @@ ${draft.customInstructions}
     // Prompt for JSON output
     const prompt = `${systemPrompt}
 
-Analyze this email and generate a professional response draft.
-Subject: ${draft.subject}
-Body: ${draft.emailBody}
+Draft a response for the following email.
 
-Return JSON with: { draft: string, reasoning: string, tags: string[] }`;
+SUBJECT: ${draft.subject}
+BODY:
+${draft.emailBody}
+
+EXECUTION PLAN (MENTAL SCRATCHPAD):
+1. **ANALYZE**: Identify the core intent.
+2. **CONSULT POLICIES**: Check <knowledge_base>.
+3. **APPLY INSTRUCTIONS**: Check <custom_instructions>.
+4. **DRAFT**: Write the response.
+
+OUTPUT FORMAT (JSON ONLY):
+{ 
+  "internalReasoning": "Step-by-step thought process...",
+  "draft": "The HTML email body", 
+  "reasoning": "Short summary of approach", 
+  "tags": ["suggested", "tags"] 
+}`;
 
     const result = await model.generateContent(prompt);
     const finalText = result.response.text();
