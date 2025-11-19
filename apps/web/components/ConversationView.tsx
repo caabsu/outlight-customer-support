@@ -199,6 +199,7 @@ export default function ConversationView() {
   const [submittingQuestion, setSubmittingQuestion] = useState(false);
   const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
   const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
+  const [showRelatedModal, setShowRelatedModal] = useState(false);
 
   const [rightSidebarWidth, setRightSidebarWidth] = useState(350);
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -556,6 +557,37 @@ export default function ConversationView() {
       month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true
     });
   };
+  
+  const handleMarkRelatedNonSupport = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Optimistic update
+    setHistory(prev => prev.map(h => h.id === id ? { ...h, userTags: [...(h.userTags || []), "non-customer-support"] } : h));
+    try {
+      const updatedTags = [...(history.find(h => h.id === id)?.userTags || []), "non-customer-support"];
+      await fetch(`/api/conversations/${id}/tags`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: updatedTags }),
+      });
+    } catch (error) {
+      console.error("Failed to mark related as non-support:", error);
+      // Revert on error? For now just log.
+    }
+  };
+
+  const handleResolveRelated = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setHistory(prev => prev.map(h => h.id === id ? { ...h, archived: true } : h));
+    try {
+       await fetch(`/api/conversations/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived: true }),
+      });
+    } catch (error) {
+      console.error("Failed to resolve related:", error);
+    }
+  };
 
   // --- RENDER ---
 
@@ -826,47 +858,6 @@ export default function ConversationView() {
                 </div>
              )}
           </div>
-
-  const [showRelatedModal, setShowRelatedModal] = useState(false);
-
-  // ... (existing code) ...
-
-  const handleMarkRelatedNonSupport = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    // Optimistic update
-    setHistory(prev => prev.map(h => h.id === id ? { ...h, userTags: [...(h.userTags || []), "non-customer-support"] } : h));
-    try {
-      const updatedTags = [...(history.find(h => h.id === id)?.userTags || []), "non-customer-support"];
-      await fetch(`/api/conversations/${id}/tags`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags: updatedTags }),
-      });
-    } catch (error) {
-      console.error("Failed to mark related as non-support:", error);
-      // Revert on error? For now just log.
-    }
-  };
-
-  const handleResolveRelated = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setHistory(prev => prev.map(h => h.id === id ? { ...h, archived: true } : h));
-    try {
-       await fetch(`/api/conversations/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ archived: true }),
-      });
-    } catch (error) {
-      console.error("Failed to resolve related:", error);
-    }
-  };
-
-  // ... (existing code) ...
-
-  // --- RENDER ---
-  
-  // ... (inside the sidebar render) ...
 
           {/* Section: History */}
           <div className="p-4 border-b border-slate-200">
