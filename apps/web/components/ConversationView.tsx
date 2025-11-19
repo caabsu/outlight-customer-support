@@ -418,7 +418,8 @@ export default function ConversationView() {
   };
 
   const handleSend = async () => {
-    const textContent = replyEditorRef.current?.textContent || "";
+    // Use innerText to preserve newlines from contentEditable
+    const textContent = replyEditorRef.current?.innerText || "";
     if (!textContent.trim() || !selectedConversation) return;
     setSending(true);
     try {
