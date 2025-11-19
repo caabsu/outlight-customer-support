@@ -589,6 +589,153 @@ export default function ConversationView() {
     }
   };
 
+  // --- REFUND & CANCEL HANDLERS ---
+
+  const handleRefundOrder = (order: any, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setRefundOrder(order);
+    // Initialize line items for refund (default 0 quantity)
+    const initialItems = new Map();
+    order.line_items.forEach((item: any) => {
+      initialItems.set(item.id, { quantity: 0, restock: true });
+    });
+    setSelectedLineItems(initialItems);
+    setRefundMode('simple');
+    setRefundType('preset');
+    setShowRefundModal(true);
+  };
+
+  const calculateRefundAmount = () => {
+    if (!refundOrder) return 0;
+    const total = parseFloat(refundOrder.total_price);
+    
+    if (refundMode === 'simple') {
+      if (refundType === 'full') return total;
+      if (refundType === 'preset') return total * (refundPreset / 100);
+      if (refundType === 'percentage') return total * (parseFloat(refundCustomPercentage) / 100);
+      if (refundType === 'dollar') return parseFloat(refundCustomDollar);
+    } else {
+      // Item-based calculation
+      let amount = 0;
+      selectedLineItems.forEach((val, id) => {
+        const item = refundOrder.line_items.find((i: any) => i.id === id);
+        if (item) amount += parseFloat(item.price) * val.quantity;
+      });
+      return amount;
+    }
+    return 0;
+  };
+
+  const processRefund = async () => {
+    if (!refundOrder) return;
+    setProcessingRefund(true);
+    try {
+      const amount = calculateRefundAmount();
+      
+      // Build refund line items if in item mode
+      const refundLineItems = refundMode === 'items' 
+        ? Array.from(selectedLineItems.entries())
+            .filter(([_, val]) => val.quantity > 0)
+            .map(([id, val]) => ({
+              line_item_id: id,
+              quantity: val.quantity,
+              restock_type: val.restock ? 'return' : 'no_restock'
+            }))
+        : [];
+
+      const response = await fetch(`${API_BASE_URL}/shopify/order/${refundOrder.id}/refund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amount.toFixed(2),
+          currency: refundOrder.currency,
+          reason: refundReason || "Customer requested refund",
+          notify: refundNotifyCustomer,
+          line_items: refundLineItems,
+          full_refund: refundType === 'full' && refundMode === 'simple'
+        })
+      });
+
+      if (!response.ok) throw new Error("Refund failed");
+      
+      alert(`Successfully refunded $${amount.toFixed(2)}`);
+      setShowRefundModal(false);
+      // Refresh order data
+      if (shopifyCustomer) {
+        const ordersRes = await fetch(`/api/shopify/customer/${shopifyCustomer.id}/orders`);
+        if (ordersRes.ok) setShopifyOrders(await ordersRes.json());
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to process refund. Please check the console or try again.");
+    } finally {
+      setProcessingRefund(false);
+    }
+  };
+
+  const handleCancelOrder = (order: any, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setCancelOrder(order);
+    setShowCancelModal(true);
+  };
+
+  const processCancel = async () => {
+    if (!cancelOrder) return;
+    setProcessingCancel(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/shopify/order/${cancelOrder.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: cancelReason,
+          email: cancelNotifyCustomer,
+          refund: cancelRefund
+        })
+      });
+
+      if (!response.ok) throw new Error("Cancellation failed");
+      
+      alert("Order cancelled successfully");
+      setShowCancelModal(false);
+      // Refresh
+      if (shopifyCustomer) {
+        const ordersRes = await fetch(`/api/shopify/customer/${shopifyCustomer.id}/orders`);
+        if (ordersRes.ok) setShopifyOrders(await ordersRes.json());
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to cancel order.");
+    } finally {
+      setProcessingCancel(false);
+    }
+  };
+
+  // --- TRACKING HANDLER ---
+  const handleTrackOrder = async (trackingNumber: string, carrier?: string) => {
+    if (!trackingNumber) return;
+    setLoadingTracking(true);
+    setTrackingData(null);
+    setTrackingError(null);
+    setShowTrackingModal(true);
+    
+    try {
+      // Try 17track first
+      const response = await fetch(`${API_BASE_URL}/tracking/17track/${trackingNumber}?carrier=${carrier || ''}`);
+      if (response.ok) {
+        const data = await response.json();
+        setTrackingData(data);
+      } else {
+        // Fallback or error
+        setTrackingError("Tracking info unavailable via API. Please check carrier website.");
+      }
+    } catch (err) {
+      console.error(err);
+      setTrackingError("Failed to fetch tracking info");
+    } finally {
+      setLoadingTracking(false);
+    }
+  };
+
   // --- RENDER ---
 
   if (!selectedConversation) {
@@ -825,25 +972,66 @@ export default function ConversationView() {
                    
                    <div className="space-y-2">
                       {shopifyOrders.slice(0, 3).map(order => (
-                         <div key={order.id} className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm hover:border-blue-300 cursor-pointer transition-colors" onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}>
-                            <div className="flex justify-between items-center mb-1">
-                               <span className="font-medium text-slate-900 text-sm">{order.name}</span>
-                               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${order.financial_status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{order.financial_status}</span>
+                         <div key={order.id} className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm hover:border-blue-300 transition-colors">
+                            <div className="cursor-pointer" onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}>
+                                <div className="flex justify-between items-center mb-1">
+                                   <span className="font-medium text-slate-900 text-sm">#{order.order_number}</span>
+                                   <div className="flex gap-1">
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${order.financial_status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{order.financial_status}</span>
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${order.fulfillment_status === 'fulfilled' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{order.fulfillment_status || 'unfulfilled'}</span>
+                                   </div>
+                                </div>
+                                <div className="flex justify-between text-xs text-slate-500">
+                                   <span>{new Date(order.created_at).toLocaleDateString()}</span>
+                                   <span className="text-slate-900 font-medium">${order.total_price}</span>
+                                </div>
                             </div>
-                            <div className="flex justify-between text-xs text-slate-500">
-                               <span>{new Date(order.created_at).toLocaleDateString()}</span>
-                               <span className="text-slate-900 font-medium">${order.total_price}</span>
-                            </div>
+                            
                             {selectedOrder?.id === order.id && (
-                               <div className="mt-2 pt-2 border-t border-slate-100 text-xs space-y-1">
-                                  {order.line_items.map((item: any) => (
-                                     <div key={item.id} className="flex justify-between">
-                                        <span className="truncate flex-1">{item.quantity}x {item.name}</span>
-                                        <span>${item.price}</span>
+                               <div className="mt-3 pt-2 border-t border-slate-100 text-xs space-y-2">
+                                  {/* Line Items */}
+                                  <div className="space-y-1">
+                                    {order.line_items.map((item: any) => (
+                                       <div key={item.id} className="flex justify-between">
+                                          <span className="truncate flex-1 text-slate-700">{item.quantity}x {item.name}</span>
+                                          <span className="text-slate-900">${item.price}</span>
+                                       </div>
+                                    ))}
+                                  </div>
+
+                                  {/* Tracking Link */}
+                                  {order.fulfillments?.map((f: any) => f.tracking_number && (
+                                     <div key={f.id} className="flex items-center gap-2 bg-slate-50 p-1.5 rounded">
+                                        <span className="text-slate-500">Tracking:</span>
+                                        <button 
+                                          onClick={() => handleTrackOrder(f.tracking_number, f.tracking_company)}
+                                          className="text-blue-600 font-medium hover:underline truncate flex-1 text-left"
+                                        >
+                                          {f.tracking_number}
+                                        </button>
                                      </div>
                                   ))}
-                                  <div className="pt-2 flex gap-2">
-                                     <button onClick={(e) => { e.stopPropagation(); window.open(`https://${process.env.NEXT_PUBLIC_SHOPIFY_STORE || 'admin.shopify.com'}/orders/${order.id}`, '_blank'); }} className="flex-1 bg-slate-100 hover:bg-slate-200 py-1 rounded text-slate-700 text-center">Open</button>
+
+                                  {/* Action Buttons */}
+                                  <div className="grid grid-cols-3 gap-2 pt-1">
+                                     <button 
+                                        onClick={(e) => { e.stopPropagation(); window.open(`https://${process.env.NEXT_PUBLIC_SHOPIFY_STORE || 'admin.shopify.com'}/orders/${order.id}`, '_blank'); }} 
+                                        className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-center font-medium"
+                                     >
+                                        View
+                                     </button>
+                                     <button 
+                                        onClick={(e) => handleRefundOrder(order, e)}
+                                        className="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-center font-medium"
+                                     >
+                                        Refund
+                                     </button>
+                                     <button 
+                                        onClick={(e) => handleCancelOrder(order, e)}
+                                        className="px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-center font-medium"
+                                     >
+                                        Cancel
+                                     </button>
                                   </div>
                                </div>
                             )}
@@ -1004,6 +1192,215 @@ export default function ConversationView() {
         </div>
       </div>
       
+      {/* Tracking Modal */}
+      {showTrackingModal && (
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 max-h-[80vh] overflow-y-auto">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                 <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                 Tracking Information
+              </h3>
+              {loadingTracking ? (
+                 <div className="py-8 text-center text-slate-500">Loading tracking info...</div>
+              ) : trackingError ? (
+                 <div className="p-4 bg-red-50 text-red-700 rounded-lg text-sm">{trackingError}</div>
+              ) : trackingData ? (
+                 <div className="space-y-4">
+                    <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-200">
+                       <div>
+                          <p className="text-xs text-slate-500 uppercase">Status</p>
+                          <p className="font-bold text-blue-600 text-lg">
+                             {trackingData.data?.[0]?.track_info?.latest_status?.status || "Unknown"}
+                          </p>
+                       </div>
+                       <div className="text-right">
+                          <p className="text-xs text-slate-500 uppercase">Carrier</p>
+                          <p className="font-medium">{trackingData.data?.[0]?.carrier || "Unknown"}</p>
+                       </div>
+                    </div>
+                    
+                    <div className="space-y-3">
+                       <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">History</h4>
+                       <div className="space-y-4 relative pl-4 border-l-2 border-slate-200">
+                          {trackingData.data?.[0]?.track_info?.tracking?.providers?.[0]?.events?.slice(0, 5).map((event: any, i: number) => (
+                             <div key={i} className="relative">
+                                <div className="absolute -left-[21px] top-1.5 w-3 h-3 bg-blue-500 rounded-full border-2 border-white"></div>
+                                <p className="text-sm font-medium text-slate-800">{event.description}</p>
+                                <p className="text-xs text-slate-500">{new Date(event.time_utc).toLocaleString()}</p>
+                                <p className="text-xs text-slate-400">{event.location}</p>
+                             </div>
+                          ))}
+                       </div>
+                    </div>
+                 </div>
+              ) : (
+                 <p className="text-center text-slate-500">No data available.</p>
+              )}
+              <div className="mt-6 flex justify-end">
+                 <button onClick={() => setShowTrackingModal(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">Close</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Refund Modal */}
+      {showRefundModal && refundOrder && (
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                 <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                 Refund Order #{refundOrder.order_number}
+              </h3>
+              
+              <div className="space-y-4">
+                 {/* Mode Selector */}
+                 <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
+                    <button onClick={() => setRefundMode('simple')} className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${refundMode === 'simple' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>Simple Refund</button>
+                    <button onClick={() => setRefundMode('items')} className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${refundMode === 'items' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>Refund Items</button>
+                 </div>
+
+                 {/* Simple Mode */}
+                 {refundMode === 'simple' && (
+                    <div className="space-y-3">
+                       <div className="grid grid-cols-2 gap-3">
+                          <button onClick={() => setRefundType('preset')} className={`p-3 border rounded-lg text-left transition-all ${refundType === 'preset' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                             <div className="font-medium text-sm">Preset %</div>
+                             <div className="flex gap-2 mt-2">
+                                <span onClick={(e) => { e.stopPropagation(); setRefundPreset(80); }} className={`px-2 py-1 text-xs rounded border cursor-pointer ${refundPreset === 80 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-slate-300'}`}>80%</span>
+                                <span onClick={(e) => { e.stopPropagation(); setRefundPreset(50); }} className={`px-2 py-1 text-xs rounded border cursor-pointer ${refundPreset === 50 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-slate-300'}`}>50%</span>
+                             </div>
+                          </button>
+                          <button onClick={() => setRefundType('full')} className={`p-3 border rounded-lg text-left transition-all ${refundType === 'full' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                             <div className="font-medium text-sm">Full Refund</div>
+                             <div className="text-xs text-slate-500 mt-1">100% of total</div>
+                          </button>
+                       </div>
+                    </div>
+                 )}
+
+                 {/* Items Mode */}
+                 {refundMode === 'items' && (
+                    <div className="space-y-2 max-h-60 overflow-y-auto border rounded-lg p-2">
+                       {refundOrder.line_items.map((item: any) => {
+                          const current = selectedLineItems.get(item.id) || { quantity: 0, restock: true };
+                          return (
+                             <div key={item.id} className="flex items-center justify-between p-2 border-b last:border-0">
+                                <div className="flex-1">
+                                   <p className="text-sm font-medium truncate">{item.name}</p>
+                                   <p className="text-xs text-slate-500">${item.price}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                   <input 
+                                     type="number" 
+                                     min="0" 
+                                     max={item.quantity} 
+                                     value={current.quantity} 
+                                     onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 0;
+                                        setSelectedLineItems(prev => new Map(prev).set(item.id, { ...current, quantity: Math.min(val, item.quantity) }));
+                                     }}
+                                     className="w-16 border rounded px-2 py-1 text-sm"
+                                   />
+                                   <label className="flex items-center gap-1 text-xs">
+                                      <input 
+                                        type="checkbox" 
+                                        checked={current.restock} 
+                                        onChange={(e) => setSelectedLineItems(prev => new Map(prev).set(item.id, { ...current, restock: e.target.checked }))}
+                                      /> Restock
+                                   </label>
+                                </div>
+                             </div>
+                          );
+                       })}
+                    </div>
+                 )}
+
+                 {/* Summary */}
+                 <div className="bg-slate-50 p-3 rounded-lg flex justify-between items-center">
+                    <span className="font-medium text-slate-700">Refund Amount:</span>
+                    <span className="text-xl font-bold text-slate-900">${calculateRefundAmount().toFixed(2)}</span>
+                 </div>
+
+                 <textarea 
+                    className="w-full border rounded-lg p-2 text-sm" 
+                    placeholder="Reason for refund (optional)"
+                    value={refundReason}
+                    onChange={(e) => setRefundReason(e.target.value)}
+                 />
+                 
+                 <label className="flex items-center gap-2 text-sm text-slate-600">
+                    <input type="checkbox" checked={refundNotifyCustomer} onChange={(e) => setRefundNotifyCustomer(e.target.checked)} />
+                    Send notification to customer
+                 </label>
+
+                 <div className="flex justify-end gap-2 pt-2">
+                    <button onClick={() => setShowRefundModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">Cancel</button>
+                    <button 
+                       onClick={processRefund} 
+                       disabled={processingRefund || calculateRefundAmount() <= 0}
+                       className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded shadow-sm disabled:opacity-50"
+                    >
+                       {processingRefund ? "Processing..." : "Process Refund"}
+                    </button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Cancel Modal */}
+      {showCancelModal && cancelOrder && (
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+              <h3 className="text-lg font-bold mb-4 text-red-600 flex items-center gap-2">
+                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                 Cancel Order #{cancelOrder.order_number}
+              </h3>
+              
+              <div className="space-y-4">
+                 <p className="text-sm text-slate-600">Are you sure you want to cancel this order? This action cannot be undone.</p>
+                 
+                 <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Reason</label>
+                    <select 
+                       value={cancelReason} 
+                       onChange={(e: any) => setCancelReason(e.target.value)}
+                       className="w-full border rounded-lg p-2 text-sm"
+                    >
+                       <option value="customer">Customer changed/cancelled order</option>
+                       <option value="fraud">Fraudulent order</option>
+                       <option value="inventory">Items unavailable</option>
+                       <option value="declined">Payment declined</option>
+                       <option value="other">Other</option>
+                    </select>
+                 </div>
+
+                 <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm text-slate-600">
+                       <input type="checkbox" checked={cancelRefund} onChange={(e) => setCancelRefund(e.target.checked)} />
+                       Refund full amount (${cancelOrder.total_price})
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-600">
+                       <input type="checkbox" checked={cancelNotifyCustomer} onChange={(e) => setCancelNotifyCustomer(e.target.checked)} />
+                       Send notification to customer
+                    </label>
+                 </div>
+
+                 <div className="flex justify-end gap-2 pt-4">
+                    <button onClick={() => setShowCancelModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">Abort</button>
+                    <button 
+                       onClick={processCancel} 
+                       disabled={processingCancel}
+                       className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded shadow-sm disabled:opacity-50"
+                    >
+                       {processingCancel ? "Cancelling..." : "Confirm Cancel"}
+                    </button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
       {/* Ask Question Modal */}
       {showAskQuestionModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
