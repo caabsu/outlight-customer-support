@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 
 interface DraftResponse {
+  conversationId?: string;
   draft: string;
   reasoning?: string;
   actionSteps?: string[];
@@ -10,6 +11,7 @@ interface DraftResponse {
   knowledgeBase?: any;
   tags?: string[];
   category?: string;
+  customInstructions?: string;
 }
 
 interface DraftAssistantModalProps {
@@ -37,13 +39,39 @@ export default function DraftAssistantModal({
   const [editedDraft, setEditedDraft] = useState("");
   const [activeTab, setActiveTab] = useState<"preview" | "reasoning" | "context" | "debug">("preview");
 
-  // Auto-generate removed to prevent empty drafts on open
-  // useEffect(() => {
-  //   if (isOpen && !data && !isLoading) {
-  //     handleGenerate();
-  //   }
-  //   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, [isOpen]);
+  // Check for existing draft on open
+  useEffect(() => {
+    if (!isOpen || isLoading) return;
+
+    // If we have data matching this conversation, don't re-fetch (preserve state)
+    if (data && data.conversationId === conversationId) return;
+
+    const loadDraft = async () => {
+        // Clear stale data
+        setData(null);
+        setEditedDraft("");
+        setInstruction("");
+        setLogs([]);
+        
+        try {
+            const res = await fetch(`/api/conversations/${conversationId}/draft`);
+            if (res.ok) {
+                const draftData = await res.json();
+                setData(draftData);
+                setEditedDraft(draftData.draft || "");
+                if (draftData.customInstructions) {
+                    setInstruction(draftData.customInstructions);
+                }
+                addLog("Loaded existing draft from database.");
+            }
+        } catch (e) {
+            // No draft found, clean state is correct
+        }
+    };
+    loadDraft();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, conversationId]);
 
   const addLog = (msg: string) => setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 

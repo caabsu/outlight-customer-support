@@ -928,54 +928,58 @@ export default function ConversationView() {
           }}
         />
 
-        <div className="flex-1 overflow-y-auto">
-          {/* Section: Shopify */}
-          <div className="p-4 border-b border-slate-200">
-             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
-                Shopify Customer
-                <button onClick={handleAIDetectEmail} disabled={detectingEmail} className="ml-auto text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded hover:bg-purple-200 disabled:opacity-50">
-                   {detectingEmail ? "..." : "AI Detect"}
-                </button>
-             </h3>
-             
-             {/* Manual Search */}
-             <div className="flex gap-2 mb-3">
-                <input 
-                  type="text" 
-                  value={shopifySearchQuery} 
-                  onChange={(e) => setShopifySearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleShopifySearch()}
-                  placeholder="Search email or name..." 
-                  className="flex-1 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-500"
-                />
-                <button 
-                  onClick={handleShopifySearch}
-                  disabled={searchingShopify}
-                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-xs font-medium border border-slate-300"
-                >
-                  {searchingShopify ? "..." : "Search"}
-                </button>
+        {/* Sidebar Content Container - Flex Column */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+          
+          {/* 1. Shopify Section (Fixed Height) */}
+          <div className="h-[280px] border-b border-slate-200 flex flex-col bg-white flex-shrink-0">
+             <div className="p-4 border-b border-slate-100 flex-shrink-0 bg-slate-50/50">
+                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                    Shopify Customer
+                    <button onClick={handleAIDetectEmail} disabled={detectingEmail} className="ml-auto text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded hover:bg-purple-200 disabled:opacity-50">
+                       {detectingEmail ? "..." : "AI Detect"}
+                    </button>
+                 </h3>
              </div>
              
-             {loadingShopify ? (
-                <div className="text-center py-4 text-slate-400 text-sm">Loading...</div>
-             ) : shopifyCustomer ? (
-                <div className="space-y-3">
-                   <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm">
-                      <p className="font-semibold text-slate-900">{shopifyCustomer.first_name} {shopifyCustomer.last_name}</p>
-                      <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-slate-500">
-                         <div>Orders: <span className="text-slate-900">{shopifyCustomer.orders_count}</span></div>
-                         <div>Spent: <span className="text-slate-900">${shopifyCustomer.total_spent}</span></div>
-                      </div>
-                   </div>
-                   
-                   <div className="space-y-2">
-                      {shopifyOrders.slice(0, 3).map(order => (
-                         <div key={order.id} className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm hover:border-blue-300 transition-colors">
-                            <div className="cursor-pointer" onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}>
+             <div className="flex-1 overflow-y-auto p-4">
+                 {/* Manual Search */}
+                 <div className="flex gap-2 mb-3">
+                    <input 
+                      type="text" 
+                      value={shopifySearchQuery} 
+                      onChange={(e) => setShopifySearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleShopifySearch()}
+                      placeholder="Search..." 
+                      className="flex-1 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-500"
+                    />
+                    <button 
+                      onClick={handleShopifySearch}
+                      disabled={searchingShopify}
+                      className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-xs font-medium border border-slate-300"
+                    >
+                      {searchingShopify ? "..." : "Search"}
+                    </button>
+                 </div>
+                 
+                 {loadingShopify ? (
+                    <div className="text-center py-8 text-slate-400 text-sm">Loading...</div>
+                 ) : shopifyCustomer ? (
+                    <div className="space-y-3">
+                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                          <p className="font-semibold text-slate-900">{shopifyCustomer.first_name} {shopifyCustomer.last_name}</p>
+                          <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-slate-500">
+                             <div>Orders: <span className="text-slate-900">{shopifyCustomer.orders_count}</span></div>
+                             <div>Spent: <span className="text-slate-900">${shopifyCustomer.total_spent}</span></div>
+                          </div>
+                       </div>
+                       
+                       <div className="space-y-2">
+                          {shopifyOrders.slice(0, 3).map(order => (
+                             <div key={order.id} className="bg-white border border-slate-200 rounded-lg p-3 hover:border-blue-300 cursor-pointer transition-colors" onClick={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}>
                                 <div className="flex justify-between items-center mb-1">
-                                   <span className="font-medium text-slate-900 text-sm">#{order.order_number}</span>
+                                   <span className="font-medium text-slate-900 text-xs">#{order.order_number}</span>
                                    <div className="flex gap-1">
                                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${order.financial_status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{order.financial_status}</span>
                                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${order.fulfillment_status === 'fulfilled' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{order.fulfillment_status || 'unfulfilled'}</span>
@@ -985,213 +989,212 @@ export default function ConversationView() {
                                    <span>{new Date(order.created_at).toLocaleDateString()}</span>
                                    <span className="text-slate-900 font-medium">${order.total_price}</span>
                                 </div>
-                            </div>
-                            
-                            {selectedOrder?.id === order.id && (
-                               <div className="mt-3 pt-2 border-t border-slate-100 text-xs space-y-2">
-                                  {/* Line Items */}
-                                  <div className="space-y-1">
-                                    {order.line_items.map((item: any) => (
-                                       <div key={item.id} className="flex justify-between">
-                                          <span className="truncate flex-1 text-slate-700">{item.quantity}x {item.name}</span>
-                                          <span className="text-slate-900">${item.price}</span>
-                                       </div>
-                                    ))}
-                                  </div>
+                                {selectedOrder?.id === order.id && (
+                                   <div className="mt-2 pt-2 border-t border-slate-100 text-xs space-y-1">
+                                      {order.line_items.map((item: any) => (
+                                         <div key={item.id} className="flex justify-between">
+                                            <span className="truncate flex-1">{item.quantity}x {item.name}</span>
+                                            <span>${item.price}</span>
+                                         </div>
+                                      ))}
+                                      
+                                      {/* Tracking Link */}
+                                      {order.fulfillments?.map((f: any) => f.tracking_number && (
+                                         <div key={f.id} className="flex items-center gap-2 bg-slate-50 p-1.5 rounded">
+                                            <span className="text-slate-500">Tracking:</span>
+                                            <button 
+                                              onClick={() => handleTrackOrder(f.tracking_number, f.tracking_company)}
+                                              className="text-blue-600 font-medium hover:underline truncate flex-1 text-left"
+                                            >
+                                              {f.tracking_number}
+                                            </button>
+                                         </div>
+                                      ))}
 
-                                  {/* Tracking Link */}
-                                  {order.fulfillments?.map((f: any) => f.tracking_number && (
-                                     <div key={f.id} className="flex items-center gap-2 bg-slate-50 p-1.5 rounded">
-                                        <span className="text-slate-500">Tracking:</span>
-                                        <button 
-                                          onClick={() => handleTrackOrder(f.tracking_number, f.tracking_company)}
-                                          className="text-blue-600 font-medium hover:underline truncate flex-1 text-left"
-                                        >
-                                          {f.tracking_number}
-                                        </button>
-                                     </div>
-                                  ))}
-
-                                  {/* Action Buttons */}
-                                  <div className="grid grid-cols-3 gap-2 pt-1">
-                                     <button 
-                                        onClick={(e) => { e.stopPropagation(); window.open(`https://${process.env.NEXT_PUBLIC_SHOPIFY_STORE || 'admin.shopify.com'}/orders/${order.id}`, '_blank'); }} 
-                                        className="flex items-center justify-center gap-1 px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-center font-medium text-[10px]"
-                                        title="View in Shopify"
-                                     >
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                                        View
-                                     </button>
-                                     <button 
-                                        onClick={(e) => handleRefundOrder(order, e)}
-                                        className="flex items-center justify-center gap-1 px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-center font-medium text-[10px]"
-                                        title="Process Refund"
-                                     >
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
-                                        Refund
-                                     </button>
-                                     <button 
-                                        onClick={(e) => handleCancelOrder(order, e)}
-                                        className="flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-center font-medium text-[10px]"
-                                        title="Cancel Order"
-                                     >
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                                        Cancel
-                                     </button>
-                                  </div>
-                               </div>
-                            )}
-                         </div>
-                      ))}
-                   </div>
-                </div>
-             ) : (
-                <div className="text-center py-4">
-                   <p className="text-xs text-slate-500 mb-2">No customer found.</p>
-                   <button onClick={() => handleShopifySearch()} className="text-xs text-blue-600 hover:underline">Search manually</button>
-                </div>
-             )}
+                                      {/* Action Buttons */}
+                                      <div className="grid grid-cols-3 gap-2 pt-1">
+                                         <button 
+                                            onClick={(e) => { e.stopPropagation(); window.open(`https://${process.env.NEXT_PUBLIC_SHOPIFY_STORE || 'admin.shopify.com'}/orders/${order.id}`, '_blank'); }} 
+                                            className="flex items-center justify-center gap-1 px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-center font-medium text-[10px]"
+                                            title="View in Shopify"
+                                         >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                            View
+                                         </button>
+                                         <button 
+                                            onClick={(e) => handleRefundOrder(order, e)}
+                                            className="flex items-center justify-center gap-1 px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-center font-medium text-[10px]"
+                                            title="Process Refund"
+                                         >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                                            Refund
+                                         </button>
+                                         <button 
+                                            onClick={(e) => handleCancelOrder(order, e)}
+                                            className="flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-center font-medium text-[10px]"
+                                            title="Cancel Order"
+                                         >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                            Cancel
+                                         </button>
+                                      </div>
+                                   </div>
+                                )}
+                             </div>
+                          ))}
+                       </div>
+                    </div>
+                 ) : (
+                    <div className="text-center py-8">
+                       <p className="text-xs text-slate-500 mb-2">No customer found.</p>
+                    </div>
+                 )}
+             </div>
           </div>
 
-          {/* Section: History */}
-          <div className="p-4 border-b border-slate-200">
-             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2 justify-between">
-                <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  Related Conversations
-                </div>
-                <button 
-                  onClick={() => setShowRelatedModal(true)}
-                  className="text-[10px] text-blue-600 hover:underline"
-                >
-                  View All
-                </button>
-             </h3>
-             
-             {selectedRelatedIds.size > 0 && (
-               <div className="mb-3 bg-blue-50 p-2 rounded-lg border border-blue-100 flex flex-col gap-2">
-                 <span className="text-[10px] font-bold text-blue-800 uppercase">{selectedRelatedIds.size} Selected</span>
-                 <div className="flex gap-1">
-                   <button 
-                     onClick={handleMergeRelatedConversations} 
-                     disabled={mergingRelated}
-                     className="flex-1 py-1 bg-white border border-blue-200 rounded text-[10px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-                   >
-                     {mergingRelated ? 'Merging...' : 'Merge'}
-                   </button>
+          {/* 2. History Section (Flexible Height - Takes Remaining Space) */}
+          <div className="flex-1 border-b border-slate-200 flex flex-col bg-white min-h-[200px]">
+             <div className="p-4 border-b border-slate-100 flex-shrink-0 bg-slate-50/50">
+                 <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        History ({history.length})
+                    </h3>
+                    <button onClick={() => setShowRelatedModal(true)} className="text-[10px] text-blue-600 hover:underline">View All</button>
                  </div>
-               </div>
-             )}
-
-             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {history.slice(0, 5).map(h => (
-                   <div key={h.id} className={`group flex items-start gap-2 p-2 rounded hover:bg-slate-100 transition-colors ${selectedConversation.id === h.id ? 'bg-blue-50/50' : ''}`}>
-                      <input 
-                        type="checkbox" 
-                        checked={selectedRelatedIds.has(h.id)}
-                        onChange={() => toggleRelatedSelection(h.id)}
-                        className="mt-1 h-3 w-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0"
-                      />
-                      <div className="flex-1 cursor-pointer min-w-0" onClick={() => selectConversation(h.id)}>
-                        <div className="flex justify-between items-baseline mb-0.5">
-                           <p className={`text-xs truncate ${selectedConversation.id === h.id ? 'font-bold text-blue-700' : 'font-medium text-slate-900'}`}>
-                              {h.subject || "(No Subject)"}
-                           </p>
-                           {h.id === selectedConversation.id && <span className="text-[10px] font-bold text-blue-600 ml-1">Current</span>}
-                        </div>
-                        <div className="flex justify-between items-center text-[10px] text-slate-500">
-                           <span>{formatDate(h.lastMessageAt)}</span>
-                           <div className="flex gap-1 items-center">
-                              {h.userTags?.includes("non-customer-support") && <span className="px-1 bg-gray-200 rounded text-gray-600">Non-CS</span>}
-                              {h.archived && <span className="px-1 bg-green-100 text-green-700 rounded">Resolved</span>}
-                              
-                              {/* Quick Actions on Hover */}
-                              <div className="hidden group-hover:flex gap-1 ml-1">
-                                <button onClick={(e) => handleMarkRelatedNonSupport(h.id, e)} title="Mark Non-CS" className="text-gray-400 hover:text-gray-600">
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                 
+                 {/* Local Filters */}
+                 <div className="flex gap-2">
+                    <button 
+                        onClick={() => setShowCSOnly(!showCSOnly)}
+                        className={`px-2 py-1 text-[10px] rounded border transition-colors ${showCSOnly ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                    >
+                        Hide Non-CS
+                    </button>
+                    <button 
+                        onClick={() => setShowNeedsReplyOnly(!showNeedsReplyOnly)}
+                        className={`px-2 py-1 text-[10px] rounded border transition-colors ${showNeedsReplyOnly ? 'bg-orange-100 border-orange-200 text-orange-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                    >
+                        Needs Reply
+                    </button>
+                 </div>
+             </div>
+             
+             <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                {history.length === 0 && !loadingHistory && (
+                    <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                        <p className="text-xs">No conversations found.</p>
+                    </div>
+                )}
+                
+                {history.slice(0, 10).map(h => (
+                   <div key={h.id} className={`group relative p-2.5 rounded-lg border transition-all ${selectedConversation.id === h.id ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:border-slate-200 hover:bg-slate-50'}`}>
+                      <div className="flex justify-between items-start mb-1" onClick={() => selectConversation(h.id)}>
+                         <p className={`text-xs truncate flex-1 pr-2 cursor-pointer ${selectedConversation.id === h.id ? 'font-bold text-blue-700' : 'font-medium text-slate-900'}`}>
+                            {h.subject || "(No Subject)"}
+                         </p>
+                         <span className="text-[10px] text-slate-400 whitespace-nowrap">{formatDate(h.lastMessageAt)}</span>
+                      </div>
+                      
+                      <div className="flex justify-between items-center mt-1">
+                         <div className="flex gap-1">
+                            {h.needsReply && <span className="w-2 h-2 bg-orange-400 rounded-full" title="Needs Reply"></span>}
+                            {h.userTags?.includes("non-customer-support") && <span className="text-[10px] text-gray-500 bg-gray-100 px-1 rounded">Non-CS</span>}
+                            {h.archived && <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded">Resolved</span>}
+                         </div>
+                         
+                         {/* Improved Action Buttons */}
+                         <div className="flex gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
+                            {!h.userTags?.includes("non-customer-support") && (
+                                <button 
+                                    onClick={(e) => handleMarkRelatedNonSupport(h.id, e)} 
+                                    className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" 
+                                    title="Mark as Non-Support"
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
                                 </button>
-                                <button onClick={(e) => handleResolveRelated(h.id, e)} title="Resolve" className="text-gray-400 hover:text-green-600">
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                            )}
+                            {!h.archived && (
+                                <button 
+                                    onClick={(e) => handleResolveRelated(h.id, e)} 
+                                    className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded" 
+                                    title="Resolve"
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                                 </button>
-                              </div>
-                           </div>
-                        </div>
+                            )}
+                         </div>
                       </div>
                    </div>
                 ))}
-                {history.length === 0 && !loadingHistory && <p className="text-xs text-slate-400 text-center py-4">No related history found.</p>}
-                {loadingHistory && <div className="flex justify-center py-4"><div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>}
              </div>
           </div>
-          
-      {/* Related Conversations Modal */}
-      {showRelatedModal && (
-        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl h-[80vh] flex flex-col">
-            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
-              <h3 className="text-lg font-bold text-slate-800">Related Conversations</h3>
-              <button onClick={() => setShowRelatedModal(false)} className="p-1 hover:bg-slate-200 rounded-full text-slate-500">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-               {history.map(h => (
-                  <div key={h.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 group">
-                     <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                           <span className="font-semibold text-sm text-slate-900 truncate">{h.subject || "(No Subject)"}</span>
-                           {h.id === selectedConversation.id && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Current</span>}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
-                           <span>{formatDate(h.lastMessageAt)}</span>
-                           <span>•</span>
-                           <span className="truncate">{h.messages[0]?.bodyText?.substring(0, 60)}...</span>
-                        </div>
-                     </div>
-                     <div className="flex items-center gap-2 ml-4">
-                        {h.userTags?.includes("non-customer-support") && <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded">Non-CS</span>}
-                        {h.archived && <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded">Resolved</span>}
-                        
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                           <button onClick={() => selectConversation(h.id)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="View">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                           </button>
-                           <button onClick={(e) => handleMarkRelatedNonSupport(h.id, e)} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded" title="Mark Non-CS">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
-                           </button>
-                           <button onClick={(e) => handleResolveRelated(h.id, e)} className="p-1.5 text-slate-500 hover:bg-green-50 hover:text-green-600 rounded" title="Resolve">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                           </button>
-                        </div>
-                     </div>
-                  </div>
-               ))}
-            </div>
-          </div>
-        </div>
-      )}
 
-          {/* Section: Quick Actions */}
-          <div className="p-4">
-             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">Actions</h3>
-             <div className="grid grid-cols-2 gap-2">
-                <button onClick={handleMarkResolved} className="px-3 py-2 bg-white border border-slate-200 rounded hover:bg-slate-50 text-xs font-medium text-slate-700">Mark Resolved</button>
-                <button onClick={handleMarkNonSupport} className="px-3 py-2 bg-white border border-slate-200 rounded hover:bg-slate-50 text-xs font-medium text-slate-700">Non-Support</button>
-                <button onClick={handleEscalateToAdmin} className="px-3 py-2 bg-white border border-slate-200 rounded hover:bg-slate-50 text-xs font-medium text-slate-700">Escalate to Admin</button>
-                <button onClick={goToNextUnreplied} className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-medium">Next Unreplied</button>
+          {/* 3. Quick Actions Section (Auto Height) */}
+          <div className="p-4 bg-slate-50 flex-shrink-0 border-t border-slate-200">
+             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">Quick Actions</h3>
+             <div className="flex flex-col space-y-2.5">
+                
+                {/* Mark Resolved */}
+                <button 
+                   onClick={handleMarkResolved} 
+                   className="group flex items-center gap-3 p-2.5 bg-white border border-slate-200 hover:border-green-500 hover:bg-green-50/50 rounded-xl transition-all shadow-sm text-left"
+                >
+                   <div className="w-8 h-8 flex items-center justify-center bg-green-100 text-green-600 rounded-lg group-hover:bg-white transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                   </div>
+                   <div>
+                      <span className="block text-xs font-bold text-slate-700 group-hover:text-green-800">Mark Resolved</span>
+                      <span className="block text-[10px] text-slate-400 group-hover:text-green-600/70">Archive conversation</span>
+                   </div>
+                </button>
+
+                {/* Non-Support */}
+                <button 
+                   onClick={handleMarkNonSupport} 
+                   className="group flex items-center gap-3 p-2.5 bg-white border border-slate-200 hover:border-slate-400 hover:bg-slate-50 rounded-xl transition-all shadow-sm text-left"
+                >
+                   <div className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-500 rounded-lg group-hover:bg-white transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                   </div>
+                   <div>
+                      <span className="block text-xs font-bold text-slate-700 group-hover:text-slate-900">Not Customer Support</span>
+                      <span className="block text-[10px] text-slate-400 group-hover:text-slate-500">Ignore this sender</span>
+                   </div>
+                </button>
+
+                {/* Escalate */}
+                <button 
+                   onClick={handleEscalateToAdmin} 
+                   className="group flex items-center gap-3 p-2.5 bg-white border border-slate-200 hover:border-purple-500 hover:bg-purple-50/50 rounded-xl transition-all shadow-sm text-left"
+                >
+                   <div className="w-8 h-8 flex items-center justify-center bg-purple-100 text-purple-600 rounded-lg group-hover:bg-white transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                   </div>
+                   <div>
+                      <span className="block text-xs font-bold text-slate-700 group-hover:text-purple-800">Escalate to Admin</span>
+                      <span className="block text-[10px] text-slate-400 group-hover:text-purple-600/70">Flag for review</span>
+                   </div>
+                </button>
+
+                {/* Next Unreplied */}
+                <button 
+                   onClick={goToNextUnreplied} 
+                   className="group flex items-center gap-3 p-2.5 bg-blue-600 border border-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-md text-left"
+                >
+                   <div className="w-8 h-8 flex items-center justify-center bg-blue-500 text-white rounded-lg group-hover:bg-blue-600 transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+                   </div>
+                   <div>
+                      <span className="block text-xs font-bold text-white">Next Unreplied</span>
+                      <span className="block text-[10px] text-blue-200">Jump to next email</span>
+                   </div>
+                </button>
+
              </div>
           </div>
         </div>
         
-        <DraftAssistantModal
-          isOpen={isDraftModalOpen}
-          onClose={() => setIsDraftModalOpen(false)}
-          onInsert={handleInsertDraft}
-          conversationId={selectedConversation.id}
-          customerName={selectedConversation.customer.name || "Customer"}
-          customerEmail={selectedConversation.customer.primaryEmail}
-        />
-
         {/* AI Assistant Chat (Fixed Bottom of Sidebar) */}
         <div className="border-t border-slate-200 bg-slate-50 p-0">
            <AIAssistant workspaceId={currentWorkspaceId ?? undefined} />

@@ -3087,6 +3087,45 @@ app.post("/tracking/batch", async (req: Request, res: Response) => {
  * AI Draft Functionality with Tool Access (Gemini Integration)
  */
 
+// Get existing draft
+app.get("/conversations/:id/draft", async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.id;
+    const existingDraft = await prisma.draftResponse.findUnique({
+      where: { conversationId }
+    });
+
+    if (!existingDraft) {
+      return res.status(404).json({ error: "No draft found" });
+    }
+
+    // Handle old data format: convert string actionSteps to array if needed
+    let actionSteps = existingDraft.actionSteps;
+    if (actionSteps && typeof actionSteps === 'string') {
+      actionSteps = (actionSteps as string).split('\n').filter(s => s.trim());
+    }
+
+    res.json({
+      internalReasoning: existingDraft.internalReasoning,
+      tags: existingDraft.tags,
+      category: existingDraft.category,
+      reasoning: existingDraft.reasoning,
+      shouldDraft: existingDraft.shouldDraft,
+      draft: existingDraft.draft,
+      actionSteps: actionSteps,
+      orderInfo: existingDraft.orderInfo,
+      conversationId,
+      fromDatabase: true,
+      createdAt: existingDraft.createdAt,
+      updatedAt: existingDraft.updatedAt,
+      customInstructions: (existingDraft as any).customInstructions || null
+    });
+  } catch (error) {
+    console.error("[Draft] Error fetching draft:", error);
+    res.status(500).json({ error: "Failed to fetch draft" });
+  }
+});
+
 app.post("/conversations/:id/draft", async (req: Request, res: Response) => {
   // Increase timeout to 5 minutes for AI processing
   req.setTimeout(300000); // 5 minutes
