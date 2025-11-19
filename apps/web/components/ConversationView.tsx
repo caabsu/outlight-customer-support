@@ -578,6 +578,7 @@ export default function ConversationView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: updatedTags }),
       });
+      await refreshConversations();
     } catch (error) {
       console.error("Failed to mark related as non-support:", error);
       // Revert on error? For now just log.
@@ -593,6 +594,7 @@ export default function ConversationView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ archived: true }),
       });
+      await refreshConversations();
     } catch (error) {
       console.error("Failed to resolve related:", error);
     }
