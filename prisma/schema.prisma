@@ -79,6 +79,7 @@ model Conversation {
   trainingAt            DateTime?
   trainingBy            String?
   trainingByUser        User?          @relation("TrainingBy", fields: [trainingBy], references: [id], onDelete: SetNull)
+  trainingReadBy        String[]       @default([])
 
   // Relations
   userActivities        UserActivity[]

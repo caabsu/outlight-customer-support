@@ -649,6 +649,46 @@ app.get("/conversations/training/all", async (req: Request, res: Response) => {
   }
 });
 
+// Toggle read status for training
+app.post("/conversations/:id/training/read", async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: "userId required" });
+
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: req.params.id },
+      select: { trainingReadBy: true }
+    });
+
+    if (!conversation) return res.status(404).json({ error: "Conversation not found" });
+
+    const currentReadBy = conversation.trainingReadBy || [];
+    let updatedReadBy;
+
+    if (currentReadBy.includes(userId)) {
+      // Remove (Mark as Unread)
+      updatedReadBy = currentReadBy.filter(id => id !== userId);
+    } else {
+      // Add (Mark as Read)
+      updatedReadBy = [...currentReadBy, userId];
+    }
+
+    const updated = await prisma.conversation.update({
+      where: { id: req.params.id },
+      data: { trainingReadBy: updatedReadBy },
+    });
+
+    res.json({ 
+      success: true, 
+      read: updatedReadBy.includes(userId),
+      trainingReadBy: updated.trainingReadBy 
+    });
+  } catch (error) {
+    console.error("Error toggling training read status:", error);
+    res.status(500).json({ error: "Failed to toggle status" });
+  }
+});
+
 // Update training status and notes
 app.patch("/conversations/:id/training", async (req: Request, res: Response) => {
   try {
