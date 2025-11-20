@@ -321,55 +321,57 @@ export default function TrainingPage() {
                            </div>
                       </div>
 
-                  {/* Messages Area */}
-                  <div className="flex-1 overflow-y-auto p-8 bg-slate-50 space-y-6 scrollbar-thin scrollbar-thumb-slate-300">
-                    {Array.isArray(conv.messages) ? conv.messages.map((msg, idx) => {
-                           // Strip HTML for preview in card, but sanitize for full view
-                           const isOutbound = msg.direction === "outbound";
-                           return (
-                              <div key={msg.id || idx} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
-                                 <div className={`max-w-[85%] rounded-2xl border shadow-sm overflow-hidden ${isOutbound ? "bg-blue-50 border-blue-100" : "bg-white border-slate-200"}`}>
-                                    
-                                    {/* Msg Header */}
-                                    <div className={`px-5 py-3 border-b flex items-center gap-3 ${isOutbound ? "border-blue-100 bg-blue-100/30" : "border-slate-100 bg-slate-50"}`}>
-                                       <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${isOutbound ? "bg-blue-100 text-blue-700" : "bg-slate-200 text-slate-600"}`}>
-                                          {isOutbound ? "Agent Response" : "Customer Inquiry"}
-                                       </span>
-                                       <span className="text-xs text-slate-400 ml-auto">
-                                          {msg.sentAt ? new Date(msg.sentAt).toLocaleString() : ""}
-                                       </span>
-                                    </div>
+                      {/* Messages Area */}
+                      <div className="flex-1 overflow-y-auto p-8 bg-slate-50 space-y-6 scrollbar-thin scrollbar-thumb-slate-300">
+                        {Array.isArray(conv.messages) ? conv.messages.map((msg, idx) => {
+                               // Strip HTML for preview in card, but sanitize for full view
+                               const isOutbound = msg.direction === "outbound";
+                               return (
+                                  <div key={msg.id || idx} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
+                                     <div className={`max-w-[85%] rounded-2xl border shadow-sm overflow-hidden ${isOutbound ? "bg-blue-50 border-blue-100" : "bg-white border-slate-200"}`}>
+                                        
+                                        {/* Msg Header */}
+                                        <div className={`px-5 py-3 border-b flex items-center gap-3 ${isOutbound ? "border-blue-100 bg-blue-100/30" : "border-slate-100 bg-slate-50"}`}>
+                                           <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${isOutbound ? "bg-blue-100 text-blue-700" : "bg-slate-200 text-slate-600"}`}>
+                                              {isOutbound ? "Agent Response" : "Customer Inquiry"}
+                                           </span>
+                                           <span className="text-xs text-slate-400 ml-auto">
+                                              {msg.sentAt ? new Date(msg.sentAt).toLocaleString() : ""}
+                                           </span>
+                                        </div>
 
-                                    {/* Msg Body */}
-                                    <div className="p-6 text-sm text-slate-800 leading-relaxed font-sans">
-                                       {msg.bodyHtml ? (
-                                          <div 
-                                             className="email-html-container"
-                                             dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(resolveInlineImages(msg.bodyHtml, msg)) }} 
-                                          />
-                                       ) : (
-                                          <p className="whitespace-pre-wrap">{msg.bodyText || "(No content)"}</p>
-                                       )}
-                                    </div>
+                                        {/* Msg Body */}
+                                        <div className="p-6 text-sm text-slate-800 leading-relaxed font-sans">
+                                           {msg.bodyHtml ? (
+                                              <div 
+                                                 className="email-html-container"
+                                                 dangerUySetInnerHTML={{ __html: sanitizeEmailHtml(resolveInlineImages(msg.bodyHtml, msg)) }} 
+                                              />
+                                           ) : (
+                                              <p className="whitespace-pre-wrap">{msg.bodyText || "(No content)"}</p>
+                                           )}
+                                        </div>
 
-                                    {/* Attachments */}
-                                    {msg.attachments && msg.attachments.length > 0 && (
-                                       <div className="px-6 pb-5 pt-1 flex flex-wrap gap-2">
-                                          {msg.attachments.map((att: any, i: number) => (
-                                             <div key={i} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 shadow-sm">
-                                                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                                                {att.filename || "Attachment"}
-                                             </div>
-                                          ))}
-                                       </div>
-                                    )}
-                                 </div>
-                              </div>
-                                                      );
-                                                   }) : (
-                                                   <div className="p-12 text-center text-slate-500">No messages available to display.</div>
-                                               )}
-                                             </div>
+                                        {/* Attachments */}
+                                        {msg.attachments && msg.attachments.length > 0 && (
+                                           <div className="px-6 pb-5 pt-1 flex flex-wrap gap-2">
+                                              {msg.attachments.map((att: any, i: number) => (
+                                                 <div key={i} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 shadow-sm">
+                                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                                                    {att.filename || "Attachment"}
+                                                 </div>
+                                              ))}
+                                           </div>
+                                        )}
+                                     </div>
+                                  </div>
+                               );
+                            }) : (
+                            <div className="p-12 text-center text-slate-500">No messages available to display.</div>
+                        )}
+                      </div>
+                   </div>
+                </div>
               );
             })()}
           </div>
