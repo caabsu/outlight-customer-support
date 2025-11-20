@@ -125,35 +125,29 @@ export default function TrainingPage() {
               <div 
                 key={conv.id} 
                 onClick={() => setSelectedId(conv.id)}
-                className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg hover:border-indigo-300 transition-all flex flex-col h-[350px] cursor-pointer group relative"
+                className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg hover:border-indigo-300 transition-all flex flex-col h-[200px] cursor-pointer group relative"
               >
                  {/* Review Badge */}
                  <div className="absolute top-4 right-4 px-2.5 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold uppercase tracking-wide rounded-full border border-indigo-100 z-10">
-                    Review Note
+                    Review Item
                  </div>
 
-                {/* Header Area */}
-                <div className="p-6 border-b border-slate-100">
+                {/* Main Content Area - focuses on Conversation Meta */}
+                <div className="p-6 flex-1 flex flex-col justify-between">
                    <div className="pr-16">
                      <h3 className="font-bold text-slate-900 text-base mb-1 truncate" title={conv.subject}>
                        {conv.subject || "(No Subject)"}
                      </h3>
-                     <p className="text-xs text-slate-500 truncate">
+                     <p className="text-xs text-slate-500 truncate mb-3">
                        {conv.customer.name || conv.customer.primaryEmail}
                      </p>
                    </div>
-                </div>
-
-                {/* Notes Preview - Minimal */}
-                <div className="p-6 flex-1 bg-white flex flex-col">
-                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Admin Note</h4>
-                   <p className="text-sm text-slate-600 font-medium leading-relaxed line-clamp-4 italic">
-                      &quot;{conv.trainingNotes}&quot;
-                   </p>
                    
-                   <div className="mt-auto pt-4 flex items-center justify-between text-xs text-slate-400">
-                      <span>{conv.trainingAt ? new Date(conv.trainingAt).toLocaleDateString() : "Date not recorded"}</span>
-                      <span className="font-medium text-indigo-500 group-hover:underline">View Full &rarr;</span>
+                   <div className="mt-auto flex items-center justify-between text-xs text-slate-400">
+                      <span className="font-medium text-slate-600">
+                         Flagged: {conv.trainingAt ? new Date(conv.trainingAt).toLocaleDateString() : "Not recorded"}
+                      </span>
+                      <span className="font-medium text-indigo-500 group-hover:underline">View Conversation &rarr;</span>
                    </div>
                 </div>
               </div>
@@ -185,7 +179,7 @@ export default function TrainingPage() {
               return (
                 <div className="flex h-full">
                    {/* LEFT: Review Notes Sidebar */}
-                   <div className="w-[350px] bg-indigo-50 flex-shrink-0 flex flex-col border-r border-indigo-100">
+                   <div className="w-[400px] bg-indigo-50 flex-shrink-0 flex flex-col border-r border-indigo-100">
                       <div className="p-8 border-b border-indigo-100 bg-white/50">
                          <h2 className="text-lg font-bold text-indigo-900 flex items-center gap-2">
                            <span className="p-1.5 bg-indigo-100 rounded-md text-indigo-600">
@@ -196,11 +190,11 @@ export default function TrainingPage() {
                          <div className="mt-4 flex flex-col gap-2 text-xs text-indigo-600/80 font-medium">
                            <div className="flex justify-between border-b border-indigo-100 pb-2">
                               <span>Reviewer:</span>
-                              <span className="text-indigo-900">{conv.trainingByUser?.name || "Admin"}</span>
+                              <span className="text-indigo-900 font-semibold">{conv.trainingByUser?.name || "Unknown User"}</span>
                            </div>
                            <div className="flex justify-between">
-                              <span>Date:</span>
-                              <span className="text-indigo-900">{conv.trainingAt ? new Date(conv.trainingAt).toLocaleDateString() : "Not recorded"}</span>
+                              <span>Date Flagged:</span>
+                              <span className="text-indigo-900 font-semibold">{conv.trainingAt ? new Date(conv.trainingAt).toLocaleString() : "Not recorded"}</span>
                            </div>
                          </div>
                       </div>
