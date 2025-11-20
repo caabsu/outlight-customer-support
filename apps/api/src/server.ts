@@ -634,7 +634,7 @@ app.get("/conversations/training/all", async (req: Request, res: Response) => {
           orderBy: { sentAt: "asc" }
         }
       },
-      orderBy: { updatedAt: "desc" }
+      orderBy: { lastMessageAt: "desc" }
     });
     res.json(conversations);
   } catch (error) {
