@@ -370,3 +370,13 @@ export default function TrainingPage() {
                         <div className="p-12 text-center text-slate-500">No messages available to display.</div>
                     )}
                   </div>
+                   </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
