@@ -121,7 +121,11 @@ export default function TrainingPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
-            {conversations.map(conv => (
+            {conversations.map(conv => {
+              // Defensive check: Ensure customer object exists
+              if (!conv || !conv.customer) return null;
+              
+              return (
               <div 
                 key={conv.id} 
                 onClick={() => setSelectedId(conv.id)}
@@ -139,7 +143,7 @@ export default function TrainingPage() {
                        {conv.subject || "(No Subject)"}
                      </h3>
                      <p className="text-xs text-slate-500 truncate mb-3">
-                       {conv.customer.name || conv.customer.primaryEmail}
+                       {conv.customer.name || conv.customer.primaryEmail || "Unknown Customer"}
                      </p>
                    </div>
                    
@@ -151,7 +155,7 @@ export default function TrainingPage() {
                    </div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         )}
       </div>
@@ -210,18 +214,16 @@ export default function TrainingPage() {
                    <div className="flex-1 flex flex-col bg-slate-50 min-w-0">
                       {/* Header */}
                       <div className="p-6 bg-white border-b border-slate-200 flex-shrink-0">
-                         <h1 className="text-xl font-bold text-slate-900 leading-snug mb-2 truncate" title={conv.subject}>
-                           {conv.subject || "(No Subject)"}
-                         </h1>
-                         <div className="flex items-center gap-2 text-sm text-slate-500">
-                           <span className="font-semibold text-slate-900">{conv.customer.name || "Customer"}</span>
-                           <span>&lt;{conv.customer.primaryEmail}&gt;</span>
-                         </div>
+                           <h2 className="text-xl font-bold text-slate-900 mb-2 line-clamp-2">{conv.subject || "(No Subject)"}</h2>
+                           <div className="flex items-center gap-2 text-sm text-slate-600">
+                              <span className="font-medium text-slate-900">{conv.customer?.name || "Unknown"}</span>
+                              <span className="text-slate-300">&lt;{conv.customer?.primaryEmail || "No Email"}&gt;</span>
+                           </div>
                       </div>
 
-                      {/* Messages */}
-                      <div className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-thin scrollbar-thumb-slate-300">
-                        {conv.messages.map((msg, idx) => {
+                  {/* Messages Area */}
+                  <div className="flex-1 overflow-y-auto p-8 bg-slate-50 space-y-6 scrollbar-thin scrollbar-thumb-slate-300">
+                    {Array.isArray(conv.messages) ? conv.messages.map((msg, idx) => {
                            // Strip HTML for preview in card, but sanitize for full view
                            const isOutbound = msg.direction === "outbound";
                            return (
@@ -264,9 +266,10 @@ export default function TrainingPage() {
                                  </div>
                               </div>
                            );
-                        })}
-                      </div>
-                   </div>
+                                                }) : (
+                                                <div className="p-12 text-center text-slate-500">No messages available to display.</div>
+                                            )}
+                                          </div>                   </div>
                 </div>
               );
             })()}
