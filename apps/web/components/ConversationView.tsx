@@ -1262,6 +1262,7 @@ export default function ConversationView() {
       </div>
       
               <DraftAssistantModal
+                key={selectedConversation.id}
                 isOpen={isDraftModalOpen}
                 onClose={() => { setIsDraftModalOpen(false); if (selectedConversation) fetch(`/api/conversations/${selectedConversation.id}/draft`).then(res => setHasDraft(res.ok)).catch(() => {}); }}
                 onInsert={handleInsertDraft}
