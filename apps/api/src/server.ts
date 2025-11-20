@@ -3488,8 +3488,9 @@ OUTPUT FORMAT (JSON ONLY):
     // Get final text response
     const finalText = response.text();
     
-    // Clean markdown code blocks if present
-    const jsonString = finalText.replace(/^```json\n|\n```$/g, '').trim();
+    // Robust JSON extraction: find the first '{' and the last '}'
+    const jsonMatch = finalText.match(/\{[\s\S]*\}/);
+    const jsonString = jsonMatch ? jsonMatch[0] : finalText;
     
     let finalResult;
     try {
@@ -3836,8 +3837,9 @@ OUTPUT FORMAT (JSON ONLY):
     const result = await model.generateContent(prompt);
     const finalText = result.response.text();
     
-    // Clean markdown code blocks if present
-    const jsonString = finalText.replace(/^```json\n|\n```$/g, '').replace(/^```\n|\n```$/g, '').trim();
+    // Robust JSON extraction: find the first '{' and the last '}'
+    const jsonMatch = finalText.match(/\{[\s\S]*\}/);
+    const jsonString = jsonMatch ? jsonMatch[0] : finalText;
     
     let finalResult;
     try {

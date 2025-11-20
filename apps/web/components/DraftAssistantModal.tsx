@@ -113,6 +113,13 @@ export default function DraftAssistantModal({
       addLog("Processing AI response...");
       const result: DraftResponse = await response.json();
       
+      // Safety Check: Ensure the result matches the current conversation
+      // This prevents race conditions where a user switches conversations while generating
+      if (result.conversationId && result.conversationId !== conversationId) {
+         console.warn(`[Draft] Mismatch: Received draft for ${result.conversationId} but current is ${conversationId}. Discarding.`);
+         return; 
+      }
+      
       setData(result);
       setEditedDraft(cleanDraftText(result.draft));
       addLog("Draft generated successfully.");
