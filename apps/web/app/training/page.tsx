@@ -58,13 +58,19 @@ export default function TrainingPage() {
 
   useEffect(() => {
     fetch("/api/conversations/training/all")
-      .then(res => res.json())
-      .then(data => {
-        setConversations(data);
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setConversations(data);
+        } else {
+          console.error("Expected array from API, got:", data);
+          setConversations([]);
+        }
         setLoading(false);
       })
       .catch(err => {
-        console.error(err);
+        console.error("Failed to fetch training conversations:", err);
         setLoading(false);
       });
   }, []);
