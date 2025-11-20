@@ -198,13 +198,13 @@ export default function TrainingPage() {
               <div 
                 key={conv.id} 
                 onClick={() => setSelectedId(conv.id)}
-                className={`bg-white rounded-xl shadow-sm border overflow-hidden hover:shadow-lg transition-all flex flex-col h-[220px] cursor-pointer group relative ${isRead ? 'border-slate-200 opacity-80 hover:opacity-100' : 'border-indigo-200 ring-1 ring-indigo-50'}`}
+                className={`bg-white rounded-xl shadow-sm border overflow-hidden hover:shadow-lg transition-all flex flex-col h-[220px] cursor-pointer group relative ${isRead ? `border-slate-200 opacity-80 hover:opacity-100` : `border-indigo-200 ring-1 ring-indigo-50`}`}
               >
                  {/* Status Badge */}
                  <div className="absolute top-4 right-4 z-10 flex gap-2">
                     <button 
                       onClick={(e) => toggleRead(e, conv.id)}
-                      className={`p-1.5 rounded-full border transition-all shadow-sm ${isRead ? 'bg-white text-slate-400 border-slate-200 hover:text-green-600 hover:border-green-200' : 'bg-white text-indigo-600 border-indigo-100 hover:bg-green-50 hover:text-green-600 hover:border-green-200'}`}
+                      className={`p-1.5 rounded-full border transition-all shadow-sm ${isRead ? `bg-white text-slate-400 border-slate-200 hover:text-green-600 hover:border-green-200` : `bg-white text-indigo-600 border-indigo-100 hover:bg-green-50 hover:text-green-600 hover:border-green-200`}`}
                       title={isRead ? "Mark as Unread" : "Mark as Read"}
                     >
                        {isRead ? (
@@ -216,7 +216,7 @@ export default function TrainingPage() {
                  </div>
 
                 {/* Main Content Area */}
-                <div className={`p-6 flex-1 flex flex-col justify-between ${isRead ? 'bg-slate-50/50' : 'bg-white'}`}>
+                <div className={`p-6 flex-1 flex flex-col justify-between ${isRead ? `bg-slate-50/50` : `bg-white`}`}>
                    <div className="pr-16">
                      <h3 className={`font-bold text-base mb-1 truncate ${isRead ? 'text-slate-600' : 'text-slate-900'}`} title={conv.subject}>
                        {conv.subject || "(No Subject)"}
