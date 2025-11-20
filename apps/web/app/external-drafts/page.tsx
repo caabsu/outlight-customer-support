@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 
 interface StandaloneDraft {
@@ -40,8 +40,14 @@ export default function ExternalDraftsPage() {
   const [customInstructions, setCustomInstructions] = useState('');
   const [creating, setCreating] = useState(false);
 
+  // Ref to hold latest drafts for interval
+  const draftsRef = useRef(drafts);
+  useEffect(() => {
+    draftsRef.current = drafts;
+  }, [drafts]);
+
   // Fetch drafts
-  const fetchDrafts = async () => {
+  const fetchDrafts = useCallback(async () => {
     try {
       const apiUrl = process.env.NODE_ENV === 'development'
         ? 'http://localhost:3001/standalone-drafts'
@@ -56,7 +62,7 @@ export default function ExternalDraftsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Auto-refresh for processing drafts
   useEffect(() => {
@@ -66,14 +72,14 @@ export default function ExternalDraftsPage() {
 
     const interval = setInterval(() => {
       // Only refresh if there are pending or processing drafts
-      const hasActiveProcessing = drafts.some(d => d.status === 'pending' || d.status === 'processing');
+      const hasActiveProcessing = draftsRef.current.some(d => d.status === 'pending' || d.status === 'processing');
       if (hasActiveProcessing) {
         fetchDrafts();
       }
     }, 2000); // Check every 2 seconds
 
     return () => clearInterval(interval);
-  }, [autoRefresh, drafts.length]);
+  }, [autoRefresh, fetchDrafts]);
 
   // Create new draft
   const handleCreate = async () => {

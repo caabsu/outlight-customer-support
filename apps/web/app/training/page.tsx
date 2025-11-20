@@ -89,7 +89,7 @@ export default function TrainingPage() {
                     </span>
                   </div>
                   <p className="text-sm text-indigo-900 font-medium italic leading-relaxed line-clamp-3">
-                    "{conv.trainingNotes}"
+                    &quot;{conv.trainingNotes}&quot;
                   </p>
                 </div>
 
