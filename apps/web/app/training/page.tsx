@@ -345,7 +345,7 @@ export default function TrainingPage() {
                                            {msg.bodyHtml ? (
                                               <div 
                                                  className="email-html-container"
-                                                 dangerUySetInnerHTML={{ __html: sanitizeEmailHtml(resolveInlineImages(msg.bodyHtml, msg)) }} 
+                                                 dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(resolveInlineImages(msg.bodyHtml, msg)) }} 
                                               />
                                            ) : (
                                               <p className="whitespace-pre-wrap">{msg.bodyText || "(No content)"}</p>
