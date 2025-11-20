@@ -632,6 +632,12 @@ app.get("/conversations/training/all", async (req: Request, res: Response) => {
         customer: true,
         messages: {
           orderBy: { sentAt: "asc" }
+        },
+        trainingByUser: {
+          select: {
+            name: true,
+            email: true
+          }
         }
       },
       orderBy: { lastMessageAt: "desc" }
@@ -646,10 +652,16 @@ app.get("/conversations/training/all", async (req: Request, res: Response) => {
 // Update training status and notes
 app.patch("/conversations/:id/training", async (req: Request, res: Response) => {
   try {
-    const { isTraining, trainingNotes } = req.body;
+    const { isTraining, trainingNotes, userId } = req.body;
     const data: any = {};
     
-    if (isTraining !== undefined) data.isTraining = isTraining;
+    if (isTraining !== undefined) {
+      data.isTraining = isTraining;
+      if (isTraining) {
+        data.trainingAt = new Date();
+        if (userId) data.trainingBy = userId;
+      }
+    }
     if (trainingNotes !== undefined) data.trainingNotes = trainingNotes;
 
     const updated = await prisma.conversation.update({

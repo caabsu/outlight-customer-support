@@ -215,7 +215,11 @@ export default function ConversationView() {
       await fetch(`/api/conversations/${selectedConversation.id}/training`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isTraining: true, trainingNotes: reviewNotes }),
+        body: JSON.stringify({ 
+          isTraining: true, 
+          trainingNotes: reviewNotes,
+          userId: currentUser?.id 
+        }),
       });
       setShowReviewModal(false);
       setReviewNotes("");

@@ -76,6 +76,9 @@ model Conversation {
   // Training / Review
   isTraining            Boolean        @default(false)
   trainingNotes         String?        @db.Text
+  trainingAt            DateTime?
+  trainingBy            String?
+  trainingByUser        User?          @relation("TrainingBy", fields: [trainingBy], references: [id], onDelete: SetNull)
 
   // Relations
   userActivities        UserActivity[]
@@ -283,6 +286,7 @@ model User {
   assignedConversations Conversation[] @relation("AssignedTo")
   draftedConversations  Conversation[] @relation("DraftedBy")
   repliedConversations  Conversation[] @relation("RepliedBy")
+  trainingConversations Conversation[] @relation("TrainingBy")
 
   @@index([username])
 }
