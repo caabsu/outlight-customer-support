@@ -37,6 +37,14 @@ const sanitizeEmailHtml = (html: string): string => {
   </div>`;
 };
 
+// Helper to strip HTML for preview
+const stripHtml = (html: string): string => {
+  if (!html) return "";
+  const tmp = document.createElement("DIV");
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || "";
+};
+
 const resolveInlineImages = (html: string, message: any): string => {
   if (!html || !message?.attachments || message.attachments.length === 0) return html;
   let resolvedHtml = html;
@@ -116,75 +124,37 @@ export default function TrainingPage() {
             {conversations.map(conv => (
               <div 
                 key={conv.id} 
-                className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg transition-all flex flex-col h-[550px] group"
+                onClick={() => setSelectedId(conv.id)}
+                className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg hover:border-indigo-300 transition-all flex flex-col h-[350px] cursor-pointer group relative"
               >
-                {/* Header / Notes */}
-                <div className="p-6 bg-indigo-50/50 border-b border-indigo-100 flex-shrink-0">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="px-2.5 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wide rounded-md border border-indigo-200">
-                      Review Note
-                    </span>
-                    <span className="text-xs text-slate-500 font-medium" title={conv.trainingAt ? new Date(conv.trainingAt).toLocaleString() : "Date unknown"}>
-                      {conv.trainingAt ? new Date(conv.trainingAt).toLocaleDateString() : "Date unknown"}
-                    </span>
-                  </div>
-                  <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
-                    <p className="text-sm text-indigo-900 font-medium whitespace-pre-wrap leading-relaxed line-clamp-4 italic">
-                      &quot;{conv.trainingNotes}&quot;
-                    </p>
-                    <div className="mt-2 pt-2 border-t border-indigo-50 flex items-center justify-end">
-                      <span className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider">
-                        By: {conv.trainingByUser?.name || "Admin"}
-                      </span>
-                    </div>
-                  </div>
+                 {/* Review Badge */}
+                 <div className="absolute top-4 right-4 px-2.5 py-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold uppercase tracking-wide rounded-full border border-indigo-100 z-10">
+                    Review Note
+                 </div>
+
+                {/* Header Area */}
+                <div className="p-6 border-b border-slate-100">
+                   <div className="pr-16">
+                     <h3 className="font-bold text-slate-900 text-base mb-1 truncate" title={conv.subject}>
+                       {conv.subject || "(No Subject)"}
+                     </h3>
+                     <p className="text-xs text-slate-500 truncate">
+                       {conv.customer.name || conv.customer.primaryEmail}
+                     </p>
+                   </div>
                 </div>
 
-                {/* Conversation Preview */}
-                <div className="p-5 flex-1 overflow-hidden flex flex-col bg-white">
-                  <div className="mb-4">
-                    <h3 className="font-bold text-slate-900 text-sm mb-1 truncate pr-4" title={conv.subject}>
-                      {conv.subject || "(No Subject)"}
-                    </h3>
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-green-400"></span>
-                      <p className="text-xs text-slate-500 font-medium truncate">
-                        {conv.customer.name || conv.customer.primaryEmail}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 overflow-hidden bg-slate-50 rounded-xl border border-slate-100 relative">
-                    <div className="absolute inset-0 p-3 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-slate-200">
-                      {conv.messages.slice(0, 3).map((msg, i) => (
-                        <div key={i} className={`p-3 rounded-lg border shadow-sm text-xs ${msg.direction === 'outbound' ? 'bg-blue-50 border-blue-100 ml-4' : 'bg-white border-slate-200 mr-4'}`}>
-                          <div className="flex justify-between items-center mb-1.5 opacity-70">
-                             <span className="font-bold uppercase tracking-wider text-[9px]">
-                                {msg.direction === 'outbound' ? 'Agent' : 'Customer'}
-                             </span>
-                             <span className="text-[9px]">{new Date(msg.sentAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                          </div>
-                          <div className="line-clamp-3 text-slate-700 leading-relaxed">
-                            {msg.bodyText || "HTML Content"}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {conv.messages.length > 3 && (
-                      <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-slate-50 to-transparent pointer-events-none flex items-end justify-center pb-2">
-                        <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-full border border-slate-200 shadow-sm">
-                          +{conv.messages.length - 3} more
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  <button 
-                    onClick={() => setSelectedId(conv.id)}
-                    className="mt-5 w-full py-2.5 bg-white border border-slate-200 hover:border-indigo-500 hover:text-indigo-600 text-slate-600 text-sm font-bold rounded-lg transition-all shadow-sm hover:shadow-md"
-                  >
-                    View Full Conversation
-                  </button>
+                {/* Notes Preview - Minimal */}
+                <div className="p-6 flex-1 bg-white flex flex-col">
+                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Admin Note</h4>
+                   <p className="text-sm text-slate-600 font-medium leading-relaxed line-clamp-4 italic">
+                      &quot;{conv.trainingNotes}&quot;
+                   </p>
+                   
+                   <div className="mt-auto pt-4 flex items-center justify-between text-xs text-slate-400">
+                      <span>{conv.trainingAt ? new Date(conv.trainingAt).toLocaleDateString() : "Date not recorded"}</span>
+                      <span className="font-medium text-indigo-500 group-hover:underline">View Full &rarr;</span>
+                   </div>
                 </div>
               </div>
             ))}
@@ -194,105 +164,116 @@ export default function TrainingPage() {
 
       {/* Full View Modal */}
       {selectedId && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          {/* Click outside to close */}
+          <div className="absolute inset-0" onClick={() => setSelectedId(null)}></div>
+          
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden relative z-10 animate-in zoom-in-95 duration-200">
+            
+            {/* Close Button */}
+            <button 
+               onClick={() => setSelectedId(null)}
+               className="absolute top-4 right-4 p-2 bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-full shadow-sm border border-slate-200 z-20 transition-colors"
+            >
+               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+
             {(() => {
               const conv = conversations.find(c => c.id === selectedId);
               if (!conv) return null;
 
               return (
-                <>
-                  {/* Modal Header */}
-                  <div className="flex-shrink-0 flex border-b border-slate-200 h-full max-h-[250px]">
-                     {/* Left: Notes */}
-                     <div className="w-1/3 bg-indigo-50 p-6 border-r border-slate-200 overflow-y-auto">
-                        <div className="flex items-center gap-2 mb-4">
-                          <span className="px-2.5 py-1 bg-indigo-600 text-white text-xs font-bold rounded-md shadow-sm uppercase tracking-wide">
-                            Review Note
-                          </span>
-                          <span className="text-xs text-indigo-400 font-semibold">
-                             by {conv.trainingByUser?.name || "Admin"}
-                          </span>
-                        </div>
-                        <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm text-sm text-indigo-950 leading-relaxed whitespace-pre-wrap">
-                           &quot;{conv.trainingNotes}&quot;
-                        </div>
-                        {conv.trainingAt && (
-                           <p className="text-right text-[10px] text-indigo-400 mt-2 font-medium">
-                              Marked on {new Date(conv.trainingAt).toLocaleString()}
-                           </p>
-                        )}
-                     </div>
-
-                     {/* Right: Meta */}
-                     <div className="flex-1 bg-white p-6 flex flex-col justify-between">
-                        <div>
-                           <h2 className="text-xl font-bold text-slate-900 mb-2 line-clamp-2">{conv.subject || "(No Subject)"}</h2>
-                           <div className="flex items-center gap-2 text-sm text-slate-600">
-                              <span className="font-medium text-slate-900">{conv.customer.name || "Unknown"}</span>
-                              <span className="text-slate-300">&lt;{conv.customer.primaryEmail}&gt;</span>
+                <div className="flex h-full">
+                   {/* LEFT: Review Notes Sidebar */}
+                   <div className="w-[350px] bg-indigo-50 flex-shrink-0 flex flex-col border-r border-indigo-100">
+                      <div className="p-8 border-b border-indigo-100 bg-white/50">
+                         <h2 className="text-lg font-bold text-indigo-900 flex items-center gap-2">
+                           <span className="p-1.5 bg-indigo-100 rounded-md text-indigo-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                           </span>
+                           Review Notes
+                         </h2>
+                         <div className="mt-4 flex flex-col gap-2 text-xs text-indigo-600/80 font-medium">
+                           <div className="flex justify-between border-b border-indigo-100 pb-2">
+                              <span>Reviewer:</span>
+                              <span className="text-indigo-900">{conv.trainingByUser?.name || "Admin"}</span>
                            </div>
-                        </div>
-                        <div className="flex justify-end">
-                           <button 
-                             onClick={() => setSelectedId(null)}
-                             className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-lg transition-colors"
-                           >
-                             Close Review
-                           </button>
-                        </div>
-                     </div>
-                  </div>
-
-                  {/* Messages Area */}
-                  <div className="flex-1 overflow-y-auto p-8 bg-slate-50 space-y-6 scrollbar-thin scrollbar-thumb-slate-300">
-                    {conv.messages.map((msg, idx) => (
-                      <div key={msg.id || idx} className={`flex ${msg.direction === "outbound" ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[85%] rounded-2xl shadow-sm border ${msg.direction === "outbound" ? "bg-blue-50 border-blue-100" : "bg-white border-slate-200"} overflow-hidden`}>
-                          
-                          {/* Message Header */}
-                          <div className={`px-5 py-3 border-b flex justify-between items-center ${msg.direction === "outbound" ? "border-blue-100 bg-blue-100/50" : "border-slate-100 bg-slate-50"}`}>
-                             <div className="flex items-center gap-2">
-                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm ${msg.direction === "outbound" ? "bg-blue-600 text-white" : "bg-slate-600 text-white"}`}>
-                                   {msg.direction === "outbound" ? "A" : "C"}
-                                </span>
-                                <span className={`text-xs font-bold uppercase tracking-wide ${msg.direction === "outbound" ? "text-blue-800" : "text-slate-700"}`}>
-                                   {msg.direction === "outbound" ? "Agent Response" : "Customer Inquiry"}
-                                </span>
-                             </div>
-                             <span className="text-[10px] font-medium text-slate-400">
-                                {(msg as any).sentAt ? new Date((msg as any).sentAt).toLocaleString() : ""}
-                             </span>
-                          </div>
-                          
-                          {/* Message Body */}
-                          <div className="p-6 text-sm text-slate-800 leading-relaxed overflow-x-auto font-sans">
-                            {msg.bodyHtml ? (
-                               <div 
-                                  className="email-html-container"
-                                  dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(resolveInlineImages(msg.bodyHtml, msg)) }} 
-                               />
-                            ) : (
-                               <p className="whitespace-pre-wrap">{msg.bodyText || "(No content)"}</p>
-                            )}
-                          </div>
-
-                          {/* Attachments */}
-                          {msg.attachments && msg.attachments.length > 0 && (
-                             <div className="px-6 pb-4 pt-2 flex gap-2 flex-wrap">
-                                {msg.attachments.map((att: any, i: number) => (
-                                   <div key={i} className="px-3 py-1.5 bg-white border border-slate-200 rounded text-xs font-medium text-slate-600 flex items-center gap-2">
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                                      {att.filename || "Attachment"}
-                                   </div>
-                                ))}
-                             </div>
-                          )}
-                        </div>
+                           <div className="flex justify-between">
+                              <span>Date:</span>
+                              <span className="text-indigo-900">{conv.trainingAt ? new Date(conv.trainingAt).toLocaleDateString() : "Not recorded"}</span>
+                           </div>
+                         </div>
                       </div>
-                    ))}
-                  </div>
-                </>
+                      
+                      <div className="p-8 overflow-y-auto flex-1">
+                         <div className="prose prose-sm prose-indigo text-indigo-900 leading-relaxed whitespace-pre-wrap">
+                            {conv.trainingNotes}
+                         </div>
+                      </div>
+                   </div>
+
+                   {/* RIGHT: Conversation View */}
+                   <div className="flex-1 flex flex-col bg-slate-50 min-w-0">
+                      {/* Header */}
+                      <div className="p-6 bg-white border-b border-slate-200 flex-shrink-0">
+                         <h1 className="text-xl font-bold text-slate-900 leading-snug mb-2 truncate" title={conv.subject}>
+                           {conv.subject || "(No Subject)"}
+                         </h1>
+                         <div className="flex items-center gap-2 text-sm text-slate-500">
+                           <span className="font-semibold text-slate-900">{conv.customer.name || "Customer"}</span>
+                           <span>&lt;{conv.customer.primaryEmail}&gt;</span>
+                         </div>
+                      </div>
+
+                      {/* Messages */}
+                      <div className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-thin scrollbar-thumb-slate-300">
+                        {conv.messages.map((msg, idx) => {
+                           // Strip HTML for preview in card, but sanitize for full view
+                           const isOutbound = msg.direction === "outbound";
+                           return (
+                              <div key={msg.id || idx} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
+                                 <div className={`max-w-[85%] rounded-2xl border shadow-sm overflow-hidden ${isOutbound ? "bg-blue-50 border-blue-100" : "bg-white border-slate-200"}`}>
+                                    
+                                    {/* Msg Header */}
+                                    <div className={`px-5 py-3 border-b flex items-center gap-3 ${isOutbound ? "border-blue-100 bg-blue-100/30" : "border-slate-100 bg-slate-50"}`}>
+                                       <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${isOutbound ? "bg-blue-100 text-blue-700" : "bg-slate-200 text-slate-600"}`}>
+                                          {isOutbound ? "Agent Response" : "Customer Inquiry"}
+                                       </span>
+                                       <span className="text-xs text-slate-400 ml-auto">
+                                          {msg.sentAt ? new Date(msg.sentAt).toLocaleString() : ""}
+                                       </span>
+                                    </div>
+
+                                    {/* Msg Body */}
+                                    <div className="p-6 text-sm text-slate-800 leading-relaxed font-sans">
+                                       {msg.bodyHtml ? (
+                                          <div 
+                                             className="email-html-container"
+                                             dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(resolveInlineImages(msg.bodyHtml, msg)) }} 
+                                          />
+                                       ) : (
+                                          <p className="whitespace-pre-wrap">{msg.bodyText || "(No content)"}</p>
+                                       )}
+                                    </div>
+
+                                    {/* Attachments */}
+                                    {msg.attachments && msg.attachments.length > 0 && (
+                                       <div className="px-6 pb-5 pt-1 flex flex-wrap gap-2">
+                                          {msg.attachments.map((att: any, i: number) => (
+                                             <div key={i} className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 shadow-sm">
+                                                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                                                {att.filename || "Attachment"}
+                                             </div>
+                                          ))}
+                                       </div>
+                                    )}
+                                 </div>
+                              </div>
+                           );
+                        })}
+                      </div>
+                   </div>
+                </div>
               );
             })()}
           </div>
