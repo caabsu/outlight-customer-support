@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type TrainingConversation = {
   id: string;
@@ -71,12 +72,20 @@ export default function TrainingPage() {
   return (
     <div className="flex-1 h-screen overflow-hidden bg-slate-50 flex flex-col font-sans">
       <header className="px-8 py-6 bg-white border-b border-slate-200 shadow-sm z-10">
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-          <span className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-          </span>
-          Training & Review Center
-        </h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+            <span className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+            </span>
+            Training & Review Center
+          </h1>
+          <Link
+            href="/emails"
+            className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors border border-slate-200"
+          >
+            ← Back to Emails
+          </Link>
+        </div>
         <p className="text-slate-500 mt-2 max-w-2xl text-sm">
           Review flagged interactions to improve support quality. Study admin notes and agent responses.
         </p>
