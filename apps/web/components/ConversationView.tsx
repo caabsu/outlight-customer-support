@@ -202,6 +202,32 @@ export default function ConversationView() {
   const [showRelatedModal, setShowRelatedModal] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
 
+  // Training & Review State
+  const [viewHistoryId, setViewHistoryId] = useState<string | null>(null);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  const handleMarkReview = async () => {
+    if (!selectedConversation || !reviewNotes.trim()) return;
+    setSubmittingReview(true);
+    try {
+      await fetch(`/api/conversations/${selectedConversation.id}/training`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isTraining: true, trainingNotes: reviewNotes }),
+      });
+      setShowReviewModal(false);
+      setReviewNotes("");
+      alert("Marked for review successfully!");
+    } catch (error) {
+      console.error("Failed to mark for review:", error);
+      alert("Failed to mark for review.");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
   const [rightSidebarWidth, setRightSidebarWidth] = useState(350);
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -1107,7 +1133,7 @@ export default function ConversationView() {
                 
                 {filteredHistory.slice(0, 10).map(h => (
                    <div key={h.id} className={`group relative p-3 mb-2 bg-white border rounded-lg shadow-sm transition-all ${selectedConversation.id === h.id ? 'border-blue-400 ring-1 ring-blue-400 bg-blue-50/30' : 'border-slate-200 hover:border-blue-300 hover:shadow-md'}`}>
-                      <div className="flex justify-between items-start mb-1.5 cursor-pointer" onClick={() => selectConversation(h.id)}>
+                      <div className="flex justify-between items-start mb-1.5 cursor-pointer" onClick={() => setViewHistoryId(h.id)}>
                          <p className={`text-xs truncate flex-1 pr-2 cursor-pointer ${selectedConversation.id === h.id ? 'font-bold text-blue-700' : 'font-medium text-slate-900'}`}>
                             {h.subject || "(No Subject)"}
                          </p>
@@ -1192,6 +1218,20 @@ export default function ConversationView() {
                    <div>
                       <span className="block text-xs font-bold text-slate-700 group-hover:text-purple-800">Escalate to Admin</span>
                       <span className="block text-[10px] text-slate-400 group-hover:text-purple-600/70">Flag for review</span>
+                   </div>
+                </button>
+
+                {/* Mark for Review */}
+                <button 
+                   onClick={() => setShowReviewModal(true)} 
+                   className="group flex items-center gap-3 p-2.5 bg-white border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 rounded-xl transition-all shadow-sm text-left"
+                >
+                   <div className="w-8 h-8 flex items-center justify-center bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-white transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                   </div>
+                   <div>
+                      <span className="block text-xs font-bold text-slate-700 group-hover:text-indigo-800">Mark for Review</span>
+                      <span className="block text-[10px] text-slate-400 group-hover:text-indigo-600/70">Add notes for training</span>
                    </div>
                 </button>
 
@@ -1604,6 +1644,100 @@ export default function ConversationView() {
                     className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold shadow-sm disabled:opacity-50 transition-all"
                  >
                     {submittingQuestion ? "Submitting..." : "Submit Question"}
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* History Popup */}
+      {viewHistoryId && (
+        <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl h-[85vh] flex flex-col overflow-hidden">
+            {(() => {
+              const historyItem = history.find(h => h.id === viewHistoryId);
+              if (!historyItem) return <div className="p-4">Loading...</div>;
+              
+              return (
+                <>
+                  <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-lg font-bold text-slate-900 truncate">{historyItem.subject || "(No Subject)"}</h3>
+                      <p className="text-xs text-slate-500">{new Date(historyItem.lastMessageAt).toLocaleString()} • {historyItem.messages.length} messages</p>
+                    </div>
+                    <div className="flex items-center gap-2 ml-4">
+                      <button 
+                        onClick={() => { selectConversation(historyItem.id); setViewHistoryId(null); }}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors"
+                      >
+                        Jump to Email
+                      </button>
+                      <button 
+                        onClick={() => setViewHistoryId(null)}
+                        className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-6 bg-slate-50 space-y-4">
+                    {historyItem.messages.map((msg, idx) => (
+                      <div key={msg.id || idx} className={`flex ${msg.direction === "outbound" ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[90%] rounded-xl border p-4 shadow-sm ${msg.direction === "outbound" ? "bg-blue-50 border-blue-100" : "bg-white border-slate-200"}`}>
+                          <div className="flex justify-between items-center gap-4 mb-2 pb-2 border-b border-black/5">
+                             <span className="font-bold text-xs uppercase tracking-wider text-slate-500">{msg.direction === "outbound" ? "Agent" : "Customer"}</span>
+                             <span className="text-[10px] text-slate-400">{(msg as any).sentAt ? new Date((msg as any).sentAt).toLocaleString() : ""}</span>
+                          </div>
+                          <div className="text-sm whitespace-pre-wrap font-sans text-slate-800">
+                            {msg.bodyText || (msg.bodyHtml ? <div dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(msg.bodyHtml) }} /> : "(No content)")}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Review Modal */}
+      {showReviewModal && (
+        <div className="fixed inset-0 bg-black/50 z-[90] flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200">
+           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg flex flex-col overflow-hidden">
+              <div className="p-5 border-b border-slate-200 bg-indigo-50 rounded-t-xl">
+                <h3 className="text-lg font-bold text-indigo-900 flex items-center gap-2">
+                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                   Mark for Review / Training
+                </h3>
+                <p className="text-xs text-indigo-700 mt-1">Add notes or insights for other agents to learn from.</p>
+              </div>
+              
+              <div className="p-6">
+                 <label className="block text-sm font-bold text-slate-700 mb-2">Training Notes & Insights</label>
+                 <textarea 
+                    className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-h-[150px]"
+                    placeholder="e.g., 'Great example of handling a refund request...' or 'Notice how we used the new policy here...'"
+                    value={reviewNotes}
+                    onChange={e => setReviewNotes(e.target.value)}
+                 />
+              </div>
+
+              <div className="p-4 border-t border-slate-200 flex justify-end gap-3 bg-slate-50 rounded-b-xl">
+                 <button 
+                    onClick={() => setShowReviewModal(false)} 
+                    className="px-4 py-2 text-slate-600 hover:bg-white border border-transparent hover:border-slate-200 rounded-lg font-medium transition-all"
+                 >
+                    Cancel
+                 </button>
+                 <button 
+                    onClick={handleMarkReview} 
+                    disabled={submittingReview || !reviewNotes.trim()} 
+                    className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-sm disabled:opacity-50 transition-all"
+                 >
+                    {submittingReview ? "Saving..." : "Save & Mark"}
                  </button>
               </div>
            </div>

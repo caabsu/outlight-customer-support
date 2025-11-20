@@ -623,6 +623,46 @@ app.get("/conversations/next-unreplied/:currentId", async (req: Request, res: Re
   }
 });
 
+// Get training emails
+app.get("/conversations/training/all", async (req: Request, res: Response) => {
+  try {
+    const conversations = await prisma.conversation.findMany({
+      where: { isTraining: true },
+      include: {
+        customer: true,
+        messages: {
+          orderBy: { sentAt: "asc" }
+        }
+      },
+      orderBy: { updatedAt: "desc" }
+    });
+    res.json(conversations);
+  } catch (error) {
+    console.error("Error fetching training conversations:", error);
+    res.status(500).json({ error: "Failed to fetch training conversations" });
+  }
+});
+
+// Update training status and notes
+app.patch("/conversations/:id/training", async (req: Request, res: Response) => {
+  try {
+    const { isTraining, trainingNotes } = req.body;
+    const data: any = {};
+    
+    if (isTraining !== undefined) data.isTraining = isTraining;
+    if (trainingNotes !== undefined) data.trainingNotes = trainingNotes;
+
+    const updated = await prisma.conversation.update({
+      where: { id: req.params.id },
+      data,
+    });
+    res.json(updated);
+  } catch (error) {
+    console.error("Error updating training status:", error);
+    res.status(500).json({ error: "Failed to update training status" });
+  }
+});
+
 // Get a single conversation (parameterized route - must come AFTER specific routes)
 app.get("/conversations/:id", async (req: Request, res: Response) => {
   try {

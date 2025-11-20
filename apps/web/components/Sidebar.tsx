@@ -126,6 +126,17 @@ export default function Sidebar() {
             <span className={`w-2 h-2 rounded-full ${isExternalDraftsActive ? "bg-blue-500" : "bg-transparent"}`}></span>
             External Drafts
           </Link>
+          <Link
+            href="/training"
+            className={`block w-full text-left px-4 py-2.5 rounded-lg text-sm font-sans font-medium transition-colors flex items-center gap-2 ${
+              pathname === "/training"
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${pathname === "/training" ? "bg-indigo-500" : "bg-transparent"}`}></span>
+            Training & Review
+          </Link>
         </div>
 
         {/* Settings Section */}

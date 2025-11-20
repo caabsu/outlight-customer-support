@@ -73,6 +73,10 @@ model Conversation {
   draftedByUser         User?          @relation("DraftedBy", fields: [lastDraftedBy], references: [id], onDelete: SetNull)
   repliedByUser         User?          @relation("RepliedBy", fields: [lastRepliedBy], references: [id], onDelete: SetNull)
 
+  // Training / Review
+  isTraining            Boolean        @default(false)
+  trainingNotes         String?        @db.Text
+
   // Relations
   userActivities        UserActivity[]
   questions             QuestionsKB[]
