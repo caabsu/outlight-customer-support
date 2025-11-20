@@ -185,7 +185,7 @@ export default function TrainingPage() {
               <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             </div>
             <h3 className="text-lg font-bold text-slate-900">No {filter} items found</h3>
-            <p className="text-slate-500 mt-2">Great job! You're all caught up.</p>
+            <p className="text-slate-500 mt-2">Great job! You&apos;re all caught up.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
