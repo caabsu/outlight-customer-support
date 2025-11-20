@@ -157,8 +157,8 @@ export default function TrainingPage() {
                   onClick={() => setFilter(f)}
                   className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all capitalize ${
                     filter === f 
-                      ? 'bg-white text-indigo-600 shadow-sm' 
-                      : 'text-slate-500 hover:text-slate-700'
+                      ? `bg-white text-indigo-600 shadow-sm` 
+                      : `text-slate-500 hover:text-slate-700`
                   }`}
                 >
                   {f} ({conversations.filter(c => {
