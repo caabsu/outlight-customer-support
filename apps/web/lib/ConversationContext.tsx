@@ -63,6 +63,7 @@ type ConversationContextType = {
   selectedConversation: Conversation | null;
   selectConversation: (id: string) => void;
   fetchAndSelectConversation: (id: string) => Promise<void>;
+  forceSelectConversation: (id: string) => Promise<void>;
   refreshConversations: () => Promise<void>;
   pollAndRefresh: () => Promise<void>;
   updateConversationOptimistic: (id: string, updates: Partial<Conversation>) => void;
@@ -482,6 +483,39 @@ export function ConversationProvider({
     }
   };
 
+  // Force select a conversation, bypassing all filters (used for related conversations eye icon)
+  const forceSelectConversation = async (id: string) => {
+    try {
+      // First, check if conversation is already in the list
+      const existing = conversations.find((c) => c.id === id);
+      if (existing) {
+        // Just select it and pin it
+        setSelectedId(id);
+        setPinnedConversation(existing);
+        return;
+      }
+
+      // Fetch the conversation from the API WITHOUT any filter parameters
+      // This allows viewing any conversation regardless of current filters
+      const res = await fetch(`/api/conversations/${id}`);
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch conversation: ${res.statusText}`);
+      }
+
+      const conversation: Conversation = await res.json();
+
+      // Pin it so it stays visible even if filters change
+      setPinnedConversation(conversation);
+
+      // Select it
+      setSelectedId(id);
+    } catch (error) {
+      console.error("Error force-fetching conversation:", error);
+      throw error;
+    }
+  };
+
   const updateConversationOptimistic = (id: string, updates: Partial<Conversation>) => {
     // First, apply the updates
     const updatedConv = conversations.find(c => c.id === id);
@@ -707,6 +741,7 @@ export function ConversationProvider({
         selectedConversation,
         selectConversation,
         fetchAndSelectConversation,
+        forceSelectConversation,
         refreshConversations,
         pollAndRefresh,
         updateConversationOptimistic,
