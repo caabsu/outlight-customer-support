@@ -959,12 +959,12 @@ export default function ConversationView() {
       </div>
 
       {/* 4. Right Sidebar (Resizable) */}
-      <div 
-        className="relative flex-shrink-0 border-l border-slate-200 bg-slate-50 flex flex-col overflow-hidden"
+      <div
+        className="relative flex-shrink-0 border-l border-slate-200 bg-slate-50 flex flex-col"
         style={{ width: rightSidebarWidth }}
       >
         {/* Resize Handle */}
-        <div 
+        <div
           className="absolute left-0 top-0 bottom-0 w-1 hover:bg-blue-400 cursor-col-resize z-20 transition-colors"
           onMouseDown={(e) => {
              const startX = e.clientX;
@@ -976,11 +976,11 @@ export default function ConversationView() {
           }}
         />
 
-        {/* Sidebar Content Container - Flex Column */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+        {/* Sidebar Content Container - Scrollable */}
+        <div className="flex-1 flex flex-col overflow-y-auto bg-slate-50 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
           
-          {/* 1. Shopify Section (Fixed Height) */}
-          <div className="h-[400px] border-b border-slate-200 flex flex-col bg-white flex-shrink-0">
+          {/* 1. Shopify Section (Flexible Height with scroll) */}
+          <div className="min-h-[200px] max-h-[350px] border-b border-slate-200 flex flex-col bg-white flex-shrink-0">
              <div className="p-4 border-b border-slate-100 flex-shrink-0 bg-slate-50/50">
                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                     <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
@@ -1100,8 +1100,8 @@ export default function ConversationView() {
              </div>
           </div>
 
-          {/* 2. History Section (Flexible Height - Takes Remaining Space) */}
-          <div className="flex-1 border-b border-slate-200 flex flex-col bg-white min-h-[200px]">
+          {/* 2. History Section (Flexible Height with scroll) */}
+          <div className="min-h-[150px] max-h-[300px] border-b border-slate-200 flex flex-col bg-white flex-shrink-0">
              <div className="p-4 border-b border-slate-100 flex-shrink-0 bg-slate-50/50">
                  <div className="flex items-center justify-between mb-2">
                     <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
@@ -1178,81 +1178,66 @@ export default function ConversationView() {
              </div>
           </div>
 
-          {/* 3. Quick Actions Section (Auto Height) */}
-          <div className="p-4 bg-slate-50 flex-shrink-0 border-t border-slate-200">
-             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">Quick Actions</h3>
-             <div className="flex flex-col space-y-2.5">
+          {/* 3. Quick Actions Section (Compact, Always Visible) */}
+          <div className="p-3 bg-slate-50 flex-shrink-0 border-t border-slate-200 sticky bottom-0">
+             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">Quick Actions</h3>
+             <div className="flex flex-col space-y-2">
                 
                 {/* Mark Resolved */}
-                <button 
-                   onClick={handleMarkResolved} 
-                   className="group flex items-center gap-3 p-2.5 bg-white border border-slate-200 hover:border-green-500 hover:bg-green-50/50 rounded-xl transition-all shadow-sm text-left"
+                <button
+                   onClick={handleMarkResolved}
+                   className="group flex items-center gap-2 p-2 bg-white border border-slate-200 hover:border-green-500 hover:bg-green-50/50 rounded-lg transition-all shadow-sm text-left"
                 >
-                   <div className="w-8 h-8 flex items-center justify-center bg-green-100 text-green-600 rounded-lg group-hover:bg-white transition-colors">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                   <div className="w-6 h-6 flex items-center justify-center bg-green-100 text-green-600 rounded group-hover:bg-white transition-colors">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                    </div>
-                   <div>
-                      <span className="block text-xs font-bold text-slate-700 group-hover:text-green-800">Mark Resolved</span>
-                      <span className="block text-[10px] text-slate-400 group-hover:text-green-600/70">Archive conversation</span>
-                   </div>
+                   <span className="text-xs font-semibold text-slate-700 group-hover:text-green-800">Mark Resolved</span>
                 </button>
 
                 {/* Non-Support */}
-                <button 
-                   onClick={handleMarkNonSupport} 
-                   className="group flex items-center gap-3 p-2.5 bg-white border border-slate-200 hover:border-slate-400 hover:bg-slate-50 rounded-xl transition-all shadow-sm text-left"
+                <button
+                   onClick={handleMarkNonSupport}
+                   className="group flex items-center gap-2 p-2 bg-white border border-slate-200 hover:border-slate-400 hover:bg-slate-50 rounded-lg transition-all shadow-sm text-left"
                 >
-                   <div className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-500 rounded-lg group-hover:bg-white transition-colors">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                   <div className="w-6 h-6 flex items-center justify-center bg-slate-100 text-slate-500 rounded group-hover:bg-white transition-colors">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
                    </div>
-                   <div>
-                      <span className="block text-xs font-bold text-slate-700 group-hover:text-slate-900">Not Customer Support</span>
-                      <span className="block text-[10px] text-slate-400 group-hover:text-slate-500">Mark this conversation</span>
-                   </div>
+                   <span className="text-xs font-semibold text-slate-700 group-hover:text-slate-900">Not Customer Support</span>
                 </button>
 
                 {/* Escalate */}
-                <button 
-                   onClick={handleEscalateToAdmin} 
-                   className="group flex items-center gap-3 p-2.5 bg-white border border-slate-200 hover:border-purple-500 hover:bg-purple-50/50 rounded-xl transition-all shadow-sm text-left"
+                <button
+                   onClick={handleEscalateToAdmin}
+                   className="group flex items-center gap-2 p-2 bg-white border border-slate-200 hover:border-purple-500 hover:bg-purple-50/50 rounded-lg transition-all shadow-sm text-left"
                 >
-                   <div className="w-8 h-8 flex items-center justify-center bg-purple-100 text-purple-600 rounded-lg group-hover:bg-white transition-colors">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                   <div className="w-6 h-6 flex items-center justify-center bg-purple-100 text-purple-600 rounded group-hover:bg-white transition-colors">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
                    </div>
-                   <div>
-                      <span className="block text-xs font-bold text-slate-700 group-hover:text-purple-800">Escalate to Admin</span>
-                      <span className="block text-[10px] text-slate-400 group-hover:text-purple-600/70">Flag for review</span>
-                   </div>
+                   <span className="text-xs font-semibold text-slate-700 group-hover:text-purple-800">Escalate to Admin</span>
                 </button>
 
                 {/* Mark for Review (Admin Only) */}
                 {currentUser?.role === 'admin' && (
-                  <button 
-                     onClick={() => setShowReviewModal(true)} 
-                     className="group flex items-center gap-3 p-2.5 bg-white border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 rounded-xl transition-all shadow-sm text-left"
+                  <button
+                     onClick={() => setShowReviewModal(true)}
+                     className="group flex items-center gap-2 p-2 bg-white border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 rounded-lg transition-all shadow-sm text-left"
                   >
-                     <div className="w-8 h-8 flex items-center justify-center bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-white transition-colors">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                     <div className="w-6 h-6 flex items-center justify-center bg-indigo-100 text-indigo-600 rounded group-hover:bg-white transition-colors">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
                      </div>
-                     <div>
-                        <span className="block text-xs font-bold text-slate-700 group-hover:text-indigo-800">Mark for Review</span>
-                        <span className="block text-[10px] text-slate-400 group-hover:text-indigo-600/70">Add notes for training</span>
-                     </div>
+                     <span className="text-xs font-semibold text-slate-700 group-hover:text-indigo-800">Mark for Review</span>
                   </button>
                 )}
 
                 {/* Next Unreplied */}
-                <button 
-                   onClick={goToNextUnreplied} 
-                   className="group flex items-center gap-3 p-2.5 bg-blue-600 border border-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-md text-left"
+                <button
+                   onClick={goToNextUnreplied}
+                   className="group flex items-center gap-2 p-2 bg-blue-600 border border-blue-600 hover:bg-blue-700 rounded-lg transition-all shadow-md text-left"
                 >
-                   <div className="w-8 h-8 flex items-center justify-center bg-blue-500 text-white rounded-lg group-hover:bg-blue-600 transition-colors">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+                   <div className="w-6 h-6 flex items-center justify-center bg-blue-500 text-white rounded group-hover:bg-blue-600 transition-colors">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
                    </div>
-                   <div>
-                      <span className="block text-xs font-bold text-white">Next Unreplied</span>
-                      <span className="block text-[10px] text-blue-200">Jump to next email</span>
-                   </div>
+                   <span className="text-xs font-semibold text-white">Next Unreplied</span>
                 </button>
 
              </div>

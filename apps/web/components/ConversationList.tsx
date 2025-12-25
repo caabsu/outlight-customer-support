@@ -1,10 +1,39 @@
 "use client";
 
 import { useConversations, type Conversation } from "@/lib/ConversationContext";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 
 export default function ConversationList() {
+  // Resizable width state
+  const [listWidth, setListWidth] = useState(400);
+  const [isResizing, setIsResizing] = useState(false);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    const startX = e.clientX;
+    const startWidth = listWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const newWidth = Math.max(280, Math.min(600, startWidth + delta));
+      setListWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [listWidth]);
   const {
     conversations,
     selectedConversation,
@@ -119,7 +148,19 @@ export default function ConversationList() {
   };
 
   return (
-    <div className={`${isCollapsed ? 'w-14' : 'w-[400px]'} border-r border-slate-200 bg-white flex flex-col h-full relative transition-all duration-300 shrink-0 z-20`}>
+    <div
+      className={`${isCollapsed ? 'w-14' : ''} border-r border-slate-200 bg-white flex flex-col h-full relative transition-all duration-300 shrink-0 z-20`}
+      style={!isCollapsed ? { width: `${listWidth}px` } : undefined}
+    >
+      {/* Resize Handle */}
+      {!isCollapsed && (
+        <div
+          onMouseDown={handleResizeStart}
+          className={`absolute right-0 top-0 bottom-0 w-1 hover:w-2 cursor-col-resize z-30 transition-all group ${isResizing ? 'bg-blue-500 w-2' : 'hover:bg-blue-400'}`}
+        >
+          <div className="absolute inset-y-0 -left-1 -right-1"></div>
+        </div>
+      )}
       {/* Progress Bar */}
       {refreshing && (
         <div className="absolute top-0 left-0 right-0 z-50">
